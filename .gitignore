@@ -2,6 +2,7 @@
 *.[ao]
 *.l[ao]
 *.backup
+*.old
 .deps
 .libs
 INSTALL
