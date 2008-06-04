@@ -1,0 +1,14 @@
+net-snmp (5.2.2-1) unstable; urgency=low
+
+  As of version 5.2.2, the default configuration disables SMUX support
+  and binds the SNMP port to 127.0.0.1.
+  
+  Please configure /etc/snmp/snmpd.conf, /etc/hosts.allow and /etc/hosts.deny
+  first to set up who can access the SNMP daemon, then edit
+  /etc/default/snmpd and remove 127.0.0.1 from SNMPDOPTS.
+
+  To enable SMUX again, remove "-I -smux" from SNMPDOPTS and eventually
+  bind it to localhost by adding "smuxsocket 127.0.0.1" to
+  /etc/snmp/snmpd.conf.
+
+ -- Jochen Friedrich <jochen@scram.de>  Fri, 20 Jan 2006 15:11:07 +0100

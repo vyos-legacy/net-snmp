@@ -1,0 +1,48 @@
+diff -upr net-snmp-5.4.1/agent/mibgroup/ucd-snmp/proc.c net-snmp-5.4.1.patch/agent/mibgroup/ucd-snmp/proc.c
+--- net-snmp-5.4.1/agent/mibgroup/ucd-snmp/proc.c	2007-03-12 12:56:39.000000000 -0700
++++ net-snmp-5.4.1.patch/agent/mibgroup/ucd-snmp/proc.c	2007-09-20 09:55:35.000000000 -0700
+@@ -427,7 +427,7 @@ sh_count_procs(char *procname)
+     return count;
+ }
+ 
+-#elif OSTYPE == NETSNMP_LINUXID
++#elif NETSNMP_OSTYPE == NETSNMP_LINUXID
+ 
+ #include <dirent.h>
+ #include <fcntl.h>
+@@ -452,7 +452,7 @@ sh_count_procs(char *procname)
+ #ifdef USE_PROC_CMDLINE  /* old method */
+       /* read /proc/XX/cmdline */
+       sprintf(cmdline,"/proc/%s/cmdline",ent->d_name);
+-      if((fd = open(cmdline, O_RDONLY)) < 0) break;
++      if((fd = open(cmdline, O_RDONLY)) < 0) continue;
+       len = read(fd,cmdline,sizeof(cmdline) - 1);
+       close(fd);
+       if(len <= 0) continue;
+@@ -464,7 +464,7 @@ sh_count_procs(char *procname)
+       /* read /proc/XX/status */
+       sprintf(cmdline,"/proc/%s/status",ent->d_name);
+       if ((status = fopen(cmdline, "r")) == NULL)
+-          break;
++          continue;
+       if (fgets(cmdline, sizeof(cmdline), status) == NULL) {
+           fclose(status);
+           break;
+@@ -507,7 +507,7 @@ sh_count_procs(char *procname)
+     return total;
+ }
+ 
+-#elif OSTYPE == NETSNMP_ULTRIXID
++#elif NETSNMP_OSTYPE == NETSNMP_ULTRIXID
+ 
+ #define	NPROCS		32      /* number of proces to read at once */
+ 
+@@ -688,7 +688,7 @@ getstruct(off_t loc, char *name, off_t d
+         return (0);
+     return (1);
+ }
+-#elif OSTYPE == NETSNMP_SOLARISID
++#elif NETSNMP_OSTYPE == NETSNMP_SOLARISID
+ 
+ #ifdef _SLASH_PROC_METHOD_
+ 

@@ -1,0 +1,2 @@
+Upstream Changeset 16705: snmpd: PATCH: 1746831: from cunnijd: fix process
+checking race condition under Linux and platform #ifdefs

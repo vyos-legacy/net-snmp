@@ -1,0 +1,9 @@
+#! /bin/sh
+
+set -e
+
+rm -f /usr/share/snmp/mibs/.index
+
+#DEBHELPER#
+
+exit 0

@@ -1,0 +1,80 @@
+# Romanian translation of net-snmp.
+# Copyright (C) 2006 THE net-snmp'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the net-snmp package.
+# Stan Ioan-Eugen <stan.ieugen@gmail.com>, 2006.
+# , fuzzy
+# 
+# 
+msgid ""
+msgstr ""
+"Project-Id-Version: net-snmp 5.2.3.1\n"
+"Report-Msgid-Bugs-To: pkg-net-snmp-devel@lists.alioth.debian.org\n"
+"POT-Creation-Date: 2007-05-31 07:40+0200\n"
+"PO-Revision-Date: 2006-12-14 17:49+0200\n"
+"Last-Translator: Stan Ioan-Eugen <stan.ieugen@gmail.com>\n"
+"Language-Team: Romanian <debian-l10n-romanian@lists.debian.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Type: note
+#. Description
+#: ../snmpd.templates:3001
+msgid "Default parameters changed since version 5.2.1"
+msgstr ""
+
+#. Type: note
+#. Description
+#: ../snmpd.templates:3001
+msgid ""
+"The default start parameters of the snmpd agent/daemon have been changed."
+msgstr ""
+
+#. Type: note
+#. Description
+#: ../snmpd.templates:3001
+#, fuzzy
+#| msgid ""
+#| "Debian has changed the default start parameters of the snmpd agent/"
+#| "daemon. The daemon is now started as user snmp, binds to localhost only "
+#| "and SMUX support is disabled. These parameters can all be individually "
+#| "changed in /etc/default/snmpd. Please see /usr/share/doc/snmpd/NEWS."
+#| "Debian.gz for more details."
+msgid ""
+"The daemon is now started as user snmp, binds to localhost only and runs "
+"with SNMP multiplexing (SMUX) support disabled. These parameters can all be "
+"individually changed in /etc/default/snmpd."
+msgstr ""
+"Debian a modificat parametrii impliciţi de pornire ai agentului/demonului "
+"snmpd. Demonul este pornit acum de utilizatorul snmp, aşteaptă numai cereri "
+"locale şi are suportul de SMUX dezactivat. Aceşti parametrii pot fi "
+"modificaţi în /etc/default/snmpd.  citiţi /usr/share/doc/snmpd/NEWS.Debian."
+"gz pentru mai multe detalii."
+
+#. Type: note
+#. Description
+#: ../snmpd.templates:3001
+msgid "Please see /usr/share/doc/snmpd/NEWS.Debian.gz for more details."
+msgstr ""
+
+#~ msgid "Upgrade warning from version 3.6 and below"
+#~ msgstr "Avertizare la actualizare de la versiunea 3.6 sau anterioară"
+
+#~ msgid ""
+#~ "Debian now uses the NET SNMP agent/daemon.  Since the new agent uses an "
+#~ "entirely new configuration file format, any configuration you may have "
+#~ "previously had can not be automatically updated and must be replaced.  "
+#~ "Consequently, a security-conscious configuration will be installed by "
+#~ "default.  Please read the snmpd.conf(5) manual page and then edit /etc/"
+#~ "snmp/snmpd.conf accordingly to change the configuration to suit your "
+#~ "needs."
+#~ msgstr ""
+#~ "Debian foloseşte acum agentul/demonul NET SNMP.  Deoarece noul agent "
+#~ "foloseşte un fişier de configurare total diferit, configuraţia "
+#~ "dumneavoastră precedentă nu poate fi actualizată automat şi trebuie "
+#~ "înlocuită. În consecinţă, se va instala implicit o configuraţie "
+#~ "securizată.  Citiţi pagina de manual snmpd.conf(5) şi apoi modificaţi /"
+#~ "etc/snmp/snmpd.conf în concordanţă cu nevoile dumneavoastră."
+
+#~ msgid "Upgrade warning from version 5.2.1 and below"
+#~ msgstr "Avertizare la actualizare de la versiunea 5.2.1 sau anterioară"

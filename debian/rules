@@ -1,0 +1,119 @@
+#!/usr/bin/make -f
+
+# Fix for broken clean target. Must run before reversing patches
+cleanbuilddir::
+	[ ! -f Makefile ] || make clean
+
+include /usr/share/cdbs/1/rules/debhelper.mk
+include /usr/share/cdbs/1/rules/simple-patchsys.mk
+include /usr/share/cdbs/1/class/autotools.mk
+
+LIB_VERSION = 15
+COMPAT_VERSION = 5.4.1~dfsg
+PYTHON_VERSION = 1.0a1
+BACKUP = aclocal.m4 configure ltmain.sh stamp-h stamp-h.in \
+         include/net-snmp/net-snmp-config.h.in
+
+MIB_MODULES = host smux ucd-snmp/dlmod
+
+PYVERS=$(shell pyversions -vr)
+
+ifeq (linux,$(DEB_HOST_ARCH_OS))
+MIB_MODULES += ucd-snmp/diskio ucd-snmp/lmSensors 
+IPV6 = --enable-ipv6
+DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libsensors-dev (>= 2.8.5)"
+else
+ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
+IPV6 = --disable-ipv6
+DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libkvm-dev"
+endif
+endif
+
+DEB_AUTO_UPDATE_LIBTOOL  = pre
+DEB_AUTO_UPDATE_ACLOCAL  = 1.9
+DEB_AUTO_UPDATE_AUTOCONF = 2.59
+
+DEB_DH_MAKESHLIBS_ARGS_libsnmp$(LIB_VERSION) := -V"libsnmp$(LIB_VERSION) (>= $(COMPAT_VERSION))"
+DEB_MAKE_INSTALL_TARGET=install	INSTALL_PREFIX=$(CURDIR)/debian/tmp DESTDIR=$(CURDIR)/debian/tmp
+DEB_MAKE_BUILD_TARGET=LD_RUN_PATH=
+DEB_CONFIGURE_EXTRA_FLAGS := --prefix=/usr --sysconfdir=/etc --mandir=/usr/share/man \
+	  --with-persistent-directory=/var/lib/snmp \
+	  --enable-ucd-snmp-compatibility \
+	  --enable-shared --with-cflags="$(CFLAGS) -DNETSNMP_USE_INLINE" \
+	  --with-perl-modules="INSTALLDIRS=vendor" --enable-as-needed \
+	  $(IPV6) --with-logfile=none \
+	  --without-rpm --with-libwrap --with-openssl \
+	  --without-dmalloc --without-efence --without-rsaref \
+	  --with-sys-contact="root" --with-sys-location="Unknown" \
+	  --with-mib-modules="$(MIB_MODULES)" \
+	  --enable-mfd-rewrites \
+	  --with-mnttab=/etc/mtab \
+	  --with-defaults
+
+pre-build::
+	# Backup files expected to be modified.
+	for i in $(BACKUP); do \
+		if [ ! -f $$i.backup ]; then cp $$i $$i.backup; fi ; \
+	done
+
+clean::
+	dh_clean perl/SNMP/t/snmptest.cmd
+	rm -rf `find . -name .libs`
+	rm -rf `find . -name .svn`
+	for i in $(BACKUP); do \
+		if [ -f $$i.backup ]; then mv -f $$i.backup $$i; fi ; \
+	done
+	find . -name *\.py[co] -exec rm {} \;
+	find debian -name python-*-stamp-* -exec rm {} \;
+	rm -rf python/build
+	rm -rf python/netsnmp_python.egg-info
+
+common-build-arch:: $(PYVERS:%=debian/python-build-stamp-%)
+
+debian/python-build-stamp-%:
+	# Build python modules manually as the net-snmp Makefile is too limited.
+	cd python; python$* setup.py build --basedir=$(CURDIR)
+	touch $@
+
+common-install-arch:: $(PYVERS:%=debian/python-install-stamp-%)
+	# Install the "broke" headers
+	cp agent/mibgroup/struct.h debian/tmp/usr/include/net-snmp/agent
+	cp agent/mibgroup/util_funcs.h debian/tmp/usr/include/net-snmp
+	cp agent/mibgroup/mibincl.h debian/tmp/usr/include/net-snmp/library
+	cp agent/mibgroup/header_complex.h debian/tmp/usr/include/net-snmp/agent
+	# Remove the snmpcheck program since we don't support it (yet).
+	rm debian/tmp/usr/bin/snmpcheck
+	# Copy the .conf files.
+	mkdir -p debian/tmp/etc/snmp
+	cp EXAMPLE.conf debian/tmp/etc/snmp/snmpd.conf
+	cp EXAMPLE-trap.conf debian/tmp/etc/snmp/snmptrapd.conf
+	mv debian/tmp/usr/share/snmp/mib2c*.conf debian/tmp/etc/snmp
+	mkdir -p debian/tmp/etc/default
+	cp debian/snmpd.default debian/tmp/etc/default/snmpd
+	# Perform other man pages fixups.
+	bash ./debian/fixman
+
+	# make lintian happy
+	mkdir -p debian/tmp/usr/share/lintian/overrides
+	cp debian/snmpd.lintian-overrides debian/tmp/usr/share/lintian/overrides/snmpd
+	cp debian/snmp.lintian-overrides debian/tmp/usr/share/lintian/overrides/snmp
+
+debian/python-install-stamp-%:
+	# Build python modules manually as the net-snmp Makefile is too limited.
+	cd python; python$* setup.py install --root $(CURDIR)/debian/tmp
+	mv debian/tmp/usr/lib/python$*/site-packages/netsnmp_python-$(PYTHON_VERSION)-py$*.egg-info \
+	   debian/tmp/usr/lib/python$*/site-packages/netsnmp_python.egg-info
+	touch $@
+
+binary-install/libsnmp-python::
+	dh_pycentral -plibsnmp-python
+
+binary/libsnmp-perl::
+	dh_installexamples -plibsnmp-perl $(shell ls -d perl/SNMP/examples/* | grep -v SCCS)
+
+binary/snmpd::
+	chmod 600 debian/snmpd/etc/snmp/snmp*d.conf
+
+binary/libsnmp$(LIB_VERSION)-dev::
+	rm -rf debian/libsnmp$(LIB_VERSION)-dev/usr/share/doc/libsnmp$(LIB_VERSION)-dev
+	ln -sf libsnmp$(LIB_VERSION) debian/libsnmp$(LIB_VERSION)-dev/usr/share/doc/libsnmp$(LIB_VERSION)-dev

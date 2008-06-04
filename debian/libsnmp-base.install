@@ -1,0 +1,5 @@
+debian/tmp/usr/share/snmp/mibs
+debian/tmp/usr/share/snmp/mib2c-data
+debian/tmp/usr/share/man/man5/*
+debian/tmp/usr/bin/net-snmp-config
+debian/tmp/usr/share/man/man1/net-snmp-config.1
