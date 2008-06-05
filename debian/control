@@ -14,8 +14,8 @@ Package: vyatta-snmpd
 Section: net
 Priority: optional
 Architecture: any
-Conflicts: snmp (<<3.6-3), snmptraplogd
-Replaces: snmptraplogd
+Conflicts: snmpd,  snmptraplogd
+Replaces: snmpd, snmptraplogd
 Depends: ${shlibs:Depends}, adduser, debconf
 Description: SNMP (Simple Network Management Protocol) agents
  The Simple Network Management Protocol (SNMP) provides a framework
