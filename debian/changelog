@@ -3,7 +3,7 @@ net-snmp (5.4.1~dfsg-7.1-vyatta1) unstable; urgency=low
   * Modify linux route table download to improve performance with large
     routing tables
 
-  -- Stephen Hemminger <shemminger@vyatta.com>  Fri, 06 Jun 2008 09:51:49 -0700
+ -- Stephen Hemminger <shemminger@vyatta.com>  Fri, 06 Jun 2008 09:51:49 -0700
 
 net-snmp (5.4.1~dfsg-7.1) unstable; urgency=high
 
