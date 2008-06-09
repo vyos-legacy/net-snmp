@@ -1,3 +1,0 @@
-Upstream Changeset 16804:
-snmplib: Change CONTAINER_INSERT to not do partial inserts in containers with
-multiple indices when one insert fails.
