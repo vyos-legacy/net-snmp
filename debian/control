@@ -14,8 +14,8 @@ Package: snmpd
 Section: net
 Priority: optional
 Architecture: any
-Conflicts: snmpd,  snmptraplogd
-Replaces: snmpd, snmptraplogd
+Conflicts: snmp (<<3.6-3), snmptraplogd
+Replaces: snmptraplogd
 Depends: ${shlibs:Depends}, adduser, debconf
 Description: SNMP (Simple Network Management Protocol) agents
  The Simple Network Management Protocol (SNMP) provides a framework
