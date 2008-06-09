@@ -213,6 +213,27 @@ se_find_value_in_list(struct snmp_enum_list *list, const char *label)
     return SE_DNE;              /* XXX: um, no good solution here */
 }
 
+int se_remove_value_from_list(struct snmp_enum_list **list, const char *label)
+{
+   struct snmp_enum_list *lastlist;
+   if(!list)
+     return SE_DNE;
+
+   lastlist = NULL;
+   while(*list) {
+      if(strcmp((*list)->label, label) == 0) {
+	 free((*list)->label);
+	 if(lastlist)
+	   lastlist->next = (*list)->next;
+	 free(*list);
+	 *list = NULL;
+	 return 0;
+      }
+      lastlist = *list;
+      (*list) = (*list)->next;
+   }
+   
+}
 int
 se_find_free_value_in_list(struct snmp_enum_list *list)
 {
@@ -329,6 +350,19 @@ int
 se_find_value_in_slist(const char *listname, const char *label)
 {
     return (se_find_value_in_list(se_find_slist(listname), label));
+}
+
+void se_remove_value_from_slist(const char *listname, const char *label)
+{
+   struct snmp_enum_list_str *sptr, *lastp = NULL;
+   struct snmp_enum_list *list;
+   if (!listname)
+     return;
+
+   for (sptr = sliststorage;
+	sptr != NULL; lastp = sptr, sptr = sptr->next)
+     if (sptr->name && strcmp(sptr->name, listname) == 0)
+       se_remove_value_from_list(&sptr->list, label);
 }
 
 int

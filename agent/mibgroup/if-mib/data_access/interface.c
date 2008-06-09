@@ -465,8 +465,13 @@ _access_interface_entry_save_name(const char *name, oid index)
         DEBUGMSGTL(("access:interface:ifIndex", "saved ifIndex %d for %s\n",
                     index, name));
     }
-    else
-        netsnmp_assert(index == tmp);
+    else {
+       if(index != tmp) {
+	  se_remove_value_from_slist("interfaces", name);
+	  se_add_pair_to_slist("interfaces", strdup(name), index);
+	  DEBUGMSGTL(("access:interface:ifIndex", "ifname %s, old index %d, already existing, replaced with %d\n", name, tmp, index));
+       }      
+    }
 }
 
 /**

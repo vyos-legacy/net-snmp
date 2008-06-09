@@ -2590,13 +2590,19 @@ AC_DEFINE_UNQUOTED(KERNEL_LOC,"$ac_cv_KERNEL_LOC")
 
 AC_CACHE_CHECK(for mount table location,ac_cv_ETC_MNTTAB,
 [ac_cv_ETC_MNTTAB="unknown"
-for i in /etc/mnttab /etc/mtab /etc/filesystems
-  do
-  if test -f $i; then
-    ac_cv_ETC_MNTTAB="$i"
-    break;
-  fi
-done
+AC_ARG_WITH(mnttab,
+[  --with-mnttab=\"/etc/mnttab\"  Mount table location.
+                                 The default is to autodetect this.],
+	[ac_cv_ETC_MNTTAB="$with_mnttab"])
+if test "$ac_cv_ETC_MNTTAB" = "unknown"; then
+  for i in /etc/mnttab /etc/mtab /etc/filesystems
+    do
+    if test -f $i; then
+      ac_cv_ETC_MNTTAB="$i"
+      break;
+    fi
+  done
+fi
 ])
 
 AC_DEFINE_UNQUOTED(ETC_MNTTAB,"$ac_cv_ETC_MNTTAB")
@@ -2854,6 +2860,9 @@ AC_CHECK_FUNC(kvm_getprocs, AC_DEFINE(HAVE_KVM_GETPROCS, 1, [Define to 1 if you 
 AC_CHECK_FUNC(kvm_getswapinfo, AC_DEFINE(HAVE_KVM_GETSWAPINFO, 1, [Define to 1 if you have the `kvm_getswapinfo' function.]),
 	AC_CHECK_LIB(kvm, kvm_getswapinfo, AC_DEFINE(HAVE_KVM_GETSWAPINFO, 1, [Define to 1 if you have the `kvm_getswapinfo' function.])
 	_libkvm="-lkvm"))
+AC_CHECK_FUNC(nlist, AC_DEFINE(HAVE_NLIST, 1, [Define to 1 if you have the `nlist' function.]),
+        AC_CHECK_LIB(kvm, nlist, AC_DEFINE(HAVE_NLIST, 1, [Define to 1 if you have the `nlist' function.])
+        _libkvm="-lkvm"))
 if test "x${_libkvm}" != "x"; then
 	AC_DEFINE(HAVE_LIBKVM, 1, [Define to 1 if you have the `kvm' library (-lkvm).])
 	LAGENTLIBS="$LAGENTLIBS ${_libkvm}"
