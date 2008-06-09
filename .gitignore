@@ -39,7 +39,6 @@ aclocal.m4
 mk/
 python/build/
 
-EXAMPLE-trap.conf
 EXAMPLE.conf
 agent/mibgroup/agent_module_dot_conf.h
 agent/mibgroup/agent_module_includes.h
