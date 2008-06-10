@@ -1,3 +1,9 @@
+net-snmp (5.4.1.1-vyatta1) unstable; urgency=low
+
+  * Update code to 5.4.1.1 to address SNMPv3 vulnerability (CVE-2008-0960)
+
+ -- Stephen Hemminger <shemminger@vyatta.com>  Tue, 10 Jun 2008 09:36:20 -0700
+
 net-snmp (5.4.1~dfsg-7.1-vyatta1) unstable; urgency=low
 
   * Modify linux route table download to improve performance with large

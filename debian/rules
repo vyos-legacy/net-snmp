@@ -9,7 +9,7 @@ include /usr/share/cdbs/1/rules/simple-patchsys.mk
 include /usr/share/cdbs/1/class/autotools.mk
 
 LIB_VERSION = 15
-COMPAT_VERSION = 5.4.1~dfsg
+COMPAT_VERSION = 5.4.1.1
 PYTHON_VERSION = 1.0a1
 BACKUP = aclocal.m4 configure ltmain.sh stamp-h stamp-h.in \
          include/net-snmp/net-snmp-config.h.in
