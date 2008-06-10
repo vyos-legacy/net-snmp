@@ -67,6 +67,7 @@ clean::
 	find debian -name python-*-stamp-* -exec rm {} \;
 	rm -rf python/build
 	rm -rf python/netsnmp_python.egg-info
+	rm -rf debian/*stamp*
 
 common-build-arch:: $(PYVERS:%=debian/python-build-stamp-%)
 
