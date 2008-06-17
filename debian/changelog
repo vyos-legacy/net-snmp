@@ -1,3 +1,35 @@
+net-snmp (5.4.1.1-vyatta2) unstable; urgency=low
+
+	  3.1.0
+  [ Mark O'Brien ]
+
+
+  [ Stephen Hemminger ]
+  * Update to version 5.4.1.1
+
+  [ rbalocca ]
+  * Add missing clean step that was preventing re-making snmp
+  * Add a file back into the repo
+  * Remove patches, as they are already applied
+  * Add derived files
+  * Check in the patched files
+
+  [ Stephen Hemminger ]
+  * Go back to original debian control file
+  * Fix debian/changlog entry so version is parsed
+  * Update debian changelog to set version
+  * Revert "Convert to vyatta-snmpd"
+  * Mark this package as replacing normal snmpd
+  * Rework how route table is read to use netlink
+  * mode change done by build process
+  * Convert to vyatta-snmpd
+  * add more generated files to .gitignore
+  * add .gitignore
+
+  [ Mark O'Brien ]
+
+ -- Mark O'Brien <mobrien@firebolt.vyatta.com>  Tue, 17 Jun 2008 09:25:47 -0700
+
 net-snmp (5.4.1.1-vyatta1) unstable; urgency=low
 
   * Update code to 5.4.1.1 to address SNMPv3 vulnerability (CVE-2008-0960)
