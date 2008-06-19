@@ -55,6 +55,7 @@ pre-build::
 	for i in $(BACKUP); do \
 		if [ ! -f $$i.backup ]; then cp $$i $$i.backup; fi ; \
 	done
+	rm -f debian/python*stamp*
 
 clean::
 	dh_clean perl/SNMP/t/snmptest.cmd
