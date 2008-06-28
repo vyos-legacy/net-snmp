@@ -1,3 +1,16 @@
+net-snmp (5.4.1.1-vyatta3) unstable; urgency=low
+
+	  3.1.1
+  [ Mark O'Brien ]
+
+
+  [ rbalocca ]
+  * The second top level "make" would fail
+
+  [ Mark O'Brien ]
+
+ -- Mark O'Brien <mobrien@firebolt.vyatta.com>  Sat, 28 Jun 2008 11:22:02 -0700
+
 net-snmp (5.4.1.1-vyatta2) unstable; urgency=low
 
 	  3.1.0
