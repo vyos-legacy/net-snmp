@@ -132,7 +132,9 @@ ipCidrRouteTable_container_init(netsnmp_container **container_ptr_ptr,
      * cache->enabled to 0.
      */
     cache->timeout = IPCIDRROUTETABLE_CACHE_TIMEOUT;    /* seconds */
+    cache->enabled = 0;
 }                               /* ipCidrRouteTable_container_init */
+
 
 /**
  * check entry for update
