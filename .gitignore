@@ -238,13 +238,7 @@ man/traptoemail.1
 man/unregister_app_config_handler.3
 man/unregister_config_handler.3
 man/variables.5
-mibs/BGP4-MIB.txt
-mibs/BRIDGE-MIB.txt
 mibs/GNOME-SMI.txt
-mibs/OSPF-MIB.txt
-mibs/OSPF-TRAP-MIB.txt
-mibs/RIPv2-MIB.txt
-mibs/SOURCE-ROUTING-MIB.txt
 net-snmp-config
 net-snmp-config-x
 perl/ASN/ASN.bs
