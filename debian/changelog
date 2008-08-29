@@ -1,3 +1,17 @@
+net-snmp (5.4.1.1-vyatta4) unstable; urgency=low
+
+	  3.1.3
+  [ Mark O'Brien ]
+
+  * 3.1.2
+
+  [ Bob Gilligan ]
+  * Bugfix: 1413
+
+  [ Mark O'Brien ]
+
+ -- Mark O'Brien <mobrien@firebolt.vyatta.com>  Tue, 19 Aug 2008 17:48:18 -0700
+
 net-snmp (5.4.1.1-vyatta3) unstable; urgency=low
 
 	  3.1.1
