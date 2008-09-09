@@ -43,6 +43,7 @@ TAGS
 tags
 aclocal.m4
 mk
+include/net-snmp/net-snmp-config.h.in
 EXAMPLE.conf
 agent/mibgroup/agent_module_dot_conf.h
 agent/mibgroup/agent_module_includes.h
