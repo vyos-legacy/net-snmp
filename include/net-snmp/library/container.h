@@ -2,7 +2,7 @@
 #define NETSNMP_CONTAINER_H
 
 /*
- * $Id: container.h 13803 2005-12-04 18:43:04Z rstory $
+ * $Id: container.h 16804 2008-02-13 23:37:48Z magfr $
  *
  * WARNING: This is a recently created file, and all of it's contents are
  *          subject to change at any time.
@@ -358,8 +358,8 @@ extern "C" {
         if(x) {
             int rc = x->insert(x,k);
             if(rc)
-/*                snmp_log(LOG_ERR,"error on subcontainer '%s' insert (%d)\n",
-                         x->container_name ? x->container_name : "", rc); */ ;
+                snmp_log(LOG_ERR,"error on subcontainer '%s' insert (%d)\n",
+                         x->container_name ? x->container_name : "", rc);
             else {
                 rc = CONTAINER_INSERT_HELPER(x->next, k);
                 if(rc)

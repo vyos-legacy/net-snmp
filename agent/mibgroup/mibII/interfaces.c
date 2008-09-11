@@ -800,7 +800,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case IFPHYSADDRESS:
         Interface_Get_Ether_By_Index(interface, return_buf);
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
 	*var_len = 0;
 #else
         if ((return_buf[0] == 0) && (return_buf[1] == 0) &&
@@ -849,7 +849,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case IFINOCTETS:
 #ifdef STRUCT_IFNET_HAS_IF_IBYTES
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = (u_long) ifnet.if_ibytes & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_ibytes;
@@ -863,13 +863,13 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case IFINUCASTPKTS:
         {
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
             long_return = (u_long) ifnet.if_ipackets & 0xffffffff;
 #else
             long_return = (u_long) ifnet.if_ipackets;
 #endif
 #if STRUCT_IFNET_HAS_IF_IMCASTS
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
             long_return -= (u_long) ifnet.if_imcasts & 0xffffffff;
 #else
             long_return -= (u_long) ifnet.if_imcasts;
@@ -879,7 +879,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case IFINNUCASTPKTS:
 #if STRUCT_IFNET_HAS_IF_IMCASTS
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = (u_long) ifnet.if_imcasts & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_imcasts;
@@ -893,7 +893,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case IFINDISCARDS:
 #if STRUCT_IFNET_HAS_IF_IQDROPS
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = (u_long) ifnet.if_iqdrops & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_iqdrops;
@@ -906,7 +906,7 @@ var_ifEntry(struct variable *vp,
 #endif
         return (u_char *) & long_return;
     case IFINERRORS:
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = (u_long) ifnet.if_ierrors & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_ierrors;
@@ -914,7 +914,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case IFINUNKNOWNPROTOS:
 #if STRUCT_IFNET_HAS_IF_NOPROTO
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = (u_long) ifnet.if_noproto & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_noproto;
@@ -928,7 +928,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case IFOUTOCTETS:
 #ifdef STRUCT_IFNET_HAS_IF_OBYTES
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = (u_long) ifnet.if_obytes & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_obytes;
@@ -942,13 +942,13 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case IFOUTUCASTPKTS:
         {
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
             long_return = (u_long) ifnet.if_opackets & 0xffffffff;
 #else
             long_return = (u_long) ifnet.if_opackets;
 #endif
 #if STRUCT_IFNET_HAS_IF_OMCASTS
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
             long_return -= (u_long) ifnet.if_omcasts & 0xffffffff;
 #else
             long_return -= (u_long) ifnet.if_omcasts;
@@ -958,7 +958,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case IFOUTNUCASTPKTS:
 #if STRUCT_IFNET_HAS_IF_OMCASTS
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = (u_long) ifnet.if_omcasts & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_omcasts;
@@ -971,21 +971,21 @@ var_ifEntry(struct variable *vp,
 #endif
         return (u_char *) & long_return;
     case IFOUTDISCARDS:
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = ifnet.if_snd.ifq_drops & 0xffffffff;
 #else
         long_return = ifnet.if_snd.ifq_drops;
 #endif
         return (u_char *) & long_return;
     case IFOUTERRORS:
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = ifnet.if_oerrors & 0xffffffff;
 #else
         long_return = ifnet.if_oerrors;
 #endif
         return (u_char *) & long_return;
     case IFOUTQLEN:
-#if defined(aix4) || defined(aix5)
+#if defined(aix4) || defined(aix5) || defined(aix6)
         long_return = ifnet.if_snd.ifq_len & 0xffffffff;
 #else
         long_return = ifnet.if_snd.ifq_len;
@@ -1550,10 +1550,6 @@ Interface_Scan_Init(void)
         struct ifnet   *nnew;
         char           *stats, *ifstart = line;
 
-	/* Ignore interfaces with no statistics. */
-	if (strstr(line, "No statistics available."))
-	    continue;
-
         if (line[strlen(line) - 1] == '\n')
             line[strlen(line) - 1] = '\0';
 
@@ -1587,7 +1583,7 @@ Interface_Scan_Init(void)
                                                &coll) != 5)) {
             if ((scan_line_to_use == scan_line_2_2)
                 && !strstr(line, "No statistics available"))
-                snmp_log(LOG_DEBUG,
+                snmp_log(LOG_ERR,
                          "/proc/net/dev data format error, line ==|%s|",
                          line);
             continue;
@@ -2246,71 +2242,7 @@ Interface_Scan_Get_Count(void)
 int
 Interface_Index_By_Name(char *Name, int Len)
 {
-    int             i, sd, lastlen = 0, interfaces = 0;
-    struct ifconf   ifc;
-    struct ifreq   *ifrp = NULL;
-    char           *buf = NULL;
-
-    if (Name == 0) {
-        return 0;
-    }
-    if ((sd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        return 0;
-    }
-
-    /*
-     * Cope with lots of interfaces and brokenness of ioctl SIOCGIFCONF
-     * on some platforms; see W. R. Stevens, ``Unix Network Programming
-     * Volume I'', p.435.  
-     */
-
-    for (i = 8;; i += 8) {
-        buf = calloc(i, sizeof(struct ifreq));
-        if (buf == NULL) {
-            close(sd);
-            return 0;
-        }
-        ifc.ifc_len = i * sizeof(struct ifreq);
-        ifc.ifc_buf = (caddr_t) buf;
-
-        if (ioctl(sd, SIOCGIFCONF, (char *) &ifc) < 0) {
-            if (errno != EINVAL || lastlen != 0) {
-                /*
-                 * Something has gone genuinely wrong.  
-                 */
-                free(buf);
-                close(sd);
-                return 0;
-            }
-            /*
-             * Otherwise, it could just be that the buffer is too small.  
-             */
-        } else {
-            if (ifc.ifc_len == lastlen) {
-                /*
-                 * The length is the same as the last time; we're done.  
-                 */
-                break;
-            }
-            lastlen = ifc.ifc_len;
-        }
-        free(buf);
-    }
-
-    ifrp = ifc.ifc_req;
-    interfaces = (ifc.ifc_len / sizeof(struct ifreq)) + 1;
-
-    for (i = 1; i < interfaces; i++, ifrp++) {
-        if (strncmp(ifrp->ifr_name, Name, Len) == 0) {
-            free(buf);
-            close(sd);
-            return i;
-        }
-    }
-
-    free(buf);
-    close(sd);
-    return 0;
+    return (solaris2_if_nametoindex(Name, Len));
 }
 
 #endif                          /* solaris2 */

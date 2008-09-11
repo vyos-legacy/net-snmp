@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $Id: net-snmp-config.in 16569 2007-06-29 22:18:27Z tanders $
+# $Id: net-snmp-config.in 17139 2008-07-30 17:28:08Z dts12 $
 #
 # this shell script is designed to merely dump the configuration
 # information about how the net-snmp package was compiled.  The
@@ -41,7 +41,7 @@ NSC_EXEC_PREFIX=$exec_prefix
 NSC_SRCDIR=@srcdir@
 NSC_INCDIR=${NSC_PREFIX}/include
 NSC_BASE_SUBAGENT_LIBS="-lnetsnmpagent -lnetsnmphelpers -lnetsnmp"
-NSC_BASE_AGENT_LIBS="-lnetsnmpmibs -lnetsnmpagent -lnetsnmphelpers -lnetsnmp"
+NSC_BASE_AGENT_LIBS="-lnetsnmpagent -lnetsnmphelpers -lnetsnmpmibs -lnetsnmp"
 NSC_SRC_LIBDIRS="agent/.libs snmplib/.libs agent/helpers/.libs"
 NSC_SRC_LIBDEPS="agent/.libs/libnetsnmpmibs.a agent/.libs/libnetsnmpagent.a agent/helpers/.libs/libnetsnmphelpers.a snmplib/.libs/libnetsnmp.a"
 
@@ -58,6 +58,7 @@ else
     *) optarg= ;;
   esac
 
+  unset shifted
   case $1 in
     --prefix=*)
       prefix=$optarg
@@ -201,6 +202,7 @@ else
       Xalgorithm="DES"
       token=rwuser
       shift
+      shifted=1
       while test "x$done" = "x" -a "x$1" != "x" ; do
 	case $1 in
 	    -A|-a)
@@ -315,6 +317,7 @@ else
     ####################################################
     --compile-subagent)
       shift
+      shifted=1
       while test "x$done" = "x" -a "x$1" != "x" ; do
 	case $1 in
             --norm)
@@ -656,7 +659,9 @@ EOF
       usage="yes"
       ;;
   esac
-  shift
+  if [ "x$shifted" = "x" ] ; then
+      shift
+  fi
   done
 fi
 

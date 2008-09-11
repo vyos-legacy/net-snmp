@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
+use Pod::Usage;
 
 
 my %opts;
@@ -13,9 +14,11 @@ LocalGetOptions(\%opts,
 	   ['n|dry-run',     'Dry run only.  Don\'t actually do anything.'],
 	   ['h|help', 'Help']);
 
-
+pod2usage(1) if ($opts{'h'});
 my $version = shift;
-die "No version supplied" if (!$version);
+pod2usage( "No version supplied" ) if (!$version);
+my $extrajunk = shift;
+pod2usage( "Unexpected argument ($extrajunk)" ) if ($extrajunk);
 my $vtag   = $version;
 my $branch = "";
 # Ensure we have both numeric and tag-style version labels
@@ -58,15 +61,19 @@ System("version:commit",
        "svn commit -m \"version update\" Makefile.top");
 
 # Step 3) configure and build and test it
+my $transportargs = "";
+if ( $^O eq "linux" ) {
+    $transportargs = "--with-transports=IPX";
+}
 my $configureargs = "--cache=config.cache --with-defaults ".
-    "--with-mib-modules='host examples examples/example   ".
-    "  testhandler smux Rmon disman/event-mib'            ".
-    "--with-transports=IPX --enable-ipv6                  ".
+    "--with-mib-modules='     examples examples/example   ".
+    "  testhandler smux Rmon'                             ".
+    " $transportargs        --enable-ipv6                 ".
     "--enable-embedded-perl --enable-shared";
 System("build:distclean","make distclean") if (-f 'Makefile');
 System("build:configure","./configure $configureargs");
 System("build:make","make");
-System("build:test","make test");
+System("build:test","make test TESTOPTS=-n");
 
 #
 # DOCUMENTATION
@@ -139,25 +146,37 @@ if ( $branch ) {
 # Step 12)  Construct the tarball
 my $tar = "star artype=ustar";    # XXX - check for star/gtar/etc
 System("release:makedist",
-       "svn checkout $root/tags/${vtag}/net-snmp net-snmp-$version");
+       "svn export $root/tags/${vtag}/net-snmp net-snmp-$version");
+System("release:removefiles",
+       "net-snmp-$version/remove-files net-snmp-$version");
 System("release:makedist",
        "$tar -c -z -f net-snmp-${version}.tar.gz  net-snmp-$version");
+System("release:makezipclean",
+       "rm -f net-snmp-${version}.zip");
+System("release:makezip",
+       "zip -r net-snmp-${version}.zip  net-snmp-$version");
 
 
 # Step 13)  Sign (or checksum) the package
-my $sig;
-my $pkg = "net-snmp-${version}.tar.gz";
+my $sig1;
+my $sig2;
+my $pkg1 = "net-snmp-${version}.tar.gz";
+my $pkg2 = "net-snmp-${version}.zip";
 
 System("release:searching-gpg-keys",
        "gpg --list-secret-keys net-snmp-admin");
 if($? != 0) {
-    $sig = "${pkg}.md5";
-    System("release:md5","md5sum $pkg > $sig");
+    $sig1 = "${pkg1}.md5";
+    $sig2 = "${pkg2}.md5";
+    System("release:md5","md5sum $pkg1 > $sig1");
+    System("release:md5","md5sum $pkg2 > $sig2");
 } else {
     # currently only rstory and hardaker have the gpg keys till Wes
     # sees someone else in person ;-)
-    $sig = "${pkg}.asc";
-    System("release:gpg","gpg -u net-snmp-admin -a --detach-sign $pkg");
+    $sig1 = "${pkg1}.asc";
+    System("release:gpg","gpg -u net-snmp-admin -a --detach-sign $pkg1");
+    $sig2 = "${pkg2}.asc";
+    System("release:gpg","gpg -u net-snmp-admin -a --detach-sign $pkg2");
 }
 
 #
@@ -182,7 +201,7 @@ System("release:update","svn -u status");
 print STDERR "**************************************** FINISHED ********************\n";
 print STDERR "\nDouble check the SVN status output above for any outstanding changes\n\n";
 print STDERR "Run the following command to upload the relase to SF:\n";
-print STDERR "  ncftpput upload.sf.net incoming net-snmp-${version}.tar.gz $sig\n";
+print STDERR "  rsync -v  $pkg1 $pkg2 $sig1 $sig2 frs.sourceforge.net:uploads/\n";
 print STDERR "See RELEASE-INSTRUCTIONS for any additional steps\n";
 
 
@@ -288,3 +307,49 @@ sub LocalOptionsMap {
     }
     return @opts;
 }
+
+__END__
+
+=head1 NAME
+
+makerelease - software package release script
+
+=head1 SYNOPSIS
+
+makerelease [options] version
+
+=head1 ARGUMENTS
+
+For full releases, the version should be specified in the form  I<5.x.y>
+
+For pre-releases, the version should be specified in the form  I<5.x.y.preN>
+
+For release candidates, the version should be specified in the form  I<5.x.y.rcN>
+
+Alternatively, it is also possible to specify versions in the form  Ext-5-x-y
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-r {step}| --regexp-ignore-steps={step}>
+
+Ignore steps matching the regular expression {step}
+
+=item B<-s {step}| --start-at={step}>
+
+Skip all steps preceding the specified (exact) {step}
+
+=item B<-i | --interactive>
+
+Prompt whether or not to execute each step
+
+=item B<-n | --dry-run>
+
+Print the commands that would be executed, but do not execute them.
+
+=item B<-h | --help>
+
+Display this help message.
+
+=back

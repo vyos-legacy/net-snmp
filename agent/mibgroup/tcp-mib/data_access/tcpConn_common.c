@@ -1,7 +1,7 @@
 /*
  *  TcpConn MIB architecture support
  *
- * $Id: tcpConn_common.c 16581 2007-07-02 05:31:33Z magfr $
+ * $Id: tcpConn_common.c 16724 2007-10-14 22:10:09Z magfr $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -141,7 +141,7 @@ netsnmp_access_tcpconn_entry_create(void)
      */
     rc = netsnmp_arch_tcpconn_entry_init(entry);
     if (SNMP_ERR_NOERROR != rc) {
-        DEBUGMSGT(("access:tcpconn:create","error %d in arch init\n"));
+        DEBUGMSGT(("access:tcpconn:create","error %d in arch init\n", rc));
         netsnmp_access_tcpconn_entry_free(entry);
     }
 

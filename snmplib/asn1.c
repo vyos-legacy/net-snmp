@@ -220,13 +220,13 @@ SOFTWARE.
             x = 0 - (x & 0xffffffff);                                   \
         }                                                               \
         if (trunc)                                                      \
-            snmp_log(LOG_ERR,"truncating signed value to 32 bits (%d)\n",y); \
+            DEBUGMSG(("asn","truncating signed value to 32 bits (%d)\n",y)); \
     } while(0)
 
 #  define CHECK_OVERFLOW_U(x,y) do {                                    \
         if (x > UINT32_MAX) {                                           \
             x &= 0xffffffff;                                            \
-            snmp_log(LOG_ERR,"truncating unsigned value to 32 bits (%d)\n",y); \
+            DEBUGMSG(("asn","truncating unsigned value to 32 bits (%d)\n",y)); \
         }                                                               \
     } while(0)
 #endif
@@ -1299,6 +1299,7 @@ asn_parse_objid(u_char * data,
     register u_long subidentifier;
     register long   length;
     u_long          asn_length;
+    size_t          original_length = *objidlength;
 
     *type = *bufp++;
     bufp = asn_parse_length(bufp, &asn_length);
@@ -1325,7 +1326,7 @@ asn_parse_objid(u_char * data,
             subidentifier =
                 (subidentifier << 7) + (*(u_char *) bufp & ~ASN_BIT8);
             length--;
-        } while (*(u_char *) bufp++ & ASN_BIT8);        /* last byte has high bit clear */
+        } while ((*(u_char *) bufp++ & ASN_BIT8) && (length > 0));        /* last byte has high bit clear */
 
 #if defined(EIGHTBIT_SUBIDS) || (SIZEOF_LONG != 4)
         if (subidentifier > (u_long) MAX_SUBID) {
@@ -1338,6 +1339,7 @@ asn_parse_objid(u_char * data,
 
     if (0 != length) {
         ERROR_MSG("OID length exceeds buffer size");
+        *objidlength = original_length;
         return NULL;
     }
 
@@ -2735,7 +2737,7 @@ asn_realloc_rbuild_int(u_char ** pkt, size_t * pkt_len,
     }
 
     CHECK_OVERFLOW_S(integer,10);
-    testvalue = (*intp < 0) ? -1 : 0;
+    testvalue = (integer < 0) ? -1 : 0;
 
     if (((*pkt_len - *offset) < 1) && !(r && asn_realloc(pkt, pkt_len))) {
         return 0;

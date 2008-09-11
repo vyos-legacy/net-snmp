@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: ipaddress_linux.c 15220 2006-09-15 00:48:50Z tanders $
+ * $Id: ipaddress_linux.c 17155 2008-08-13 13:02:12Z jsafranek $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -180,7 +180,8 @@ int
 _load_v6(netsnmp_container *container, int idx_offset)
 {
     FILE           *in;
-    char            line[80], addr[40], if_name[IFNAMSIZ];
+    char            line[80], addr[40];
+    char            if_name[IFNAMSIZ+1];/* +1 for '\0' because of the ugly sscanf below */ 
     u_char          *buf;
     int             if_index, pfx_len, scope, flags, rc = 0;
     size_t          in_len, out_len;
@@ -219,7 +220,7 @@ _load_v6(netsnmp_container *container, int idx_offset)
          * F: flags (see include/linux/rtnetlink.h, net/ipv6/addrconf.c)
          * I: interface
          */
-        rc = sscanf(line, "%39s %02x %02x %02x %02x %16s\n",
+        rc = sscanf(line, "%39s %04x %02x %02x %02x %" SNMP_MACRO_VAL_TO_STR(IFNAMSIZ) "s\n",
                     addr, &if_index, &pfx_len, &scope, &flags, if_name);
         if( 6 != rc ) {
             snmp_log(LOG_ERR, PROCFILE " data format error (%d!=6), line ==|%s|\n",

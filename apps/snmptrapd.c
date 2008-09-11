@@ -680,10 +680,10 @@ main(int argc, char *argv[])
      * inherited from the shell.
      */
     for (i = getdtablesize() - 1; i > 2; --i) {
-	(void) close(i);
+        (void) close(i);
     }
 #endif /* #WIN32 */
-
+    
 #ifdef SIGTERM
     signal(SIGTERM, term_handler);
 #endif

@@ -1,7 +1,7 @@
 /*
  * mib.c
  *
- * $Id: mib.c 16360 2007-05-12 11:14:39Z magfr $
+ * $Id: mib.c 17137 2008-07-30 07:57:19Z dts12 $
  *
  * Update: 1998-07-17 <jhy@gsu.edu>
  * Added print_oid_report* functions.
@@ -434,7 +434,7 @@ sprint_realloc_octet_string(u_char ** buf, size_t * buf_len,
     const char     *saved_hint = hint;
     int             hex = 0, x = 0;
     u_char         *cp;
-    int             output_format;
+    int             output_format, len_needed;
 
     if ((var->type != ASN_OCTET_STR) && 
         (!netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICKE_PRINT))) {
@@ -528,7 +528,9 @@ sprint_realloc_octet_string(u_char ** buf, size_t * buf_len,
                     break;
                 case 't': /* new in rfc 3411 */
                 case 'a':
-                    while ((*out_len + width + 1) >= *buf_len) {
+                    /* A string hint gives the max size - we may not need this much */
+                    len_needed = SNMP_MIN( width, ecp-cp );
+                    while ((*out_len + len_needed + 1) >= *buf_len) {
                         if (!(allow_realloc && snmp_realloc(buf, buf_len))) {
                             return 0;
                         }
@@ -3241,19 +3243,26 @@ sprint_realloc_variable(u_char ** buf, size_t * buf_len,
 #ifndef NETSNMP_DISABLE_MIB_LOADING
     } else if (subtree) {
         const char *units = NULL;
+        const char *hint = NULL;
         if (!netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID,
                                     NETSNMP_DS_LIB_DONT_PRINT_UNITS)) {
             units = subtree->units;
         }
+
+		if (!netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID,
+                                    NETSNMP_DS_LIB_NO_DISPLAY_HINT)) {
+			hint = subtree->hint;
+        }
+
         if (subtree->printomat) {
             return (*subtree->printomat) (buf, buf_len, out_len,
                                           allow_realloc, variable,
-                                          subtree->enums, subtree->hint,
+                                          subtree->enums, hint,
                                           units);
         } else {
             return sprint_realloc_by_type(buf, buf_len, out_len,
                                           allow_realloc, variable,
-                                          subtree->enums, subtree->hint,
+                                          subtree->enums, hint,
                                           units);
         }
 #endif /* NETSNMP_DISABLE_MIB_LOADING */

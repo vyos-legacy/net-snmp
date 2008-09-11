@@ -113,7 +113,7 @@ var_extensible_version(struct variable *vp,
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERDATE:
-        sprintf(errmsg, "$Date: 2006-09-14 17:48:50 -0700 (Thu, 14 Sep 2006) $");
+        sprintf(errmsg, "$Date: 2006-09-15 01:48:50 +0100 (Fri, 15 Sep 2006) $");
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERCDATE:

@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: route_linux.c 16381 2007-05-17 21:53:28Z hardaker $
+ * $Id: route_linux.c 17099 2008-07-02 12:39:23Z jsafranek $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -36,7 +36,7 @@ _netlink_parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 }
 
 
-static int 
+static int
 _get_route(struct nlmsghdr *n, void *arg1, void *arg2)
 {
     struct rtmsg *r = NLMSG_DATA(n);
@@ -49,7 +49,7 @@ _get_route(struct nlmsghdr *n, void *arg1, void *arg2)
     void *gate;
     void *src = NULL;
     char anyaddr[16] = { 0 };
-    
+
     if (n->nlmsg_type != RTM_NEWROUTE) {
 	snmp_log(LOG_ERR, "netlink got wrong type %d response to get route\n",
 		 n->nlmsg_type);
@@ -98,7 +98,7 @@ _get_route(struct nlmsghdr *n, void *arg1, void *arg2)
 
     entry->rt_proto = (r->rtm_protocol == RTPROT_REDIRECT)
 	? IANAIPROUTEPROTOCOL_ICMP : IANAIPROUTEPROTOCOL_LOCAL;
-	
+
     if (tb[RTA_PRIORITY])
 	entry->rt_metric1 = *(int *) RTA_DATA(tb[RTA_PRIORITY]);
 
@@ -119,15 +119,15 @@ _get_route(struct nlmsghdr *n, void *arg1, void *arg2)
 
 #ifdef USING_IP_FORWARD_MIB_INETCIDRROUTETABLE_INETCIDRROUTETABLE_MODULE
         /*
-	  inetCidrRoutePolicy OBJECT-TYPE 
-	  SYNTAX     OBJECT IDENTIFIER 
-	  MAX-ACCESS not-accessible 
-	  STATUS     current 
-	  DESCRIPTION 
-	  "This object is an opaque object without any defined 
-	  semantics.  Its purpose is to serve as an additional 
-	  index which may delineate between multiple entries to 
-	  the same destination.  The value { 0 0 } shall be used 
+	  inetCidrRoutePolicy OBJECT-TYPE
+	  SYNTAX     OBJECT IDENTIFIER
+	  MAX-ACCESS not-accessible
+	  STATUS     current
+	  DESCRIPTION
+	  "This object is an opaque object without any defined
+	  semantics.  Its purpose is to serve as an additional
+	  index which may delineate between multiple entries to
+	  the same destination.  The value { 0 0 } shall be used
 	  as the default value for this object."
         */
         /*
@@ -144,7 +144,7 @@ _get_route(struct nlmsghdr *n, void *arg1, void *arg2)
             entry->flags |= NETSNMP_ACCESS_ROUTE_POLICY_STATIC;
         }
 #endif
-    } 
+    }
 #ifdef NETSNMP_ENABLE_IPV6
     if (r->rtm_family == AF_INET6) {
         entry->rt_pfx_len = r->rtm_dst_len;
@@ -158,15 +158,15 @@ _get_route(struct nlmsghdr *n, void *arg1, void *arg2)
 
 #ifdef USING_IP_FORWARD_MIB_INETCIDRROUTETABLE_INETCIDRROUTETABLE_MODULE
         /*
-	  inetCidrRoutePolicy OBJECT-TYPE 
-	  SYNTAX     OBJECT IDENTIFIER 
-	  MAX-ACCESS not-accessible 
-	  STATUS     current 
-	  DESCRIPTION 
-	  "This object is an opaque object without any defined 
-	  semantics.  Its purpose is to serve as an additional 
-	  index which may delineate between multiple entries to 
-	  the same destination.  The value { 0 0 } shall be used 
+	  inetCidrRoutePolicy OBJECT-TYPE
+	  SYNTAX     OBJECT IDENTIFIER
+	  MAX-ACCESS not-accessible
+	  STATUS     current
+	  DESCRIPTION
+	  "This object is an opaque object without any defined
+	  semantics.  Its purpose is to serve as an additional
+	  index which may delineate between multiple entries to
+	  the same destination.  The value { 0 0 } shall be used
 	  as the default value for this object."
         */
         /*
@@ -204,7 +204,7 @@ _netlink_open(int protocol)
 	snmp_log_perror("Cannot open netlink socket");
 	return -1;
     }
-	
+
     /* increase default rx buffer for performance */
     if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) < 0) {
 	snmp_log_perror("netlink SO_RCVBUF");
@@ -221,7 +221,7 @@ _netlink_open(int protocol)
     return fd;
 }
 
-static int 
+static int
 _netlink_dump_request(int fd, int family, int type)
 {
     struct {
@@ -240,8 +240,8 @@ _netlink_dump_request(int fd, int family, int type)
     return send(fd, &req, sizeof(req), 0);
 }
 
-static int 
-_netlink_dump_filter(int fd, 
+static int
+_netlink_dump_filter(int fd,
 		     int (*filter)(struct nlmsghdr *, void *, void *),
 		     void *arg1, void *arg2)
 {
@@ -368,7 +368,7 @@ netsnmp_access_route_container_arch_load(netsnmp_container* container,
     int             rc;
 
     DEBUGMSGTL(("access:route:container",
-                "route_container_arch_load (flags %p)\n", load_flags));
+                "route_container_arch_load (flags %x)\n", load_flags));
 
     if (NULL == container) {
         snmp_log(LOG_ERR, "no container specified/found for access_route\n");

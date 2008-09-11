@@ -110,7 +110,7 @@ netsnmp_udp6_fmtaddr(netsnmp_transport *t, void *data, int len)
         return strdup("UDP/IPv6: unknown");
     } else {
         char addr[INET6_ADDRSTRLEN];
-        char tmp[INET6_ADDRSTRLEN + 8];
+        char tmp[INET6_ADDRSTRLEN + 18];
 
         sprintf(tmp, "UDP/IPv6: [%s]:%hu",
                 inet_ntop(AF_INET6, (void *) &(to->sin6_addr), addr,
@@ -535,6 +535,13 @@ netsnmp_sockaddr_in6_2(struct sockaddr_in6 *addr,
              * Fall through.  
              */
         }
+
+        if (peername[0] == '\0') {
+          DEBUGMSGTL(("netsnmp_sockaddr_in6", "empty hostname\n"));
+          free(peername);
+          return 0;
+        }
+
 #if HAVE_GETADDRINFO
         memset(&hint, 0, sizeof hint);
         hint.ai_flags = 0;
@@ -545,10 +552,11 @@ netsnmp_sockaddr_in6_2(struct sockaddr_in6 *addr,
         err = getaddrinfo(peername, NULL, &hint, &addrs);
         if (err != 0) {
 #if HAVE_GAI_STRERROR
-            snmp_log(LOG_ERR, "getaddrinfo: %s %s\n", peername,
+            snmp_log(LOG_ERR, "getaddrinfo(\"%s\", NULL, ...): %s\n", peername,
                      gai_strerror(err));
 #else
-            snmp_log(LOG_ERR, "getaddrinfo: %s (error %d)\n", peername, err);
+            snmp_log(LOG_ERR, "getaddrinfo(\"%s\", NULL, ...): (error %d)\n",
+                     peername, err);
 #endif
             free(peername);
             return 0;

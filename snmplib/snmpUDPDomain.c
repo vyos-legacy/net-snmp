@@ -104,11 +104,13 @@ netsnmp_udp_fmtaddr(netsnmp_transport *t, void *data, int len)
 	char tmp[64];
         to = (struct sockaddr_in *) &(addr_pair->remote_addr);
         if (to == NULL) {
-            return strdup("UDP: unknown");
+            sprintf(tmp, "UDP: [%s]->unknown",
+                    inet_ntoa(addr_pair->local_addr));
+        } else {
+            sprintf(tmp, "UDP: [%s]->", inet_ntoa(addr_pair->local_addr));
+            sprintf(tmp + strlen(tmp), "[%s]:%hd",
+                    inet_ntoa(to->sin_addr), ntohs(to->sin_port));
         }
-
-        sprintf(tmp, "UDP: [%s]:%hu",
-                inet_ntoa(to->sin_addr), ntohs(to->sin_port));
         return strdup(tmp);
     }
 }
@@ -642,6 +644,7 @@ netsnmp_udp_transport(struct sockaddr_in *addr, int local)
             if (setsockopt(t->sock, SOL_IP, IP_PKTINFO, &sockopt, sizeof sockopt) == -1) {
                 DEBUGMSGTL(("netsnmp_udp", "couldn't set IP_PKTINFO: %s\n",
                     strerror(errno)));
+                netsnmp_transport_free(t);
                 return NULL;
             }
             DEBUGMSGTL(("netsnmp_udp", "set IP_PKTINFO\n"));
@@ -667,10 +670,24 @@ netsnmp_udp_transport(struct sockaddr_in *addr, int local)
         if (client_socket) {
             struct sockaddr_in client_addr;
             netsnmp_sockaddr_in2(&client_addr, client_socket, NULL);
+            addr_pair.local_addr = client_addr.sin_addr;
             client_addr.sin_port = 0;
-            bind(t->sock, (struct sockaddr *)&client_addr,
+            rc = bind(t->sock, (struct sockaddr *)&client_addr,
                   sizeof(struct sockaddr));
+            if ( rc != 0 ) {
+                DEBUGMSGTL(("netsnmp_udp", "failed to bind for clientaddr: %d %s\n",
+                            errno, strerror(errno)));
+                netsnmp_udp_close(t);
+                netsnmp_transport_free(t);
+                return NULL;
+            }
         }
+
+        str = netsnmp_udp_fmtaddr(NULL, (void *)&addr_pair,
+                 sizeof(netsnmp_udp_addr_pair));
+        DEBUGMSGTL(("netsnmp_udp", "client open %s\n", str));
+        free(str);
+
         /*
          * Save the (remote) address in the
          * transport-specific data pointer for later use by netsnmp_udp_send.

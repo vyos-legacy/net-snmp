@@ -1,14 +1,14 @@
 /*
  *  Arp MIB architecture support
  *
- * $Id: scalars_linux.c 15120 2006-08-31 08:34:18Z tanders $
+ * $Id: scalars_linux.c 16965 2008-05-25 07:14:16Z magfr $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
 
 #include <net-snmp/data_access/ip_scalars.h>
 
-const char *ipfw_name = "/proc/sys/net/ipv6/conf/all/forwarding";
+static const char ipfw_name[] = "/proc/sys/net/ipv6/conf/all/forwarding";
 
 int
 netsnmp_arch_ip_scalars_ipv6IpForwarding_get(u_long *value)
@@ -55,8 +55,8 @@ netsnmp_arch_ip_scalars_ipv6IpForwarding_set(u_long value)
     else if (2 == value)
         value = 0;
     else {
-        DEBUGMSGTL(("access:ipv6IpForwarding", "bad value %ld for %s\n",
-                    value));
+        DEBUGMSGTL(("access:ipv6IpForwarding",
+                    "bad value %ld for ipv6IpForwarding\n", value));
         return SNMP_ERR_WRONGVALUE;
     }
 

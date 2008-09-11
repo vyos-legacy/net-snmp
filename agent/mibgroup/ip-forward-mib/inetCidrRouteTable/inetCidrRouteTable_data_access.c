@@ -130,7 +130,6 @@ inetCidrRouteTable_container_init(netsnmp_container **container_ptr_ptr,
      * cache->enabled to 0.
      */
     cache->timeout = INETCIDRROUTETABLE_CACHE_TIMEOUT;  /* seconds */
-    cache->enabled = 0;
 }                               /* inetCidrRouteTable_container_init */
 
 /**

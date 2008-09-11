@@ -1,7 +1,7 @@
 /*
  *  Ipaddress MIB architecture support
  *
- * $Id: ipaddress_common.c 16612 2007-07-16 23:59:44Z hardaker $
+ * $Id: ipaddress_common.c 16724 2007-10-14 22:10:09Z magfr $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -169,7 +169,7 @@ netsnmp_access_ipaddress_entry_create(void)
 
     rc = netsnmp_arch_ipaddress_entry_init(entry);
     if (SNMP_ERR_NOERROR != rc) {
-        DEBUGMSGT(("access:ipaddress:create","error %d in arch init\n"));
+        DEBUGMSGT(("access:ipaddress:create","error %d in arch init\n", rc));
         netsnmp_access_ipaddress_entry_free(entry);
         entry = NULL;
     }

@@ -245,6 +245,7 @@ handle_agentx_packet(int operation, netsnmp_session * session, int reqid,
     netsnmp_pdu    *internal_pdu = NULL;
     void           *retmagic = NULL;
     ns_subagent_magic *smagic = NULL;
+    int             result;
 
     if (operation == NETSNMP_CALLBACK_OP_DISCONNECT) {
         struct synch_state *state = (struct synch_state *) magic;
@@ -465,8 +466,11 @@ handle_agentx_packet(int operation, netsnmp_session * session, int reqid,
     internal_pdu->contextNameLen = internal_pdu->community_len;
     internal_pdu->community = NULL;
     internal_pdu->community_len = 0;
-    snmp_async_send(agentx_callback_sess, internal_pdu, mycallback,
+    result = snmp_async_send(agentx_callback_sess, internal_pdu, mycallback,
                     retmagic);
+    if (result == 0) {
+        snmp_free_pdu(internal_pdu);
+    }
     return 1;
 }
 
@@ -559,6 +563,7 @@ handle_subagent_set_response(int op, netsnmp_session * session, int reqid,
 {
     netsnmp_session *retsess;
     struct agent_netsnmp_set_info *asi;
+    int    result;
 
     if (op != NETSNMP_CALLBACK_OP_RECEIVED_MESSAGE || magic == NULL) {
         return 1;
@@ -583,8 +588,11 @@ handle_subagent_set_response(int op, netsnmp_session * session, int reqid,
          */
         if (!pdu->errstat) {
             asi->mode = pdu->command = SNMP_MSG_INTERNAL_SET_RESERVE2;
-            snmp_async_send(agentx_callback_sess, pdu,
+            result = snmp_async_send(agentx_callback_sess, pdu,
                             handle_subagent_set_response, asi);
+            if (result == 0) {
+                snmp_free_pdu(pdu);
+            }
             DEBUGMSGTL(("agentx/subagent",
                         "  going from RESERVE1 -> RESERVE2\n"));
             return 1;
@@ -746,7 +754,7 @@ subagent_open_master_session(void)
 
     if (main_session) {
         snmp_log(LOG_WARNING,
-                 "AgentX session to master agent attempted to be re-opened.");
+                 "AgentX session to master agent attempted to be re-opened.\n");
         return -1;
     }
 
@@ -812,6 +820,16 @@ subagent_open_master_session(void)
         main_session = NULL;
         return -1;
     }
+
+    /*
+     * subagent_register_ping_alarm assumes that securityModel will
+     *  be set to SNMP_DEFAULT_SECMODEL on new AgentX sessions.
+     *  This field is then (ab)used to hold the alarm stash.
+     *
+     * Why is the securityModel field used for this purpose, I hear you ask.
+     * Damn good question!   (See SVN revision 4886)
+     */
+    main_session->securityModel = SNMP_DEFAULT_SECMODEL;
 
     if (add_trap_session(main_session, AGENTX_MSG_NOTIFY, 1,
                          AGENTX_VERSION_1)) {

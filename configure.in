@@ -10,10 +10,10 @@
 #
 # Process this file with autoconf to produce a configure script.
 #
-AC_INIT([Net-SNMP], [5.4.1.1], [net-snmp-coders@lists.sourceforge.net])
+AC_INIT([Net-SNMP], [5.4.2], [net-snmp-coders@lists.sourceforge.net])
 AC_PREREQ([2.59])
 AC_CONFIG_SRCDIR([agent/mibgroup/ucd-snmp/extensible.c])
-AC_REVISION([$Revision: 16640 $])
+AC_REVISION([$Revision: 17213 $])
 
 AC_CONFIG_HEADER(include/net-snmp/net-snmp-config.h)
 
@@ -408,7 +408,7 @@ AC_ARG_ENABLE(opaque-special-types,,
 	AC_MSG_ERROR([ Invalid option. Use --with-opaque-special-types/--without-opaque-special-types instead ]) )
 
 AC_ARG_WITH(mibdirs,
-[  --with-mibdirs=\"dir1:dir2:\"   Default directories to look for mibs.
+[  --with-mibdirs="dir1:dir2:"   Default directories to look for mibs.
                                   (Default: \$HOME/.snmp/mibs:DATADIR/snmp/mibs)],
     [NETSNMP_DEFAULT_MIBDIRS="$with_mibdirs"
     AC_DEFINE_UNQUOTED(NETSNMP_DEFAULT_MIBDIRS,"$with_mibdirs")])
@@ -416,9 +416,9 @@ AC_ARG_ENABLE(mibdirs,,
 	AC_MSG_ERROR([ Invalid option. Use --with-mibdirs/--without-mibdirs instead ]) )
 
 AC_ARG_WITH(mibs,
-[  --with-mibs=\"item1:item2:\"    Default mib IDs to read.
-                                  (The default list is \"IP-MIB:IF-MIB:
-                                  TCP-MIB:UDP-MIB:SNMPv2-MIB:RFC1213-MIB\"
+[  --with-mibs="item1:item2:"    Default mib IDs to read.
+                                  (The default list is "IP-MIB:IF-MIB:
+                                  TCP-MIB:UDP-MIB:SNMPv2-MIB:RFC1213-MIB"
                                   with the addition of any mibs used
                                   by the mib modules the agent is
                                   configured with)],
@@ -426,7 +426,7 @@ AC_ARG_WITH(mibs,
 # enable-mibs is valid too, but means something else
 
 AC_ARG_WITH(mibfiles,
-[  --with-mibfiles=\"file1:file2\" Default mib files to load.
+[  --with-mibfiles="file1:file2" Default mib files to load.
                                   (Default:  none.  uses IDs above instead.)],
     AC_DEFINE_UNQUOTED(NETSNMP_DEFAULT_MIBFILES,"$with_mibfiles"))
 AC_ARG_ENABLE(mibfiles,,
@@ -517,14 +517,14 @@ AC_ARG_ENABLE(dummy-values,,
 	AC_MSG_ERROR([ Invalid option. Use --with-dummy-values/--without-dummy-values instead ]) )
 
 AC_ARG_WITH(persistent-directory,
-[  --with-persistent-directory=\"directory\"
+[  --with-persistent-directory="directory"
                                   Default directory for persistent data storage.],ac_cv_user_prompt_NETSNMP_PERSISTENT_DIRECTORY="$with_persistent_directory")
 AC_ARG_ENABLE(persistent-directory,,
 	AC_MSG_ERROR([ Invalid option. Use --with-persistent-directory/--without-persistent-directory instead ]) )
 
 default_persistent_mask=077
 AC_ARG_WITH(persistent-mask,
-[  --with-persistent-mask=\"mask\"  Default mask for persistent data storage.
+[  --with-persistent-mask="mask"  Default mask for persistent data storage.
                                   (Default: 077)],[
   if test "$withval" = yes; then
     AC_MSG_ERROR([ Please provide a mask value ]);
@@ -539,12 +539,27 @@ AC_ARG_ENABLE(persistent-mask,,
 	AC_MSG_ERROR([ Invalid option. Use --with-persistent-mask instead ]) )
 
 AC_ARG_WITH(copy_persistent_files,
-[  --with-copy-persistent-files=\"no\" Don't copy persistent files
-                                     (or use \"yes\" to copy them).
+[  --with-copy-persistent-files="no" Don't copy persistent files
+                                     (or use "yes" to copy them).
                                      (Default: yes)],
     ac_cv_user_prompt_COPY_PERSISTENT_FILES="$with_copy_persistent_files")
 AC_ARG_ENABLE(copy_persistent_files,,
 	AC_MSG_ERROR([ Invalid option. Use --with-copy_persistent_files/--without-copy_persistent_files instead ]) )
+
+default_temp_file_pattern="/tmp/snmpdXXXXXX"
+AC_ARG_WITH(temp-file-pattern,
+[  --with-temp-file-pattern=PATTERN  Pattern of temporary files (Default: /tmp/snmpdXXXXXX)],[
+  if test "$withval" = yes; then
+    AC_MSG_ERROR([ Please provide a pattern ]);
+  fi
+  AC_MSG_RESULT(using temporary file pattern $withval)
+  AC_DEFINE_UNQUOTED(NETSNMP_TEMP_FILE_PATTERN,"$withval",[Pattern of temporary files])
+],[
+  AC_MSG_RESULT(using default temporary file pattern $default_temp_file_pattern)
+  AC_DEFINE_UNQUOTED(NETSNMP_TEMP_FILE_PATTERN,"$default_temp_file_pattern",[Pattern of temporary files])
+])
+AC_ARG_ENABLE(temp-file-pattern,,
+	AC_MSG_ERROR([ Invalid option. Use --with-temp-file-pattern instead ]) )
 
 default_agentx_socket="/var/agentx/master"
 AC_ARG_WITH(agentx-socket,
@@ -562,7 +577,7 @@ AC_ARG_ENABLE(agentx-socket,,
 	AC_MSG_ERROR([ Invalid option. Use --with-agentx-socket instead ]) )
 
 AC_ARG_WITH(default-snmp-version,
-[  --with-default-snmp-version=\"3\" Default version of SNMP to use.
+[  --with-default-snmp-version="3" Default version of SNMP to use.
                                     (Default: 3)
                                     Legal values: 1, 2 (for SNMPv2c) or 3.],
     ac_cv_user_prompt_NETSNMP_DEFAULT_SNMP_VERSION="$with_default_snmp_version")
@@ -581,21 +596,21 @@ if test "x$ac_cv_user_prompt_NETSNMP_DEFAULT_SNMP_VERSION" != "x"; then
 fi
 
 AC_ARG_WITH(sys_contact,
-[  --with-sys-contact=\"who@where\"  Default system contact.
+[  --with-sys-contact="who@where"  Default system contact.
                                     (Default: LOGIN@DOMAINNAME)],
     ac_cv_user_prompt_NETSNMP_SYS_CONTACT="$with_sys_contact")
 AC_ARG_ENABLE(sys_contact,,
 	AC_MSG_ERROR([ Invalid option. Use --with-sys-contact/--without-sys-contact instead ]) )
 
 AC_ARG_WITH(sys_location,
-[  --with-sys-location=\"location\"  Default system location.
+[  --with-sys-location="location"  Default system location.
                                     (Default: Unknown)],
     ac_cv_user_prompt_NETSNMP_SYS_LOC="$with_sys_location")
 AC_ARG_ENABLE(sys_location,,
 	AC_MSG_ERROR([ Invalid option. Use --with-sys-location/--without-sys-location instead ]) )
 
 AC_ARG_WITH(logfile,
-[  --with-logfile=\"location\"       Default log file location for snmpd.],
+[  --with-logfile="location"       Default log file location for snmpd.],
     ac_cv_user_prompt_NETSNMP_LOGFILE="$with_logfile")
 AC_ARG_ENABLE(logfile,,
 	AC_MSG_ERROR([ Invalid option. Use --with-logfile/--without-logfile instead ]) )
@@ -604,10 +619,10 @@ if test "$ac_cv_user_prompt_NETSNMP_LOGFILE" = "no"; then
 fi
 
 AC_ARG_WITH(transports,
-[  --with-transports=\"t1 t2 ...\"   Compile in the given SNMP transport
+[  --with-transports="t1 t2 ..."   Compile in the given SNMP transport
                                     modules (space separated list).])
 AC_ARG_WITH(out_transports,
-[  --with-out-transports=\"t1 ...\"  Exclude listed SNMP transports
+[  --with-out-transports="t1 ..."  Exclude listed SNMP transports
                                     (space separated list).
 
   Available SNMP transport modules are:
@@ -648,7 +663,7 @@ AC_ARG_WITH(out-transport,,AC_MSG_ERROR([ Invalid option. Use --with-out-transpo
 #
 
 AC_ARG_WITH(security-modules,
-[  --with-security-modules=\"s1 s2 ...\"   Compile in the given SNMP security
+[  --with-security-modules="s1 s2 ..."   Compile in the given SNMP security
                                     module services (space separated list).
 
   Available SNMP security services:
@@ -665,13 +680,13 @@ AC_ARG_ENABLE(security-modules,,
 #
 
 AC_ARG_WITH(mib_modules,
-[  --with-mib-modules=\"item1 ...\"  Compile with additional mib modules
+[  --with-mib-modules="item1 ..."  Compile with additional mib modules
                                     (Space separated list).])
 AC_ARG_ENABLE(mib_modules,,
 	AC_MSG_ERROR([ Invalid option. Use --with-mib-modules/--without-mib-modules instead ]) )
 
 AC_ARG_WITH(out_mib_modules,
-[  --with-out-mib-modules=\"list\"   Compile without these mib modules.
+[  --with-out-mib-modules="list"   Compile without these mib modules.
 
   Default mib modules compiled into the agent (which can be removed):
   
@@ -708,6 +723,7 @@ AC_ARG_WITH(out_mib_modules,
       misc/ipfwacc         accounting rules IP firewall information
       ipfwchains/ipfwchains  firewall chains under ipfw
                              (See agent/mibgroup/ipfwchains/README)
+      sctp-mib             support for the SCTP-MIB
 
     Solaris
       ucd-snmp/lmSensors   hardware monitoring (LM-SENSORS-MIB)
@@ -1021,7 +1037,7 @@ fi
 
 # platform-specific linker flags
 case $target_os in
-    aix4.2*|aix4.3*|aix5*)
+    aix4.2*|aix4.3*|aix5*|aix6*)
         AC_MSG_CHECKING([what linker flags to add to enable runtime linking on AIX])
         for ld_flag in $LDFLAGS; do
             if (test $ld_flag = "-brtl" || test $ld_flag = "-Wl,-brtl"); then
@@ -1041,7 +1057,7 @@ case $target_os in
 	    AC_MSG_RESULT([none])
 	fi
 	;;
-    darwin8*)
+    darwin8*|darwin9*)
         AC_MSG_CHECKING([whether darwin ld might need -flat_namespace])
 	if test -z "$MACOSX_DEPLOYMENT_TARGET"; then
 		LDFLAGS="-flat_namespace $LDFLAGS"
@@ -1320,6 +1336,9 @@ AC_SUBST(SNMPSHAREPATH)
 
 if test "x$NETSNMP_DEFAULT_MIBDIRS" = "x"; then
   NETSNMP_DEFAULT_MIBDIRS="\$HOME/.snmp/mibs:$SNMPSHAREPATH/mibs"
+  if test "x$PARTIALTARGETOS" = "xmingw32" -o "x$PARTIALTARGETOS" = "xmingw32msvc" -o "x$PARTIALTARGETOS" = "xcygwin"; then
+    NETSNMP_DEFAULT_MIBDIRS=`echo "$NETSNMP_DEFAULT_MIBDIRS" | $SED 's/:/;/g'`
+  fi
   AC_DEFINE_UNQUOTED(NETSNMP_DEFAULT_MIBDIRS,"$NETSNMP_DEFAULT_MIBDIRS")
 fi
 AC_SUBST(NETSNMP_DEFAULT_MIBDIRS)
@@ -1856,7 +1875,7 @@ new_module_list="$new_with_mib_modules default_modules"
 # minor modifications
 if test "x$enable_agent" = "xno"; then
    # minimum mib module list for snmptrapd
-   new_module_list="mibII/vacm_vars utilities/execute $new_with_mib_modules"
+   new_module_list="mibII/vacm_vars mibII/vacm_conf utilities/execute $new_with_mib_modules"
    default_mibs=SNMPv2-MIB:RFC1213-MIB
    default_mibs_install=" "
 elif test "x$mini_agent" = "xyes"; then
@@ -2590,19 +2609,13 @@ AC_DEFINE_UNQUOTED(KERNEL_LOC,"$ac_cv_KERNEL_LOC")
 
 AC_CACHE_CHECK(for mount table location,ac_cv_ETC_MNTTAB,
 [ac_cv_ETC_MNTTAB="unknown"
-AC_ARG_WITH(mnttab,
-[  --with-mnttab=\"/etc/mnttab\"  Mount table location.
-                                 The default is to autodetect this.],
-	[ac_cv_ETC_MNTTAB="$with_mnttab"])
-if test "$ac_cv_ETC_MNTTAB" = "unknown"; then
-  for i in /etc/mnttab /etc/mtab /etc/filesystems
-    do
-    if test -f $i; then
-      ac_cv_ETC_MNTTAB="$i"
-      break;
-    fi
-  done
-fi
+for i in /etc/mnttab /etc/mtab /etc/filesystems
+  do
+  if test -f $i; then
+    ac_cv_ETC_MNTTAB="$i"
+    break;
+  fi
+done
 ])
 
 AC_DEFINE_UNQUOTED(ETC_MNTTAB,"$ac_cv_ETC_MNTTAB")
@@ -2650,7 +2663,7 @@ fi
 AC_ARG_WITH(elf,
 	[AS_HELP_STRING(--without-elf,[use elf libraries])],,
 	[AC_ARG_ENABLE(elf,,
-		[AC_MSG_ERROR([ Invalid option. Use --with-elf/--with-out-elf instead ])])])
+		[AC_MSG_ERROR([ Invalid option. Use --with-elf/--without-elf instead ])])])
 
 if test "x$with_elf" != "xno"; then
 # nlist is needed for uptime on some sytems in the generic library
@@ -2860,9 +2873,6 @@ AC_CHECK_FUNC(kvm_getprocs, AC_DEFINE(HAVE_KVM_GETPROCS, 1, [Define to 1 if you 
 AC_CHECK_FUNC(kvm_getswapinfo, AC_DEFINE(HAVE_KVM_GETSWAPINFO, 1, [Define to 1 if you have the `kvm_getswapinfo' function.]),
 	AC_CHECK_LIB(kvm, kvm_getswapinfo, AC_DEFINE(HAVE_KVM_GETSWAPINFO, 1, [Define to 1 if you have the `kvm_getswapinfo' function.])
 	_libkvm="-lkvm"))
-AC_CHECK_FUNC(nlist, AC_DEFINE(HAVE_NLIST, 1, [Define to 1 if you have the `nlist' function.]),
-        AC_CHECK_LIB(kvm, nlist, AC_DEFINE(HAVE_NLIST, 1, [Define to 1 if you have the `nlist' function.])
-        _libkvm="-lkvm"))
 if test "x${_libkvm}" != "x"; then
 	AC_DEFINE(HAVE_LIBKVM, 1, [Define to 1 if you have the `kvm' library (-lkvm).])
 	LAGENTLIBS="$LAGENTLIBS ${_libkvm}"
@@ -2976,7 +2986,7 @@ if test "x$install_perl" != "xno" ; then
     if test "xenable_perl_cc_checks" != "xno" ; then
       AC_MSG_CHECKING([for Perl cc])
       changequote(, )
-      PERLCC=`$myperl -V:cc | $myperl -n -e 'print if (s/^\s*cc=.([-\w\s\/]+).;\s*/$1/);'`
+      PERLCC=`$myperl -V:cc | $myperl -n -e 'print if (s/^\s*cc=.([-=\w\s\/]+).;\s*/$1/);'`
       changequote([, ])
       if test "x$PERLCC" != "x" ; then
         AC_MSG_RESULT([$PERLCC])
@@ -3065,7 +3075,7 @@ if test "x$embed_perl" != "xno" ; then
     perlcflags=`$myperl -MExtUtils::Embed -e ccopts`
     if test "x$perlcflags" != "x" ; then
       AC_MSG_RESULT([$perlcflags])
-      CPPFLAGS="$CPPFLAGS $perlcflags"
+      CFLAGS="$CFLAGS $perlcflags"
     else
       if test "x$embed_perl" = "xtry" ; then
         embed_perl="no"
@@ -3106,8 +3116,8 @@ fi
 
 # check needed functions
 if test "x$embed_perl" != "xno" ; then
-    OLDLDFLAGS="$LDFLAGS"
-    LDFLAGS="$LDFLAGS $netsnmp_perlldopts"
+    OLDLIBS="$LIBS"
+    LIBS="$LIBS $netsnmp_perlldopts"
 
     # newer perl vs older perl call functions
     AC_CHECK_FUNCS(eval_pv)
@@ -3118,7 +3128,7 @@ if test "x$embed_perl" != "xno" ; then
     AC_CHECK_FUNC(perl_eval_pv, AC_DEFINE(HAVE_PERL_EVAL_PV_LC))
     AC_CHECK_FUNC(Perl_eval_pv, AC_DEFINE(HAVE_PERL_EVAL_PV_UC))
 
-    LDFLAGS="$OLDLDFLAGS"
+    LIBS="$OLDLIBS"
 
 
     if test "x$ac_cv_func_perl_eval_pv" != "xyes" -a "x$ac_cv_func_Perl_eval_pv" != "xyes" -a "x$ac_cv_func_eval_pv" != "xyes" ; then
@@ -3808,11 +3818,55 @@ AC_CHECK_STRUCT_FOR([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#ifdef HAVE_NET_IF_VAR_H
+#include <net/if_var.h>
+#endif
+], ifnet, if_mtu)
+
+if test "x$ac_cv_struct_ifnet_has_if_mtu" = "xno"; then
+AC_CACHE_CHECK(if _KERNEL needs to be defined for if_mtu, ac_cv_IFNET_NEEDS_KERNEL,
+[
+if test "x$ac_cv_struct_ifnet_has_if_mtu" = "xyes"; then
+  ac_cv_IFNET_NEEDS_KERNEL=no
+else
+AC_TRY_COMPILE([
+#define _KERNEL 1
+#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
+#include <sys/types.h>
+#include <sys/socket.h>
+#ifdef HAVE_SYS_TIME_H
+#include <sys/time.h>
+#endif
+#include <net/if.h>
+#ifdef HAVE_NET_IF_VAR_H
+#include <net/if_var.h>
+#endif
+],[
+struct ifnet testit;
+testit.if_mtu = 0;
+], ac_cv_IFNET_NEEDS_KERNEL=yes, ac_cv_IFNET_NEEDS_KERNEL=no)
+fi
+])
+
+if test "x$ac_cv_IFNET_NEEDS_KERNEL" = "xyes"; then
+  AC_DEFINE(IFNET_NEEDS_KERNEL)
+fi
+fi
+
+AC_CHECK_STRUCT_FOR([
+#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
+#include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
-#undef KERNEL
-#undef _KERNEL
 ], sockaddr, sa_len, no)
 
 AC_CHECK_STRUCT_FOR([
@@ -3820,11 +3874,11 @@ AC_CHECK_STRUCT_FOR([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
-#undef KERNEL
-#undef _KERNEL
 ], sockaddr, sa_union.sa_generic.sa_family2, no)
 
 AC_CHECK_STRUCT_FOR([
@@ -3856,8 +3910,10 @@ AC_CHECK_STRUCT_FOR([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
 #undef KERNEL
 #undef _KERNEL
@@ -3874,8 +3930,10 @@ AC_TRY_COMPILE([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
 #undef KERNEL
 #undef _KERNEL
@@ -3898,8 +3956,10 @@ AC_TRY_COMPILE([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
 #undef KERNEL
 #undef _KERNEL
@@ -3955,8 +4015,10 @@ AC_TRY_COMPILE([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
 #undef KERNEL
 #undef _KERNEL
@@ -3993,8 +4055,10 @@ AC_CHECK_STRUCT_FOR([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
 #undef KERNEL
 #undef _KERNEL
@@ -4006,8 +4070,10 @@ AC_CHECK_STRUCT_FOR([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
 #undef KERNEL
 #undef _KERNEL
@@ -4019,8 +4085,10 @@ AC_CHECK_STRUCT_FOR([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
 #undef KERNEL
 #undef _KERNEL
@@ -4032,8 +4100,10 @@ AC_CHECK_STRUCT_FOR([
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
+#ifdef IFNET_NEEDS_KERNEL
 #define KERNEL
 #define _KERNEL
+#endif
 #include <sys/socket.h>
 #undef KERNEL
 #undef _KERNEL
@@ -4059,51 +4129,6 @@ AC_CHECK_STRUCT_FOR([
 #endif
 ], tcpstat, tcp_rcvmemdrop)
 
-# irix checks
-
-AC_CHECK_STRUCT_FOR([
-#ifdef HAVE_SYS_PARAM_H
-#include <sys/param.h>
-#endif
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <net/if.h>
-#ifdef HAVE_NET_IF_VAR_H
-#include <net/if_var.h>
-#endif
-], ifnet, if_mtu)
-
-if test "x$ac_cv_struct_ifnet_has_if_mtu" = "xno"; then
-AC_CACHE_CHECK(if _KERNEL needs to be defined for if_mtu, ac_cv_IFNET_NEEDS_KERNEL,
-[
-if test "x$ac_cv_struct_ifnet_has_if_mtu" = "xyes"; then
-  ac_cv_IFNET_NEEDS_KERNEL=no
-else
-AC_TRY_COMPILE([
-#define _KERNEL 1
-#ifdef HAVE_SYS_PARAM_H
-#include <sys/param.h>
-#endif
-#include <sys/types.h>
-#include <sys/socket.h>
-#ifdef HAVE_SYS_TIME_H
-#include <sys/time.h>
-#endif
-#include <net/if.h>
-#ifdef HAVE_NET_IF_VAR_H
-#include <net/if_var.h>
-#endif
-],[
-struct ifnet testit;
-testit.if_mtu = 0;
-], ac_cv_IFNET_NEEDS_KERNEL=yes, ac_cv_IFNET_NEEDS_KERNEL=no)
-fi
-])
-
-if test "x$ac_cv_IFNET_NEEDS_KERNEL" = "xyes"; then
-  AC_DEFINE(IFNET_NEEDS_KERNEL)
-fi
-fi
 
 AC_CHECK_STRUCT_FOR([
 #ifdef IFNET_NEEDS_KERNEL

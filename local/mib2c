@@ -2,7 +2,7 @@
 #!/usr/bin/perl -w
 
 #
-# $Id: mib2c 15712 2007-01-02 16:49:07Z dts12 $
+# $Id: mib2c 16865 2008-03-24 17:54:20Z dts12 $
 #
 # Description: 
 #
@@ -60,9 +60,8 @@ $currentlevel = -1;
 if($ENV{MIB2C_DIR}) {
    push @def_search_dirs, split(/:/, $ENV{MIB2C_DIR});
 }
-push @def_search_dirs, "/etc/snmp/";
-push @def_search_dirs, "/usr/share/snmp/";
-push @def_search_dirs, "/usr/share/snmp/mib2c-data";
+push @def_search_dirs, "/usr/local/share/snmp/";
+push @def_search_dirs, "/usr/local/share/snmp/mib2c-data";
 push @def_search_dirs, "./mib2c-conf.d";
 
 sub usage {
@@ -193,6 +192,7 @@ exit 1;
 
 # setup
 $outputName = $mibnode->{'label'} if (!defined($outputName));
+$outputName =~ s/-/_/g;
 $vars{'name'} = $outputName;
 $vars{'oid'} = $oid;
 $vars{'example_start'} = "    /*\n" .

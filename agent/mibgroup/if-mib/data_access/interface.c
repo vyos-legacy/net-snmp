@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: interface.c 15768 2007-01-22 16:18:29Z rstory $
+ * $Id: interface.c 16830 2008-02-22 23:52:33Z hardaker $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -465,13 +465,17 @@ _access_interface_entry_save_name(const char *name, oid index)
         DEBUGMSGTL(("access:interface:ifIndex", "saved ifIndex %d for %s\n",
                     index, name));
     }
-    else {
-       if(index != tmp) {
-	  se_remove_value_from_slist("interfaces", name);
-	  se_add_pair_to_slist("interfaces", strdup(name), index);
-	  DEBUGMSGTL(("access:interface:ifIndex", "ifname %s, old index %d, already existing, replaced with %d\n", name, tmp, index));
-       }      
-    }
+    else
+        if (index != tmp) {
+            static int logged = 0;
+            if (!logged) {
+                snmp_log(LOG_ERR, "IfIndex of an interface changed. Such " \
+                         "interfaces will appear multiple times in IF-MIB.\n");
+                logged = 1;
+            }
+            DEBUGMSGTL(("access:interface:ifIndex", "index %d != tmp for %s\n",
+                         index, name));
+        }
 }
 
 /**
@@ -546,6 +550,19 @@ netsnmp_access_interface_entry_update_stats(netsnmp_interface_entry * prev_vals,
                                        &prev_vals->old_stats->obcast,
                                        &need_wrap_check);
     
+    /*
+     * Copy 32 bit counters
+     */
+    prev_vals->stats.ierrors = new_vals->stats.ierrors;
+    prev_vals->stats.idiscards = new_vals->stats.idiscards;
+    prev_vals->stats.iunknown_protos = new_vals->stats.iunknown_protos;
+    prev_vals->stats.inucast = new_vals->stats.inucast;
+    prev_vals->stats.oerrors = new_vals->stats.oerrors;
+    prev_vals->stats.odiscards = new_vals->stats.odiscards;
+    prev_vals->stats.oqlen = new_vals->stats.oqlen;
+    prev_vals->stats.collisions = new_vals->stats.collisions;
+    prev_vals->stats.onucast = new_vals->stats.onucast;
+
     /*
      * if we've decided we no longer need to check wraps, free old stats
      */

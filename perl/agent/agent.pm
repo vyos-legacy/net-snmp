@@ -86,7 +86,7 @@ use vars qw(@ISA %EXPORT_TAGS @EXPORT_OK @EXPORT $VERSION $AUTOLOAD);
 	SNMP_ERR_AUTHORIZATIONERROR
 	SNMP_ERR_NOTWRITABLE
 );
-$VERSION = '5.04011';
+$VERSION = '5.0402';
 
 sub AUTOLOAD {
     # This AUTOLOAD is used to 'autoload' constants from the constant()
@@ -271,8 +271,6 @@ module implements in a perl-way, and a perl specific tutorial at:
     				'Name' => "my_agent_name",
     				'AgentX' => 1
     				);
-	}
-
     	$agent->register("my_agent_name", ".1.3.6.1.4.1.8072.9999.9999.7375",
                          \&myhandler);
 

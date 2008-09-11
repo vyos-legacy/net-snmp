@@ -471,7 +471,7 @@ int flag;
               for(ep = tp->enums; ep; ep = ep->next) {
                  if (ep->value == *var->val.integer) {
                     strncpy(buf, ep->label, buf_len);
-                    buf[buf_len -1] = 0;
+                    buf[buf_len-1] = '\0';
                     len = strlen(buf);
                     break;
                  }
@@ -479,6 +479,7 @@ int flag;
            }
            if (!len) {
               snprintf(buf, buf_len, "%ld", *var->val.integer);
+              buf[buf_len-1] = '\0';
               len = strlen(buf);
            }
            break;
@@ -488,22 +489,24 @@ int flag;
         case ASN_TIMETICKS:
         case ASN_UINTEGER:
            snprintf(buf, buf_len, "%lu", (unsigned long) *var->val.integer);
+           buf[buf_len-1] = '\0';
            len = strlen(buf);
            break;
 
         case ASN_OCTET_STR:
         case ASN_OPAQUE:
-           if (len > buf_len)
+           len = var->val_len;
+           if ( len > buf_len )
                len = buf_len;
            memcpy(buf, (char*)var->val.string, len);
-           len = var->val_len;
            break;
 
         case ASN_IPADDRESS:
-          ip = (u_char*)var->val.string;
-          snprintf(buf, buf_len, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-          len = strlen(buf);
-          break;
+           ip = (u_char*)var->val.string;
+           snprintf(buf, buf_len, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+           buf[buf_len-1] = '\0';
+           len = strlen(buf);
+           break;
 
         case ASN_NULL:
            break;
@@ -515,14 +518,14 @@ int flag;
           break;
 
 	case SNMP_ENDOFMIBVIEW:
-          snprintf(buf, buf_len, "%s", "ENDOFMIBVIEW");
-	  break;
+           snprintf(buf, buf_len, "%s", "ENDOFMIBVIEW");
+	   break;
 	case SNMP_NOSUCHOBJECT:
-	  snprintf(buf, buf_len, "%s", "NOSUCHOBJECT");
-	  break;
+	   snprintf(buf, buf_len, "%s", "NOSUCHOBJECT");
+	   break;
 	case SNMP_NOSUCHINSTANCE:
-	  snprintf(buf, buf_len, "%s", "NOSUCHINSTANCE");
-	  break;
+	   snprintf(buf, buf_len, "%s", "NOSUCHINSTANCE");
+	   break;
 
         case ASN_COUNTER64:
 #ifdef NETSNMP_WITH_OPAQUE_SPECIAL_TYPES
@@ -546,14 +549,14 @@ int flag;
             break;
 #ifdef NETSNMP_WITH_OPAQUE_SPECIAL_TYPES
         case ASN_OPAQUE_FLOAT:
-	  if (var->val.floatVal)
-	    snprintf(buf, buf_len, "%f", *var->val.floatVal);
-         break;
+           if (var->val.floatVal)
+              snprintf(buf, buf_len, "%f", *var->val.floatVal);
+           break;
          
         case ASN_OPAQUE_DOUBLE:
-	  if (var->val.doubleVal)
-	    snprintf(buf, buf_len, "%f", *var->val.doubleVal);
-         break;
+           if (var->val.doubleVal)
+              snprintf(buf, buf_len, "%f", *var->val.doubleVal);
+           break;
 #endif
          
         case ASN_NSAP:
@@ -1337,6 +1340,7 @@ void *cb_data;
 
       sv_bless(varlist_ref, gv_stashpv("SNMP::VarList",0));
       for(vars = (pdu?pdu->variables:NULL); vars; vars = vars->next_variable) {
+         int local_getlabel_flag = getlabel_flag;
          varbind = newAV();
          varbind_ref = newRV_noinc((SV*)varbind);
          sv_bless(varbind_ref, gv_stashpv("SNMP::Varbind",0));
@@ -1352,10 +1356,10 @@ void *cb_data;
          if (__is_leaf(tp)) {
             type = tp->type;
          } else {
-            getlabel_flag |= NON_LEAF_NAME;
+            local_getlabel_flag |= NON_LEAF_NAME;
             type = __translate_asn_type(vars->type);
          }
-         __get_label_iid(str_buf,&label,&iid,getlabel_flag);
+         __get_label_iid(str_buf,&label,&iid,local_getlabel_flag);
          if (label) {
              av_store(varbind, VARBIND_TAG_F,
                       newSVpv(label, strlen(label)));
@@ -2270,6 +2274,7 @@ _bulkwalk_recv_pdu(walk_context *context, netsnmp_pdu *pdu)
 static int
 _bulkwalk_finish(walk_context *context, int okay)
 {
+   dSP;
    int		npushed = 0;
    int		i;
    int		async = 0;
@@ -2280,9 +2285,23 @@ _bulkwalk_finish(walk_context *context, int okay)
 
    SV **err_str_svp = hv_fetch((HV*)SvRV(context->sess_ref), "ErrorStr", 8, 1);
    SV **err_num_svp = hv_fetch((HV*)SvRV(context->sess_ref), "ErrorNum", 8, 1);
+   
+   async = SvTRUE(context->perl_cb);
+
+   /* XXX
+      _bulkwalk_finish() was originally intended to be called from XS code, and
+      would extend the caller's stack with result. Later it was changed into
+      an asynchronous version that calls perl code instead. These two branches
+      differ significantly in how they treat perl stack. Due to these differences,
+      often implicit (f.ex. dMARK calls POPMARK ), it would be a good idea
+      to write two different procedures, _bulkwalk_finish_sync and _bulkwalk_finish_async
+      for cleaner separation. */
+
+   if (async) PUSHMARK(sp);
+
+   {
 
 #ifdef dITEMS
-   dSP;
    dMARK;
    dITEMS;
 #else
@@ -2290,14 +2309,12 @@ _bulkwalk_finish(walk_context *context, int okay)
    /* older perl versions don't declare dITEMS though and the
       following declars it but also uses dAXMARK instead of dMARK
       which is the bad popping version */
-   dSP;
    dMARK;
 
    /* err...  This is essentially what the newer dITEMS does */
    I32 items = sp - mark;
 #endif
 
-   async = SvTRUE(context->perl_cb);
 
    /* Successfully completed the bulkwalk.  For synchronous calls, push each
    ** of the request value arrays onto the stack, and return the number of
@@ -2407,7 +2424,7 @@ _bulkwalk_finish(walk_context *context, int okay)
    DBPRT(2,(DBOUT "Free() context 0x%p\n", context));
    Safefree(context);
    return npushed;
-}
+}}
 
 /* End of bulkwalk support routines */
 
@@ -3069,7 +3086,7 @@ snmp_set(sess_ref, varlist_ref, perl_callback)
                     res = __add_var_val_str(pdu, oid_arr, oid_arr_len,
 				     (varbind_val_f && SvOK(*varbind_val_f) ?
 				      SvPV(*varbind_val_f,na):NULL),
-				      (varbind_val_f && SvOK(*varbind_val_f) ?
+				      (varbind_val_f && SvPOK(*varbind_val_f) ?
 				       SvCUR(*varbind_val_f):0), type);
 
 		    if (verbose && res == FAILURE)
@@ -3320,6 +3337,7 @@ snmp_get(sess_ref, retry_nosuch, varlist_ref, perl_callback)
               for(vars = (response?response->variables:NULL), varlist_ind = 0;
                   vars && (varlist_ind <= varlist_len);
                   vars = vars->next_variable, varlist_ind++) {
+                 int local_getlabel_flag = getlabel_flag;
                  varbind_ref = av_fetch(varlist, varlist_ind, 0);
                  if (SvROK(*varbind_ref)) {
                     varbind = (AV*) SvRV(*varbind_ref);
@@ -3338,10 +3356,10 @@ snmp_get(sess_ref, retry_nosuch, varlist_ref, perl_callback)
                     if (__is_leaf(tp)) {
                        type = tp->type;
                     } else {
-                       getlabel_flag |= NON_LEAF_NAME;
+                       local_getlabel_flag |= NON_LEAF_NAME;
                        type = __translate_asn_type(vars->type);
                     }
-                    __get_label_iid(str_buf,&label,&iid,getlabel_flag);
+                    __get_label_iid(str_buf,&label,&iid,local_getlabel_flag);
                     if (label) {
                         av_store(varbind, VARBIND_TAG_F,
                                  newSVpv(label, strlen(label)));
@@ -3558,6 +3576,7 @@ snmp_getnext(sess_ref, varlist_ref, perl_callback)
               for(vars = (response?response->variables:NULL), varlist_ind = 0;
                   vars && (varlist_ind <= varlist_len);
                   vars = vars->next_variable, varlist_ind++) {
+                 int local_getlabel_flag = getlabel_flag;
                  varbind_ref = av_fetch(varlist, varlist_ind, 0);
                  if (SvROK(*varbind_ref)) {
                     varbind = (AV*) SvRV(*varbind_ref);
@@ -3583,10 +3602,10 @@ snmp_getnext(sess_ref, varlist_ref, perl_callback)
                     if (__is_leaf(tp)) {
                        type = tp->type;
                     } else {
-                       getlabel_flag |= NON_LEAF_NAME;
+                       local_getlabel_flag |= NON_LEAF_NAME;
                        type = __translate_asn_type(vars->type);
                     }
-                    __get_label_iid(str_buf,&label,&iid,getlabel_flag);
+                    __get_label_iid(str_buf,&label,&iid,local_getlabel_flag);
                     if (label) {
                         av_store(varbind, VARBIND_TAG_F,
                                  newSVpv(label, strlen(label)));
@@ -3796,6 +3815,7 @@ snmp_getbulk(sess_ref, nonrepeaters, maxrepetitions, varlist_ref, perl_callback)
                   vars;
                   vars = vars->next_variable) {
 
+                    int local_getlabel_flag = getlabel_flag;
                     varbind = (AV*) newAV();
                     *str_buf = '.';
                     *(str_buf+1) = '\0';
@@ -3812,10 +3832,10 @@ snmp_getbulk(sess_ref, nonrepeaters, maxrepetitions, varlist_ref, perl_callback)
                     if (__is_leaf(tp)) {
                        type = tp->type;
                     } else {
-                       getlabel_flag |= NON_LEAF_NAME;
+                       local_getlabel_flag |= NON_LEAF_NAME;
                        type = __translate_asn_type(vars->type);
                     }
-                    __get_label_iid(str_buf,&label,&iid,getlabel_flag);
+                    __get_label_iid(str_buf,&label,&iid,local_getlabel_flag);
                     if (label) {
                         av_store(varbind, VARBIND_TAG_F,
                                  newSVpv(label, strlen(label)));
@@ -4263,7 +4283,7 @@ snmp_trapV1(sess_ref,enterprise,agent,generic,specific,uptime,varlist_ref)
                     res = __add_var_val_str(pdu, oid_arr, oid_arr_len,
                                   (varbind_val_f && SvOK(*varbind_val_f) ?
                                    SvPV(*varbind_val_f,na):NULL),
-                                  (varbind_val_f && SvOK(*varbind_val_f) ?
+                                  (varbind_val_f && SvPOK(*varbind_val_f) ?
                                    SvCUR(*varbind_val_f):0),
                                   type);
 
@@ -4421,7 +4441,7 @@ snmp_trapV2(sess_ref,uptime,trap_oid,varlist_ref)
                     res = __add_var_val_str(pdu, oid_arr, oid_arr_len,
                                   (varbind_val_f && SvOK(*varbind_val_f) ?
                                    SvPV(*varbind_val_f,na):NULL),
-                                  (varbind_val_f && SvOK(*varbind_val_f) ?
+                                  (varbind_val_f && SvPOK(*varbind_val_f) ?
                                    SvCUR(*varbind_val_f):0),
                                   type);
 
@@ -4560,7 +4580,7 @@ snmp_inform(sess_ref,uptime,trap_oid,varlist_ref,perl_callback)
                     res = __add_var_val_str(pdu, oid_arr, oid_arr_len,
                                   (varbind_val_f && SvOK(*varbind_val_f) ?
                                    SvPV(*varbind_val_f,na):NULL),
-                                  (varbind_val_f && SvOK(*varbind_val_f) ?
+                                  (varbind_val_f && SvPOK(*varbind_val_f) ?
                                    SvCUR(*varbind_val_f):0),
                                   type);
 

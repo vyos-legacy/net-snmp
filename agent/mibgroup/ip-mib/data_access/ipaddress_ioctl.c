@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: ipaddress_ioctl.c 16381 2007-05-17 21:53:28Z hardaker $
+ * $Id: ipaddress_ioctl.c 16778 2008-01-17 00:09:33Z magfr $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -210,6 +210,13 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
             snmp_log(LOG_ERR,"no ifindex found for interface\n");
             netsnmp_access_ipaddress_entry_free(entry);
             continue;
+        }
+
+        /* restore the interface name if we modifed it due to unaliasing
+         * above
+         */
+        if (entry->flags | NETSNMP_ACCESS_IPADDRESS_ISALIAS) {
+            memcpy(ifrp->ifr_name, extras->name, sizeof(extras->name));
         }
 
         /*

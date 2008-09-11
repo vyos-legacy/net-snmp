@@ -419,7 +419,7 @@ snmp_get_next_reqid(void)
     if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_16BIT_IDS))
         return (retVal & 0x7fff);	/* mask to 15 bits */
     else
-        return retVal;
+        return (retVal & 0x7fffffff);	/* mask to 31 bits */
 }
 
 long
@@ -435,7 +435,7 @@ snmp_get_next_msgid(void)
     if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_16BIT_IDS))
         return (retVal & 0x7fff);	/* mask to 15 bits */
     else
-        return retVal;
+        return (retVal & 0x7fffffff);	/* mask to 31 bits */
 }
 
 long
@@ -451,7 +451,7 @@ snmp_get_next_sessid(void)
     if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_16BIT_IDS))
         return (retVal & 0x7fff);	/* mask to 15 bits */
     else
-        return retVal;
+        return (retVal & 0x7fffffff);	/* mask to 31 bits */
 }
 
 long
@@ -467,7 +467,7 @@ snmp_get_next_transid(void)
     if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_16BIT_IDS))
         return (retVal & 0x7fff);	/* mask to 15 bits */
     else
-        return retVal;
+        return (retVal & 0x7fffffff);	/* mask to 31 bits */
 }
 
 void
@@ -661,8 +661,8 @@ _init_snmp(void)
     Reqid = tmpReqid;
     Msgid = tmpMsgid;
 
-    netsnmp_register_default_domain("snmp", "udp");
-    netsnmp_register_default_domain("snmptrap", "udp");
+    netsnmp_register_default_domain("snmp", "udp udp6");
+    netsnmp_register_default_domain("snmptrap", "udp udp6");
 
     netsnmp_register_default_target("snmp", "udp", ":161");
     netsnmp_register_default_target("snmp", "tcp", ":161");
@@ -752,35 +752,6 @@ register_default_handlers(void)
     netsnmp_register_service_handlers();
 }
 
-void
-init_snmp_enums(void)
-{
-    se_add_pair_to_slist("asntypes", strdup("integer"), ASN_INTEGER);
-    se_add_pair_to_slist("asntypes", strdup("counter"), ASN_COUNTER);
-    se_add_pair_to_slist("asntypes", strdup("uinteger"), ASN_GAUGE);
-    se_add_pair_to_slist("asntypes", strdup("unsigned"), ASN_UNSIGNED); /* RFC 1902 - same as GAUGE */
-    se_add_pair_to_slist("asntypes", strdup("timeticks"), ASN_TIMETICKS);
-    se_add_pair_to_slist("asntypes", strdup("counter64"), ASN_COUNTER64);
-    se_add_pair_to_slist("asntypes", strdup("octet_str"), ASN_OCTET_STR);
-    se_add_pair_to_slist("asntypes", strdup("ipaddress"), ASN_IPADDRESS);
-    se_add_pair_to_slist("asntypes", strdup("opaque"), ASN_OPAQUE);
-    se_add_pair_to_slist("asntypes", strdup("nsap"), ASN_NSAP);
-    se_add_pair_to_slist("asntypes", strdup("object_id"), ASN_OBJECT_ID);
-    se_add_pair_to_slist("asntypes", strdup("null"), ASN_NULL);
-#ifdef NETSNMP_WITH_OPAQUE_SPECIAL_TYPES
-    se_add_pair_to_slist("asntypes", strdup("opaque_counter64"),
-                         ASN_OPAQUE_COUNTER64);
-    se_add_pair_to_slist("asntypes", strdup("opaque_u64"), ASN_OPAQUE_U64);
-    se_add_pair_to_slist("asntypes", strdup("opaque_float"),
-                         ASN_OPAQUE_FLOAT);
-    se_add_pair_to_slist("asntypes", strdup("opaque_double"),
-                         ASN_OPAQUE_DOUBLE);
-    se_add_pair_to_slist("asntypes", strdup("opaque_i64"), ASN_OPAQUE_I64);
-#endif
-}
-
-
-
 /**
  * Calls the functions to do config file loading and  mib module parsing
  * in the correct order.
@@ -830,7 +801,6 @@ init_snmp(const char *type)
     init_snmpv3(type);
     init_snmp_alarm();
     init_snmp_enum(type);
-    init_snmp_enums();
     init_vacm();
 
     read_premib_configs();
@@ -1136,17 +1106,16 @@ _sess_copy(netsnmp_session * in_session)
             snmp_sess_close(slp);
             return (NULL);
         }
-    } else if ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
-					   NETSNMP_DS_LIB_CONTEXT)) != NULL) {
-        cp = strdup(cp);
+    } else {
+        if ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
+                                        NETSNMP_DS_LIB_CONTEXT)) != NULL)
+            cp = strdup(cp);
+        else
+            cp = strdup(SNMP_DEFAULT_CONTEXT);
         if (cp == NULL) {
             snmp_sess_close(slp);
             return (NULL);
         }
-        session->contextName = cp;
-        session->contextNameLen = strlen(cp);
-    } else {
-        cp = strdup(SNMP_DEFAULT_CONTEXT);
         session->contextName = cp;
         session->contextNameLen = strlen(cp);
     }
@@ -1663,6 +1632,7 @@ create_user_from_session(netsnmp_session * session)
     if (SNMP_FLAGS_USER_CREATED == (session->flags & SNMP_FLAGS_USER_CREATED) ||
         session->securityModel != SNMP_SEC_MODEL_USM ||
         session->version != SNMP_VERSION_3 ||
+        session->securityNameLen == 0 ||
         session->securityEngineIDLen == 0)
         return SNMPERR_SUCCESS;
 
@@ -6833,7 +6803,7 @@ snmp_add_var(netsnmp_pdu *pdu,
         }
 #endif /* NETSNMP_DISABLE_MIB_LOADING */
         atmp = inet_addr(value);
-        if (atmp != (long) -1 || !strcmp(value, "255.255.255.255"))
+        if (atmp != (in_addr_t) -1 || !strcmp(value, "255.255.255.255"))
             snmp_pdu_add_variable(pdu, name, name_length, ASN_IPADDRESS,
                                   (u_char *) & atmp, sizeof(atmp));
         else

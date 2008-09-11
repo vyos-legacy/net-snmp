@@ -97,7 +97,7 @@ netsnmp_tcp6_fmtaddr(netsnmp_transport *t, void *data, int len)
         return strdup("TCP/IPv6: unknown");
     } else {
         char addr[INET6_ADDRSTRLEN];
-        char tmp[INET6_ADDRSTRLEN + 8];
+        char tmp[INET6_ADDRSTRLEN + 18];
 
         sprintf(tmp, "TCP/IPv6: [%s]:%hd",
                 inet_ntop(AF_INET6, (void *) &(to->sin6_addr), addr,
@@ -120,7 +120,7 @@ netsnmp_tcp6_recv(netsnmp_transport *t, void *buf, int size,
 
     if (t != NULL && t->sock >= 0) {
 	while (rc < 0) {
-	    rc = recv(t->sock, buf, size, 0);
+	    rc = recvfrom(t->sock, buf, size, 0, NULL, 0);
 	    if (rc < 0 && errno != EINTR) {
 		DEBUGMSGTL(("netsnmp_tcp6", "recv fd %d err %d (\"%s\")\n",
 			    t->sock, errno, strerror(errno)));
@@ -157,7 +157,7 @@ netsnmp_tcp6_send(netsnmp_transport *t, void *buf, int size,
 
     if (t != NULL && t->sock >= 0) {
 	while (rc < 0) {
-	    rc = send(t->sock, buf, size, 0);
+	    rc = sendto(t->sock, buf, size, 0, NULL, 0);
 	    if (rc < 0 && errno != EINTR) {
 		break;
 	    }

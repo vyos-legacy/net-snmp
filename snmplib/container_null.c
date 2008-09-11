@@ -1,6 +1,6 @@
 /*
  * container_null.c
- * $Id: container_null.c 14169 2006-01-25 16:28:12Z dts12 $
+ * $Id: container_null.c 16758 2007-12-19 22:39:31Z magfr $
  *
  * see comments in header file.
  *
@@ -33,7 +33,7 @@
 #include <net-snmp/library/tools.h>
 #include <net-snmp/library/snmp_assert.h>
 
-/** @defgroup container null_container
+/** @defgroup null_container null_container
  *  Helps you implement specialized containers.
  *  @ingroup container
  *

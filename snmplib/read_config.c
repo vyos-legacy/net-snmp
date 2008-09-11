@@ -171,7 +171,8 @@ internal_register_config_handler(const char *type_param,
                 *cptr = '\0';
                 ++cptr;
             }
-            ltmp2 = register_config_handler(c, token, parser, releaser, help);
+            ltmp2 = internal_register_config_handler(c, token, parser,
+                                                     releaser, help, when);
         }
         return ltmp2;
     }
@@ -257,11 +258,11 @@ register_app_prenetsnmp_mib_handler(const char *token,
  * management of where to put tokens as the module or modules get more complex
  * in regard to handling token registrations.
  *
- * @param type_param the configuration file used, e.g., if snmp.conf is the
+ * @param type     the configuration file used, e.g., if snmp.conf is the
  *                 file where the token is located use "snmp" here.
  *                 Multiple colon separated tokens might be used.
  *                 If NULL or "" then the configuration file used will be
- *                 <application>.conf.
+ *                 \<application\>.conf.
  *
  * @param token    the token being parsed from the file.  Must be non-NULL.
  *
@@ -1050,7 +1051,7 @@ read_config_files_in_path(const char *path, struct config_files *ctmp,
                 ctmp->fileHeader, envconfpath, perspath));
     cptr1 = cptr2 = envconfpath;
     done = 0;
-    while ((*cptr2 != 0) && (!done)) {
+    while ((!done) && (*cptr2 != 0)) {
         while (*cptr1 != 0 && *cptr1 != ENV_SEPARATOR_CHAR)
             cptr1++;
         if (*cptr1 == 0)

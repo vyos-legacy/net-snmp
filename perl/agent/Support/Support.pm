@@ -17,9 +17,8 @@ require Exporter;
 use NetSNMP::OID (':all');
 use NetSNMP::agent (':all');
 use NetSNMP::ASN (':all');
+use NetSNMP::default_store (':all');
 use Data::Dumper;
-use XML::Simple;
-use IO::File;
 
 
 use vars qw(@ISA @EXPORT @EXPORT_OK $VERSION);
@@ -27,7 +26,7 @@ use vars qw(@ISA @EXPORT @EXPORT_OK $VERSION);
 @ISA       = qw(Exporter getLeaf);
 @EXPORT    = qw(registerAgent getOidElement setOidElement);
 @EXPORT_OK = qw();
-$VERSION = '5.04011';
+$VERSION = '5.0402';
 
 use strict;
 
@@ -59,7 +58,8 @@ my $oidroot = "";
 # Some parts borrowed from the perl cookbook
 ################################################################
 sub buildTree {
-    foreach my $key (keys %$oidtable) {
+    my ($new_oidtable) = @_;
+    foreach my $key (keys %$new_oidtable) {
 	insert($oidtree, $key);
     }
 }
@@ -124,13 +124,20 @@ sub insert {
 sub registerAgent {
     my $agent = shift;
     my $regat = shift;
-    $oidtable = shift;
+    my $new_oidtable = shift;
+
+    foreach (keys %$new_oidtable) { $oidtable->{$_} = $new_oidtable->{$_}; }
+
+    # This is necessary to avoid problems traversing trees where the
+    # IID index is range-limited to not include .0, which is used as a 
+    # placeholder in the oidtable.
+     netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, 
+                            NETSNMP_DS_LIB_DONT_CHECK_RANGE, 1);
 
     print STDERR "Building OID tree\n";
-    buildTree();
-
+    buildTree($new_oidtable);    
     doLinks($oidtree);
-
+ 
 #    print Dumper($oidtable);
 
     # Debug. Print the list of oids in their next ordering
@@ -407,7 +414,7 @@ sub getNextOid {
 	    my $nextoid = $current->{next};
 	    print "Trying $nextoid\n"   if ($debugging);
 	    $current = $oidtable->{$nextoid};
-	    $curoid = new NetSNMP::OID($nextoid);
+	    $curoid = $current ? new NetSNMP::OID($nextoid) : undef;
 	}
     }
 
@@ -435,7 +442,7 @@ sub getNextOid {
 	    # No not this one so try the next
 	    $nextoid = $current->{next};
 	    $current = $oidtable->{$nextoid};
-	    $curoid = new NetSNMP::OID($nextoid);
+	    $curoid = $current ? new NetSNMP::OID($nextoid) : undef;
 	    print "Trying next $curoid $nextoid\n"   if ($debugging);
 	} else {
 

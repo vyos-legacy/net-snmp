@@ -353,10 +353,10 @@ int flag;
 
         case ASN_OCTET_STR:
         case ASN_OPAQUE:
-           if(len > buf_len)
+           len = var->val_len;
+           if (len > buf_len)
                len = buf_len;
            memcpy(buf, (char*)var->val.string, len);
-           len = var->val_len;
            break;
 
         case ASN_IPADDRESS:
@@ -1776,6 +1776,7 @@ netsnmp_walk(PyObject *self, PyObject *args)
 {
   PyObject *session;
   PyObject *varlist;
+  PyObject *varlist_iter;
   PyObject *varbind;
   PyObject *val_tuple = NULL;
   PyObject *varbinds;
@@ -1841,7 +1842,7 @@ netsnmp_walk(PyObject *self, PyObject *args)
     best_guess = py_netsnmp_attr_long(session, "BestGuess");
     retry_nosuch = py_netsnmp_attr_long(session, "RetryNoSuch");
         
-    PyObject *varlist_iter = PyObject_GetIter(varlist);
+    varlist_iter = PyObject_GetIter(varlist);
 
     pdu = snmp_pdu_create(SNMP_MSG_GETNEXT);
     
@@ -2050,6 +2051,7 @@ netsnmp_getbulk(PyObject *self, PyObject *args)
   PyObject *varlist;
   PyObject *varbinds;
   PyObject *varbind;
+  PyObject *varbinds_iter;
   PyObject *val_tuple = NULL;
   int varbind_ind;
   netsnmp_session *ss;
@@ -2111,7 +2113,7 @@ netsnmp_getbulk(PyObject *self, PyObject *args)
       pdu->errstat = nonrepeaters;
       pdu->errindex = maxrepetitions;
 
-      PyObject *varbinds_iter = PyObject_GetIter(varbinds);
+      varbinds_iter = PyObject_GetIter(varbinds);
 
       while (varbinds_iter && (varbind = PyIter_Next(varbinds_iter))) {
 	tag = py_netsnmp_attr_string(varbind, "tag");
