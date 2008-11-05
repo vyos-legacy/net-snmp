@@ -1,3 +1,9 @@
+net-snmp (5.4.2.1-vyatta1) unstable; urgency=low
+
+  * Merge in upstream version 5.4.2.1
+
+ -- Stephen Hemminger <shemminger@vyatta.com>  Mon, 03 Nov 2008 13:13:55 -0800
+
 net-snmp (5.4.2-vyatta1) unstable; urgency=low
 
   * Merge in upstream version 5.4.2
