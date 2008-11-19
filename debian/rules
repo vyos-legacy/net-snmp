@@ -18,14 +18,18 @@ MIB_MODULES = host smux ucd-snmp/dlmod
 
 PYVERS=$(shell pyversions -vr)
 
+DGC_DEV := $(shell \
+	if [ -f "../.VYATTA_DEV_BUILD" ]; then echo "-v999.dev"; fi)
+
 ifeq (linux,$(DEB_HOST_ARCH_OS))
 MIB_MODULES += ucd-snmp/diskio ucd-snmp/lmSensors 
 IPV6 = --enable-ipv6
-DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libsensors-dev (>= 2.8.5)"
+DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libsensors-dev (>= 2.8.5)" \
+                          $(DGC_DEV)
 else
 ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
 IPV6 = --disable-ipv6
-DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libkvm-dev"
+DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libkvm-dev" $(DGC_DEV)
 endif
 endif
 
