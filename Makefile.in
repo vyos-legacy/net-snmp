@@ -53,6 +53,9 @@ PYTHONARGS=@PYTHONARGS@
 #
 LIBTOOL_DEPS = @LIBTOOL_DEPS@
 
+# we don't need autodeps
+NOAUTODEPS = y
+
 #
 # targets
 #
