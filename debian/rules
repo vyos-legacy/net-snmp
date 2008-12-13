@@ -55,6 +55,7 @@ DEB_CONFIGURE_EXTRA_FLAGS := --prefix=/usr --sysconfdir=/etc --mandir=/usr/share
 	  --with-defaults
 
 pre-build::
+	rm -f debian/files
 	# Backup files expected to be modified.
 	for i in $(BACKUP); do \
 		if [ ! -f $$i.backup ]; then cp $$i $$i.backup || true; fi ; \
