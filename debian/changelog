@@ -1,3 +1,16 @@
+net-snmp (5.4.2.1-vyatta2) unstable; urgency=low
+
+  [ Stephen Hemminger ]
+  * Netsnmp 5.4.2.1 bulk agent security fix
+
+  [ An-Cheng Huang ]
+  * add support for development build
+  * remove unnecessary autoconf invocations
+  * update maintainer information
+  * "files" file should be removed before package build
+
+ -- An-Cheng Huang <ancheng@vyatta.com>  Wed, 07 Jan 2009 19:14:03 -0800
+
 net-snmp (5.4.2.1-vyatta1) unstable; urgency=low
 
   * Merge in upstream version 5.4.2.1
