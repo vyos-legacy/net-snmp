@@ -1,3 +1,9 @@
+net-snmp (5.4.2.1-vyatta3) unstable; urgency=low
+
+  * Fix possible memory leak
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Mon, 16 Feb 2009 08:59:09 -0800
+
 net-snmp (5.4.2.1-vyatta2) unstable; urgency=low
 
   [ Stephen Hemminger ]
