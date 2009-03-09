@@ -1,3 +1,9 @@
+net-snmp (5.4.2.1-vyatta4) unstable; urgency=low
+
+  * Support 10G and other interface speeds
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Mon, 09 Mar 2009 09:32:01 -0700
+
 net-snmp (5.4.2.1-vyatta3) unstable; urgency=low
 
   * Fix possible memory leak
