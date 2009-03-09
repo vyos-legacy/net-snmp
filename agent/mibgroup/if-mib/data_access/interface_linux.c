@@ -739,17 +739,10 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name)
     strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name)-1);
     ifr.ifr_data = (char *) &edata;
     
-    if (ioctl(fd, SIOCETHTOOL, &ifr) == -1) {
+    if (ioctl(fd, SIOCETHTOOL, &ifr) == -1 
+	|| edata.speed == 0 || edata.speed == -1) {
         DEBUGMSGTL(("mibII/interfaces", "ETHTOOL_GSET on %s failed\n",
                     ifr.ifr_name));
-        return netsnmp_linux_interface_get_if_speed_mii(fd,name);
-    }
-    
-    if (edata.speed != SPEED_10 && edata.speed != SPEED_100 &&
-        edata.speed != SPEED_1000) {
-        DEBUGMSGTL(("mibII/interfaces", "fallback to mii for %s\n",
-                    ifr.ifr_name));
-        /* try MII */
         return netsnmp_linux_interface_get_if_speed_mii(fd,name);
     }
 
