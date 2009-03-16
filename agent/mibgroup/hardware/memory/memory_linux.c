@@ -11,7 +11,7 @@
  * about huge files, so why fiddle about with reallocs?
  * I checked /proc/meminfo sizes on 3 different systems: 598, 644, 654
  */
-#define MEMINFO_INIT_SIZE   768
+#define MEMINFO_INIT_SIZE   1024
 #define MEMINFO_STEP_SIZE   256
 #define MEMINFO_FILE   "/proc/meminfo"
 
