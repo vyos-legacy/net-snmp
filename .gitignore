@@ -280,3 +280,4 @@ python/build
 python/netsnmp_python.egg-info
 sedscript
 snmplib/snmpsm_init.h
+install-sh
