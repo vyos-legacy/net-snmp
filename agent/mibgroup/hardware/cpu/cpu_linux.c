@@ -118,8 +118,7 @@ int netsnmp_cpu_arch_load( netsnmp_cache *cache, void *magic ) {
         bsize += 256;
         buff = realloc(buff, bsize);
         DEBUGMSGTL(("cpu", "/proc/stat buffer increased to %d\n", bsize));
-        close(statfd);
-        statfd = open(STAT_FILE, O_RDONLY, 0);
+	lseek(statfd, 0ul, SEEK_SET);
     }
     close(statfd);
 
@@ -207,8 +206,7 @@ void _cpu_load_swap_etc( char *buff, netsnmp_cpu_info *cpu ) {
         while (read(vmstatfd, vmbuff, vmbsize) == vmbsize) {
 	    vmbsize += 256;
 	    vmbuff = realloc(vmbuff, vmbsize);
-	    close(vmstatfd);
-	    vmstatfd = open(VMSTAT_FILE, O_RDONLY, 0);
+	    lseek(vmstatfd, 0ul, SEEK_SET);
         }
         close(vmstatfd);
     }
