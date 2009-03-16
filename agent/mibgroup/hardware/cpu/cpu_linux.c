@@ -219,7 +219,7 @@ void _cpu_load_swap_etc( char *buff, netsnmp_cpu_info *cpu ) {
 		snmp_log_perror(VMSTAT_FILE "read error");
 		return -1;
 	}
-	buff[cc] = '\0';
+	vmbuff[cc] = '\0';
 
         close(vmstatfd);
     }
