@@ -100,7 +100,7 @@ int netsnmp_cpu_arch_load( netsnmp_cache *cache, void *magic ) {
     static int   bsize = 0;
     static int   first = 1;
     static int   has_cpu_26 = 1;
-    int          statfd, i;
+    int          cc, statfd, i;
     char        *b1, *b2;
     unsigned long long cusell = 0, cicell = 0, csysll = 0, cidell = 0,
                        ciowll = 0, cirqll = 0, csoftll = 0;
@@ -111,16 +111,23 @@ int netsnmp_cpu_arch_load( netsnmp_cache *cache, void *magic ) {
         return -1;
     }
     if (bsize == 0) {
-        bsize = getpagesize();
-        buff = malloc(bsize);
+        bsize = getpagesize()-1;
+        buff = malloc(bsize+1);
     }
-    while (read(statfd, buff, bsize) == bsize) {
+
+    while ((cc = read(statfd, buff, bsize)) == bsize) {
         bsize += BUFSIZ;
-        buff = realloc(buff, bsize);
+        buff = realloc(buff, bsize+1);
         DEBUGMSGTL(("cpu", "/proc/stat buffer increased to %d\n", bsize));
 	lseek(statfd, 0ul, SEEK_SET);
     }
     close(statfd);
+
+    if (cc < 0) {
+	    snmp_log_perror(STAT_FILE "read error");
+	    return -1;
+    }
+    buff[cc] = '\0';
 
         /*
          * CPU statistics (overall and per-CPU)
@@ -193,21 +200,27 @@ void _cpu_load_swap_etc( char *buff, netsnmp_cpu_info *cpu ) {
     static char *vmbuff  = NULL;
     static int   vmbsize = 0;
     static int   first   = 1;
-    int          vmstatfd;
+    int          cc, vmstatfd;
     char        *b;
     unsigned long long pin, pout, swpin, swpout;
     unsigned long long itot, iticks, ctx;
 
     if (has_vmstat && (vmstatfd = open(VMSTAT_FILE, O_RDONLY, 0)) != -1) {
         if (vmbsize == 0) {
-	    vmbsize = getpagesize();
-	    vmbuff = malloc(vmbsize);
-        }
-        while (read(vmstatfd, vmbuff, vmbsize) == vmbsize) {
+	    vmbsize = getpagesize()-1;
+	    vmbuff = malloc(vmbsize+1);
+	}
+        while ((cc = read(vmstatfd, vmbuff, vmbsize+1)) == vmbsize) {
 	    vmbsize += BUFSIZ;
 	    vmbuff = realloc(vmbuff, vmbsize);
 	    lseek(vmstatfd, 0ul, SEEK_SET);
         }
+	if (cc < 0) {
+		snmp_log_perror(VMSTAT_FILE "read error");
+		return -1;
+	}
+	buff[cc] = '\0';
+
         close(vmstatfd);
     }
     else
