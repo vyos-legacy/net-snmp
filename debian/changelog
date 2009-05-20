@@ -1,3 +1,15 @@
+net-snmp (5.4.2.1-vyatta5) unstable; urgency=low
+
+  * Use lseek rather than reopening
+  * Allocate bigger initial buffer
+  * Avoid reading past end of buffer
+  * Fix valgrind warning
+  * Ignore derived file
+  * ignore another build file
+  * Fix problem with last change
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Mon, 16 Mar 2009 15:31:35 -0700
+
 net-snmp (5.4.2.1-vyatta4) unstable; urgency=low
 
   * Support 10G and other interface speeds
