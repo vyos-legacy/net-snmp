@@ -1,3 +1,9 @@
+net-snmp (5.4.2.1-vyatta5+jenner1) unstable; urgency=low
+
+  * UNRELEASED
+
+ -- An-Cheng Huang <ancheng@vyatta.com>  Fri, 29 May 2009 18:29:50 -0700
+
 net-snmp (5.4.2.1-vyatta5) unstable; urgency=low
 
   * Use lseek rather than reopening
