@@ -14,6 +14,7 @@ typedef __u16 u16;         /* ditto */
 typedef __u8 u8;           /* ditto */
 #include <linux/ethtool.h>
 #endif /* HAVE_LINUX_ETHTOOL_H */
+#include <linux/mii.h>
 
 #include "mibII/mibII_common.h"
 #include "if-mib/ifTable/ifTable_constants.h"
@@ -532,7 +533,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
         }
         if ((scan_expected == 10) && ((stats - line) < 6)) {
             snmp_log(LOG_ERR,
-                     "interface data format error 2 (%d < 6), line ==|%s|\n",
+                     "interface data format error 2 (%ld < 6), line ==|%s|\n",
                      stats - line, line);
         }
 
@@ -740,11 +741,17 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name)
     strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name)-1);
     ifr.ifr_data = (char *) &edata;
     
-    if (ioctl(fd, SIOCETHTOOL, &ifr) == -1 
-	|| edata.speed == 0 || edata.speed == -1) {
+    if (ioctl(fd, SIOCETHTOOL, &ifr) == -1) {
         DEBUGMSGTL(("mibII/interfaces", "ETHTOOL_GSET on %s failed\n",
                     ifr.ifr_name));
         return netsnmp_linux_interface_get_if_speed_mii(fd,name);
+    }
+
+    /* Speed is unknown */
+    if (edata.speed == 0 || edata.speed == -1) {
+        DEBUGMSGTL(("mibII/interfaces", "%s speed is unknown\n",
+                    ifr.ifr_name));
+	    return 0;
     }
 
     /* return in bps */
@@ -754,6 +761,26 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name)
 }
 #endif
  
+static unsigned int mii_media_speed(unsigned mask)
+{
+    int i;
+    static const unsigned media_speeds[5] = {
+	10000000,   10000000, 
+	100000000, 100000000, 10000000
+    };
+
+    if (mask & BMCR_SPEED1000) 
+	    return 1000000000;
+
+    mask >>= 5;
+    for (i = 4; i >= 0; i--) {
+	if (mask & (1<<i))
+	    return media_speeds[i];
+    }
+
+    return 0;
+}
+
 /**
  * Determines network interface speed from MII
  */
@@ -764,19 +791,13 @@ netsnmp_linux_interface_get_if_speed_mii(int fd, const char *name)
 netsnmp_linux_interface_get_if_speed(int fd, const char *name)
 #endif
 {
-    unsigned int retspeed = 10000000;
     struct ifreq ifr;
-
-    /* the code is based on mii-diag utility by Donald Becker
-     * see ftp://ftp.scyld.com/pub/diag/mii-diag.c
-     */
+    /* the code is based on mii-tool utility */
     ushort *data = (ushort *)(&ifr.ifr_data);
     unsigned phy_id;
-    int mii_reg, i;
+    int mii_reg;
     ushort mii_val[32];
-    ushort bmcr, bmsr, nway_advert, lkpar;
-    const unsigned int media_speeds[] = {10000000, 10000000, 100000000, 100000000, 10000000, 0};	
-    /* It corresponds to "10baseT", "10baseT-FD", "100baseTx", "100baseTx-FD", "100baseT4", "Flow-control", 0, */
+    ushort bmcr, bmsr, nway_advert, lkpar, bmcr2, lpa2;
 
     strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
     ifr.ifr_name[ sizeof(ifr.ifr_name)-1 ] = 0;
@@ -789,12 +810,12 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name)
     if (ioctl(fd, SIOCGMIIPHY, &ifr) < 0) {
         DEBUGMSGTL(("mibII/interfaces", "SIOCGMIIPHY on %s failed\n",
                     ifr.ifr_name));
-        return retspeed;
+        return 0;
     }
 
     /* Begin getting mii register values */
     phy_id = data[0];
-    for (mii_reg = 0; mii_reg < 8; mii_reg++){
+    for (mii_reg = 0; mii_reg < 10; mii_reg++){
         data[0] = phy_id;
         data[1] = mii_reg;
         if(ioctl(fd, SIOCGMIIREG, &ifr) <0){
@@ -806,45 +827,33 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name)
     /*Invalid basic mode control register*/
     if (mii_val[0] == 0xffff  ||  mii_val[1] == 0x0000) {
         DEBUGMSGTL(("mibII/interfaces", "No MII transceiver present!.\n"));
-        return retspeed;
+        return 0;
     }
+
     /* Descriptive rename. */
-    bmcr = mii_val[0]; 	  /*basic mode control register*/
-    bmsr = mii_val[1]; 	  /* basic mode status register*/
-    nway_advert = mii_val[4]; /* autonegotiation advertisement*/
-    lkpar = mii_val[5]; 	  /*link partner ability*/
+    bmcr = mii_val[MII_BMCR];
+    bmsr = mii_val[MII_BMSR];
+    nway_advert = mii_val[MII_ADVERTISE];
+    lkpar = mii_val[MII_LPA];
+    bmcr2 = mii_val[MII_CTRL1000];
+    lpa2 = mii_val[MII_STAT1000];
     
-    /*Check for link existence, returns 0 if link is absent*/
-    if ((bmsr & 0x0016) != 0x0004){
-        DEBUGMSGTL(("mibII/interfaces", "No link...\n"));
-        retspeed = 0;
-        return retspeed;
-    }
-    
-    if(!(bmcr & 0x1000) ){
+    if (!(bmcr & BMCR_ANENABLE)) {
         DEBUGMSGTL(("mibII/interfaces", "Auto-negotiation disabled.\n"));
-        retspeed = bmcr & 0x2000 ? 100000000 : 10000000;
-        return retspeed;
+	return ((bmcr2 & 0x0300) & lpa2 >> 2) ? 1000000000
+		: (bmcr & BMCR_SPEED100) ? 100000000 : 10000000;
     }
-    /* Link partner got our advertised abilities */	
-    if (lkpar & 0x4000) {
-        int negotiated = nway_advert & lkpar & 0x3e0;
-        int max_capability = 0;
-        /* Scan for the highest negotiated capability, highest priority
-           (100baseTx-FDX) to lowest (10baseT-HDX). */
-        int media_priority[] = {8, 9, 7, 6, 5}; 	/* media_names[i-5] */
-        for (i = 0; media_priority[i]; i++){
-            if (negotiated & (1 << media_priority[i])) {
-                max_capability = media_priority[i];
-                break;
-            }
-        }
-        if (max_capability)
-            retspeed = media_speeds[max_capability - 5];
-        else
-            DEBUGMSGTL(("mibII/interfaces", "No common media type was autonegotiated!\n"));
-    }else if(lkpar & 0x00A0){
-        retspeed = (lkpar & 0x0080) ? 100000000 : 10000000;
+
+   /*Check for link existence, returns 0 if link is absent*/
+    if (!(bmsr & BMSR_LSTATUS)) {
+        DEBUGMSGTL(("mibII/interfaces", "No link...\n"));
+	return 0;
     }
-    return retspeed;
+
+    if (!(bmsr & BMSR_ANEGCOMPLETE)) {
+        DEBUGMSGTL(("mibII/interfaces", "Autoneg not complete...\n"));
+	return 0;
+    }
+ 
+    return mii_media_speed(nway_advert & lkpar);
 }
