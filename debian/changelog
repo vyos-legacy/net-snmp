@@ -1,3 +1,11 @@
+net-snmp (5.4.2.1-vyatta5+jenner2) unstable; urgency=low
+
+  * Increase initial size
+  * Avoid reading past end of buffer
+  * Rework how Interface speed recognition
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Tue, 09 Jun 2009 16:34:35 -0700
+
 net-snmp (5.4.2.1-vyatta5+jenner1) unstable; urgency=low
 
   * UNRELEASED
