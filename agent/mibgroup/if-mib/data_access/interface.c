@@ -469,12 +469,12 @@ _access_interface_entry_save_name(const char *name, oid index)
         if (index != tmp) {
             static int logged = 0;
             if (!logged) {
-                snmp_log(LOG_ERR, "IfIndex of an interface changed. Such " \
-                         "interfaces will appear multiple times in IF-MIB.\n");
+                snmp_log(LOG_ERR, "IfIndex of an interface changed.\n");
                 logged = 1;
             }
-            DEBUGMSGTL(("access:interface:ifIndex", "index %d != tmp for %s\n",
-                         index, name));
+	    se_remove_value_from_slist("interfaces", name);
+	    se_add_pair_to_slist("interfaces", strdup(name), index);
+	    DEBUGMSGTL(("access:interface:ifIndex", "ifname %s, old index %d, already existing, replaced with %d\n", name, tmp, index));
         }
 }
 

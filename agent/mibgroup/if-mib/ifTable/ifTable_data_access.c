@@ -266,8 +266,21 @@ static void
 _add_new_interface(netsnmp_interface_entry *ifentry,
                    netsnmp_container *container)
 {
-    ifTable_rowreq_ctx *rowreq_ctx;
+    ifTable_rowreq_ctx *rowreq_ctx, *container_entry;
+    netsnmp_iterator *ctxit;
+    ctxit = CONTAINER_ITERATOR(container);
+    container_entry = ITERATOR_FIRST(ctxit);
 
+    for(; container_entry; container_entry = ITERATOR_NEXT(ctxit)) {
+	if(!strcmp(ifentry->name, container_entry->data.ifName) && \
+	    ifentry->index != container_entry->data.ifentry->index) {
+		DEBUGMSGTL(("ifTable:access", "removing old entry %s (index %d != %d)\n",
+		    container_entry->data.ifName, container_entry->data.ifentry->index, ifentry->index));
+		    se_remove_value_from_slist("interfaces", container_entry->data.ifName);
+		CONTAINER_REMOVE(container, container_entry);
+		ifTable_release_rowreq_ctx(container_entry);
+		}
+    }
     DEBUGMSGTL(("ifTable:access", "creating new entry\n"));
 
     /*
