@@ -1,3 +1,10 @@
+net-snmp (5.4.2.1-vyatta8) unstable; urgency=low
+
+  * Fix shadow ppp devices
+  * Fix speed report for 10G
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Tue, 22 Dec 2009 21:16:29 -0800
+
 net-snmp (5.4.2.1-vyatta7) unstable; urgency=low
 
   * Increase initial size
