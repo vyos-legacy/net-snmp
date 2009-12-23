@@ -702,7 +702,14 @@ netsnmp_access_interface_entry_overrides(netsnmp_interface_entry *entry)
         netsnmp_access_interface_entry_overrides_get(entry->name);
     if (if_ptr) {
         entry->type = if_ptr->type;
-        entry->speed = if_ptr->speed;
+	/*
+	 * enforce speed limit
+	 */
+	if (if_ptr->speed > 4294967295)
+	    entry->speed = 4294967295;
+	else
+	    entry->speed = if_ptr->speed;
+	entry->speed_high = if_ptr->speed/1000000;
     }
 }
 
@@ -747,7 +754,7 @@ _parse_interface_config(const char *token, char *cptr)
         config_perror("Out of memory");
         return;
     }
-    if_new->speed = strtoul(speed, &ecp, 0);
+    if_new->speed = strtoull(speed, &ecp, 0);
     if (*ecp) {
         config_perror("Bad SPEED value");
         free(if_new);

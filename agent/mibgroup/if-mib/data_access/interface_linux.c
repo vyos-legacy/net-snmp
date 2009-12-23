@@ -636,15 +636,26 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
                 entry->type = IANAIFTYPE_OTHER;
         }
 
-        if (IANAIFTYPE_ETHERNETCSMACD == entry->type)
-            entry->speed =
+        if (IANAIFTYPE_ETHERNETCSMACD == entry->type) {
+	    /* prevent int32 overflow */	    
+            entry->speed_high =
                 netsnmp_linux_interface_get_if_speed(fd, entry->name);
+	    /* Maximum speed is 4,294,967,295 */
+	    if (entry->speed_high > 4294)
+		entry->speed = 4294967295;
+	    else
+		entry->speed = entry->speed_high*1000*1000;
 #ifdef APPLIED_PATCH_836390   /* xxx-rks ifspeed fixes */
-        else if (IANAIFTYPE_PROPVIRTUAL == entry->type)
+	/* patch hasn't been applied in 4 years, I thinnk it's safe to 
+	 * delete this stuff */
+        } else if (IANAIFTYPE_PROPVIRTUAL == entry->type) {
             entry->speed = _get_bonded_if_speed(entry);
+	    entry->speed_high = entry->speed/1000000;
 #endif
-        else
+	} else {
             netsnmp_access_interface_entry_guess_speed(entry);
+	    entry->speed_high = entry->speed/1000000;
+	}
         
         netsnmp_access_interface_ioctl_flags_get(fd, entry);
 
@@ -680,8 +691,6 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
             NETSNMP_INTERFACE_FLAGS_HAS_V6_REASMMAX;
 
         netsnmp_access_interface_entry_overrides(entry);
-
-        entry->speed_high = entry->speed / 1000000;
 
         if (! (load_flags & NETSNMP_ACCESS_INTERFACE_LOAD_NO_STATS))
             _parse_stats(entry, stats, scan_expected);
@@ -751,26 +760,23 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name)
     if (edata.speed == 0 || edata.speed == -1) {
         DEBUGMSGTL(("mibII/interfaces", "%s speed is unknown\n",
                     ifr.ifr_name));
-	    return 0;
+	return 0;
     }
 
     /* return in bps */
     DEBUGMSGTL(("mibII/interfaces", "ETHTOOL_GSET on %s speed = %d\n",
                 ifr.ifr_name, edata.speed));
-    return edata.speed*1000*1000;
+    return edata.speed;
 }
 #endif
  
 static unsigned int mii_media_speed(unsigned mask)
 {
     int i;
-    static const unsigned media_speeds[5] = {
-	10000000,   10000000, 
-	100000000, 100000000, 10000000
-    };
+    static const unsigned media_speeds[5] = { 10, 10, 100, 100, 10 };
 
     if (mask & BMCR_SPEED1000) 
-	    return 1000000000;
+	    return 1000;
 
     mask >>= 5;
     for (i = 4; i >= 0; i--) {
