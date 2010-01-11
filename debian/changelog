@@ -1,3 +1,10 @@
+net-snmp (5.4.2.1-vyatta9) unstable; urgency=low
+
+  * Disable IPV6 in net-snmp
+  * Enable stack protection in net-snmp
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Mon, 11 Jan 2010 15:44:13 -0800
+
 net-snmp (5.4.2.1-vyatta8) unstable; urgency=low
 
   * Fix shadow ppp devices
