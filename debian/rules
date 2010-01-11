@@ -23,7 +23,8 @@ DGC_DEV := $(shell \
 
 ifeq (linux,$(DEB_HOST_ARCH_OS))
 MIB_MODULES += ucd-snmp/diskio ucd-snmp/lmSensors 
-IPV6 = --enable-ipv6
+# IPV6 disabled until Vyatta CLI updated
+IPV6 = --disable-ipv6
 DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libsensors-dev (>= 2.8.5)" \
                           $(DGC_DEV)
 else
