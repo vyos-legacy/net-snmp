@@ -1,3 +1,9 @@
+net-snmp (5.4.2.1-vyatta10) unstable; urgency=low
+
+  * Allow snmpd to have configured trap source address
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Wed, 13 Jan 2010 19:17:14 -0800
+
 net-snmp (5.4.2.1-vyatta9) unstable; urgency=low
 
   * Disable IPV6 in net-snmp
