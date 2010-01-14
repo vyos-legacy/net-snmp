@@ -267,6 +267,8 @@ init_agent_read_config(const char *app)
     netsnmp_ds_register_config(ASN_INTEGER, app, "maxGetbulkResponses",
                                NETSNMP_DS_APPLICATION_ID,
                                NETSNMP_DS_AGENT_MAX_GETBULKRESPONSES);
+    netsnmp_ds_register_config(ASN_OCTET_STR, app, "clientaddr",
+			       NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_CLIENT_ADDR);
     netsnmp_init_handler_conf();
 
 #include "agent_module_dot_conf.h"
