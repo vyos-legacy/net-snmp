@@ -34,7 +34,9 @@ DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libkvm-dev" $(DGC_DEV)
 endif
 endif
 
-CFLAGS = -Wall -fstack-protector
+# Use hardening options
+export DEB_BUILD_HARDENING=1
+
 ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
 	CFLAGS += -O0 -g
 else
