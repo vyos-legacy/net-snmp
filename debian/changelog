@@ -1,3 +1,9 @@
+net-snmp (5.4.2.1-vyatta13) unstable; urgency=low
+
+  * Fix memory leak when subinterfaces present
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Tue, 27 Apr 2010 09:31:23 -0700
+
 net-snmp (5.4.2.1-vyatta12) unstable; urgency=low
 
   * UNRELEASED
