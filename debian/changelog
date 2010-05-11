@@ -1,3 +1,9 @@
+net-snmp (5.4.2.1-vyatta14) unstable; urgency=low
+
+  * Fix memory leak in table handling
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Thu, 06 May 2010 09:26:15 -0700
+
 net-snmp (5.4.2.1-vyatta13) unstable; urgency=low
 
   * Fix memory leak when subinterfaces present
