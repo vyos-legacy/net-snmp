@@ -25,6 +25,7 @@ ifeq (linux,$(DEB_HOST_ARCH_OS))
 MIB_MODULES += ucd-snmp/diskio ucd-snmp/lmSensors 
 DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libsensors-dev (>= 2.8.5)" \
                           $(DGC_DEV)
+IPV6 = --enable-ipv6
 else
 ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
 IPV6 = --disable-ipv6
