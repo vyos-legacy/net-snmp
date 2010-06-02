@@ -1,3 +1,9 @@
+net-snmp (5.4.2.1-vyatta17) unstable; urgency=low
+
+  * Fix problem with snmpd and tcp-wrappers
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Wed, 02 Jun 2010 10:53:20 -0700
+
 net-snmp (5.4.2.1-vyatta16) unstable; urgency=low
 
   * Make sure IPv6 is enabled
