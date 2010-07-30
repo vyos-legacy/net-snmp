@@ -1,3 +1,10 @@
+net-snmp (5.4.2.1-vyatta17+larkspur2) unstable; urgency=low
+
+  * Backport speed code from net-snmp 5.5
+  * Need updated ethtool.h header file
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Fri, 30 Jul 2010 16:30:53 -0700
+
 net-snmp (5.4.2.1-vyatta17+larkspur1) unstable; urgency=low
 
   * UNRELEASED
