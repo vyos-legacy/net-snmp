@@ -665,6 +665,7 @@ netsnmp_access_interface_entry_guess_speed(netsnmp_interface_entry *entry)
         entry->speed = 4000000;
     else
         entry->speed = 0;
+    entry->speed_high = entry->speed / 1000000LL;
 }
 
 netsnmp_conf_if_list *
@@ -705,11 +706,12 @@ netsnmp_access_interface_entry_overrides(netsnmp_interface_entry *entry)
 	/*
 	 * enforce speed limit
 	 */
-	if (if_ptr->speed > 4294967295)
-	    entry->speed = 4294967295;
-	else
+	if (if_ptr->speed > 0xffffffff) {
+	    entry->speed = 0xffffffff;
+	} else {
 	    entry->speed = if_ptr->speed;
-	entry->speed_high = if_ptr->speed/1000000;
+	}
+	entry->speed_high = if_ptr->speed / 1000000LL;
     }
 }
 
