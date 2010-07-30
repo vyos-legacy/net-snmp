@@ -12,7 +12,9 @@ typedef __u64 u64;         /* hack, so we may include kernel's ethtool.h */
 typedef __u32 u32;         /* ditto */
 typedef __u16 u16;         /* ditto */
 typedef __u8 u8;           /* ditto */
-#include <linux/ethtool.h>
+
+/* Glibc ethtool.h is out of date with kernel! */
+#include "ethtool.h"
 #endif /* HAVE_LINUX_ETHTOOL_H */
 #include <linux/mii.h>
 
