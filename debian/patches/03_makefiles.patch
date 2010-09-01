@@ -1,8 +1,6 @@
-Index: net-snmp-5.4.3/local/Makefile.in
-===================================================================
---- net-snmp-5.4.3.orig/local/Makefile.in	2008-03-21 18:22:57.000000000 +0100
-+++ net-snmp-5.4.3/local/Makefile.in	2010-06-04 17:10:51.000000000 +0200
-@@ -100,7 +100,7 @@
+--- a/local/Makefile.in	2010-09-01 10:26:47.120456121 -0700
++++ b/local/Makefile.in	2010-09-01 10:28:05.349060712 -0700
+@@ -101,7 +101,7 @@ tkmib.made: $(srcdir)/tkmib
  
  mib2c.made: $(srcdir)/mib2c
  	if test "x$(PERL)" != "x" ; then \
@@ -11,11 +9,9 @@ Index: net-snmp-5.4.3/local/Makefile.in
  	else \
  	  touch mib2c.made; \
          fi
-Index: net-snmp-5.4.3/Makefile.top
-===================================================================
---- net-snmp-5.4.3.orig/Makefile.top	2009-10-29 10:55:42.000000000 +0100
-+++ net-snmp-5.4.3/Makefile.top	2010-06-04 17:10:51.000000000 +0200
-@@ -24,8 +24,9 @@
+--- a/Makefile.top	2010-09-01 10:26:47.120456121 -0700
++++ b/Makefile.top	2010-09-01 10:28:05.353060945 -0700
+@@ -25,8 +25,9 @@ man3dir		= $(mandir)/man3
  man5dir		= $(mandir)/man5
  man8dir		= $(mandir)/man8
  snmplibdir	= $(datadir)/snmp
@@ -26,11 +22,9 @@ Index: net-snmp-5.4.3/Makefile.top
  DESTDIR         = @INSTALL_PREFIX@
  INSTALL_PREFIX  = $(DESTDIR)
  
-Index: net-snmp-5.4.3/mibs/Makefile.in
-===================================================================
---- net-snmp-5.4.3.orig/mibs/Makefile.in	2009-05-29 11:08:28.000000000 +0200
-+++ net-snmp-5.4.3/mibs/Makefile.in	2010-06-04 17:13:21.000000000 +0200
-@@ -13,53 +13,24 @@
+--- a/mibs/Makefile.in	2010-09-01 10:26:47.124456359 -0700
++++ b/mibs/Makefile.in	2010-09-01 10:28:05.353060945 -0700
+@@ -13,53 +13,24 @@ OTHERINSTALL=mibsinstall
  OTHERUNINSTALL=mibsuninstall
  
  
@@ -96,11 +90,9 @@ Index: net-snmp-5.4.3/mibs/Makefile.in
  	done
  
  mibsuninstall: installdirs
-Index: net-snmp-5.4.3/Makefile.in
-===================================================================
---- net-snmp-5.4.3.orig/Makefile.in	2007-06-08 22:32:56.000000000 +0200
-+++ net-snmp-5.4.3/Makefile.in	2010-06-04 17:10:51.000000000 +0200
-@@ -156,7 +156,7 @@
+--- a/Makefile.in	2010-09-01 10:26:47.120456121 -0700
++++ b/Makefile.in	2010-09-01 10:28:05.353060945 -0700
+@@ -162,7 +162,7 @@ OTHERCLEANTODOS=perlclean @PYTHONCLEANTA
  #
  # override LD_RUN_PATH to avoid dependencies on the build directory
  perlmodules: perlmakefiles subdirs
