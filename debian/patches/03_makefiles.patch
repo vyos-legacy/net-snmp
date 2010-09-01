@@ -1,5 +1,5 @@
---- a/local/Makefile.in	2010-09-01 14:36:49.000000000 -0700
-+++ b/local/Makefile.in	2010-09-01 14:37:38.263429724 -0700
+--- a/local/Makefile.in	2010-09-01 15:03:23.000000000 -0700
++++ b/local/Makefile.in	2010-09-01 15:04:10.976111119 -0700
 @@ -101,7 +101,7 @@ tkmib.made: $(srcdir)/tkmib
  
  mib2c.made: $(srcdir)/mib2c
@@ -9,8 +9,8 @@
  	else \
  	  touch mib2c.made; \
          fi
---- a/Makefile.top	2010-09-01 14:36:49.000000000 -0700
-+++ b/Makefile.top	2010-09-01 14:37:38.263429724 -0700
+--- a/Makefile.top	2010-09-01 15:03:23.000000000 -0700
++++ b/Makefile.top	2010-09-01 15:04:10.976111119 -0700
 @@ -25,8 +25,9 @@ man3dir		= $(mandir)/man3
  man5dir		= $(mandir)/man5
  man8dir		= $(mandir)/man8
@@ -22,8 +22,8 @@
  DESTDIR         = @INSTALL_PREFIX@
  INSTALL_PREFIX  = $(DESTDIR)
  
---- a/mibs/Makefile.in	2010-09-01 14:37:05.000000000 -0700
-+++ b/mibs/Makefile.in	2010-09-01 14:37:48.575632005 -0700
+--- a/mibs/Makefile.in	2010-09-01 15:03:23.000000000 -0700
++++ b/mibs/Makefile.in	2010-09-01 15:04:10.976111119 -0700
 @@ -43,16 +43,22 @@ RFCMIBS	= IF-MIB.txt IF-INVERTED-STACK-M
  	SCTP-MIB.txt
  
@@ -49,14 +49,3 @@
  
  all: standardall
  
---- a/Makefile.in	2010-09-01 14:36:49.000000000 -0700
-+++ b/Makefile.in	2010-09-01 14:37:38.263429724 -0700
-@@ -162,7 +162,7 @@ OTHERCLEANTODOS=perlclean @PYTHONCLEANTA
- #
- # override LD_RUN_PATH to avoid dependencies on the build directory
- perlmodules: perlmakefiles subdirs
--	@(cd perl ; $(MAKE) LD_RUN_PATH="$(libdir):`$(PERL) -e 'use Config; print qq($$Config{archlibexp}/CORE);'`") ; \
-+	@(cd perl ; $(MAKE) LD_RUN_PATH="") ; \
-         if test $$? != 0 ; then \
-            exit 1 ; \
-         fi
