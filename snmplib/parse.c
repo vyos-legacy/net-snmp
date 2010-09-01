@@ -112,6 +112,33 @@ SOFTWARE.
 #include <net-snmp/library/snmp_api.h>
 
 /*
+ * A linked list of nodes.
+ */
+struct node {
+    struct node    *next;
+    char           *label;  /* This node's (unique) textual name */
+    u_long          subid;  /* This node's integer subidentifier */
+    int             modid;  /* The module containing this node */
+    char           *parent; /* The parent's textual name */
+    int             tc_index; /* index into tclist (-1 if NA) */
+    int             type;   /* The type of object this represents */
+    int             access;
+    int             status;
+    struct enum_list *enums; /* (optional) list of enumerated integers */
+    struct range_list *ranges;
+    struct index_list *indexes;
+    char           *augments;
+    struct varbind_list *varbinds;
+    char           *hint;
+    char           *units;
+    char           *description; /* description (a quoted string) */
+    char           *reference; /* references (a quoted string) */
+    char           *defaultValue;
+    char           *filename;
+    int             lineno;
+};
+
+/*
  * This is one element of an object identifier with either an integer
  * subidentifier, or a textual string label, or both.
  * The subid is -1 if not present, and label is NULL if not present.
@@ -520,15 +547,15 @@ static struct node *nbuckets[NHASHSIZE];
 static struct tree *tbuckets[NHASHSIZE];
 static struct module *module_head = NULL;
 
-struct node    *orphan_nodes = NULL;
-struct tree    *tree_head = NULL;
+static struct node *orphan_nodes = NULL;
+struct tree        *tree_head = NULL;
 
 #define	NUMBER_OF_ROOT_NODES	3
 static struct module_import root_imports[NUMBER_OF_ROOT_NODES];
 
 static int      current_module = 0;
 static int      max_module = 0;
-static char    *last_err_module = 0;    /* no repeats on "Cannot find module..." */
+static char    *last_err_module = NULL; /* no repeats on "Cannot find module..." */
 
 static void     tree_from_node(struct tree *tp, struct node *np);
 static void     do_subtree(struct tree *, struct node **);
@@ -723,7 +750,7 @@ netsnmp_init_mib_internals(void)
      */
 }
 
-#ifndef NETSNMP_CLEAN_NAMESPACE
+#ifndef NETSNMP_NO_LEGACY_DEFINITIONS
 void
 init_mib_internals(void)
 {
@@ -916,7 +943,6 @@ free_node(struct node *np)
 static void
 print_nodes(FILE * fp, struct node *root)
 {
-    extern void     xmalloc_stats(FILE *);
     struct enum_list *ep;
     struct index_list *ip;
     struct range_list *rp;
@@ -1019,7 +1045,7 @@ print_ascii_dump_tree(FILE * f, struct tree *tree, int count)
 static int      translation_table[256];
 
 static void
-build_translation_table()
+build_translation_table(void)
 {
     int             count;
 
@@ -1105,7 +1131,7 @@ build_translation_table()
 }
 
 static void
-init_tree_roots()
+init_tree_roots(void)
 {
     struct tree    *tp, *lasttp;
     int             base_modid;
@@ -2952,6 +2978,9 @@ eat_syntax(FILE * fp, char *token, int maxtoken)
     struct node    *np = alloc_node(current_module);
     char            nexttoken[MAXTOKEN];
 
+    if (!np)
+	return 0;
+
     type = get_token(fp, token, maxtoken);
     nexttype = get_token(fp, nexttoken, MAXTOKEN);
     switch (type) {
@@ -3907,7 +3936,7 @@ adopt_orphans(void)
         }
 }
 
-#ifndef NETSNMP_CLEAN_NAMESPACE
+#ifndef NETSNMP_NO_LEGACY_DEFINITIONS
 struct tree    *
 read_module(const char *name)
 {
@@ -4008,7 +4037,7 @@ unload_module_by_ID(int modID, struct tree *tree_top)
     }
 }
 
-#ifndef NETSNMP_CLEAN_NAMESPACE
+#ifndef NETSNMP_NO_LEGACY_DEFINITIONS
 int
 unload_module(const char *name)
 {
@@ -4042,7 +4071,7 @@ netsnmp_unload_module(const char *name)
  * Clear module map, tree nodes, textual convention table.
  */
 void
-unload_all_mibs()
+unload_all_mibs(void)
 {
     struct module  *mp;
     struct module_compatability *mcp;
@@ -4159,7 +4188,7 @@ new_module(const char *name, const char *file)
 
 
 static void
-scan_objlist(struct node *root, struct objgroup *list, const char *error)
+scan_objlist(struct node *root, struct module *mp, struct objgroup *list, const char *error)
 {
     int             oLine = mibLine;
 
@@ -4174,8 +4203,16 @@ scan_objlist(struct node *root, struct objgroup *list, const char *error)
             else
                 break;
         if (!np) {
-            mibLine = gp->line;
-            print_error(error, gp->name, QUOTESTRING);
+	    int i;
+	    struct module_import *mip;
+	    /* if not local, check if it was IMPORTed */
+	    for (i = 0, mip = mp->imports; i < mp->no_imports; i++, mip++)
+		if (strcmp(mip->label, gp->name) == 0)
+		    break;
+	    if (i == mp->no_imports) {
+		mibLine = gp->line;
+		print_error(error, gp->name, QUOTESTRING);
+	    }
         }
         free(gp->name);
         free(gp);
@@ -4190,6 +4227,9 @@ scan_objlist(struct node *root, struct objgroup *list, const char *error)
 static struct node *
 parse(FILE * fp, struct node *root)
 {
+#ifdef TEST
+    extern void     xmalloc_stats(FILE *);
+#endif
     char            token[MAXTOKEN];
     char            name[MAXTOKEN];
     int             type = LABEL;
@@ -4206,7 +4246,7 @@ parse(FILE * fp, struct node *root)
 
     if (last_err_module)
         free(last_err_module);
-    last_err_module = 0;
+    last_err_module = NULL;
 
     np = root;
     if (np != NULL) {
@@ -4234,15 +4274,15 @@ parse(FILE * fp, struct node *root)
                 printf("\nNodes for Module %s:\n", name);
                 print_nodes(stdout, root);
 #endif
-                scan_objlist(root, objgroups, "Undefined OBJECT-GROUP");
-                scan_objlist(root, objects, "Undefined OBJECT");
-                scan_objlist(root, notifs, "Undefined NOTIFICATION");
-                objgroups = oldgroups;
-                objects = oldobjects;
-                notifs = oldnotifs;
                 for (mp = module_head; mp; mp = mp->next)
                     if (mp->modid == current_module)
                         break;
+                scan_objlist(root, mp, objgroups, "Undefined OBJECT-GROUP");
+                scan_objlist(root, mp, objects, "Undefined OBJECT");
+                scan_objlist(root, mp, notifs, "Undefined NOTIFICATION");
+                objgroups = oldgroups;
+                objects = oldobjects;
+                notifs = oldnotifs;
                 do_linkup(mp, root);
                 np = root = NULL;
             }
@@ -4250,7 +4290,7 @@ parse(FILE * fp, struct node *root)
 #ifdef TEST
             if (netsnmp_ds_get_int(NETSNMP_DS_LIBRARY_ID, 
 				   NETSNMP_DS_LIB_MIB_WARNINGS)) {
-                xmalloc_stats(stderr);
+                /* xmalloc_stats(stderr); */
 	    }
 #endif
             continue;
@@ -4487,6 +4527,7 @@ get_token(FILE * fp, char *token, int maxtlen)
     register int    hash = 0;
     register struct tok *tp;
     int             too_long = 0;
+    enum { bdigits, xdigits, other } seenSymbols;
 
     /*
      * skip all white space 
@@ -4505,39 +4546,60 @@ get_token(FILE * fp, char *token, int maxtlen)
     case '"':
         return parseQuoteString(fp, token, maxtlen);
     case '\'':                 /* binary or hex constant */
-        while ((ch = getc(fp)) != EOF && ch != '\''
-               && cp - token < maxtlen - 2)
-            *cp++ = ch;
+        seenSymbols = bdigits;
+        while ((ch = getc(fp)) != EOF && ch != '\'') {
+            switch (seenSymbols) {
+            case bdigits:
+                if (ch == '0' || ch == '1')
+                    break;
+                seenSymbols = xdigits;
+            case xdigits:
+                if (isxdigit(ch))
+                    break;
+                seenSymbols = other;
+            case other:
+                break;
+            }
+            if (cp - token < maxtlen - 2)
+                *cp++ = ch;
+        }
         if (ch == '\'') {
             unsigned long   val = 0;
-            *cp++ = '\'';
-            *cp++ = ch = getc(fp);
-            *cp = 0;
-            cp = token + 1;
+            char           *run = token + 1;
+            ch = getc(fp);
             switch (ch) {
             case EOF:
                 return ENDOFFILE;
             case 'b':
             case 'B':
-                while ((ch = *cp++) != '\'')
-                    if (ch != '0' && ch != '1')
-                        return LABEL;
-                    else
-                        val = val * 2 + ch - '0';
+                if (seenSymbols > bdigits) {
+                    *cp++ = '\'';
+                    *cp = 0;
+                    return LABEL;
+                }
+                while (run != cp)
+                    val = val * 2 + *run++ - '0';
                 break;
             case 'h':
             case 'H':
-                while ((ch = *cp++) != '\'')
+                if (seenSymbols > xdigits) {
+                    *cp++ = '\'';
+                    *cp = 0;
+                    return LABEL;
+                }
+                while (run != cp) {
+                    ch = *run++;
                     if ('0' <= ch && ch <= '9')
                         val = val * 16 + ch - '0';
                     else if ('a' <= ch && ch <= 'f')
                         val = val * 16 + ch - 'a' + 10;
                     else if ('A' <= ch && ch <= 'F')
                         val = val * 16 + ch - 'A' + 10;
-                    else
-                        return LABEL;
+                }
                 break;
             default:
+                *cp++ = '\'';
+                *cp = 0;
                 return LABEL;
             }
             sprintf(token, "%ld", val);
@@ -4718,26 +4780,24 @@ add_mibdir(const char *dirname)
     int             count = 0;
     int             fname_len = 0;
 #if !(defined(WIN32) || defined(cygwin))
-    char            token[MAXTOKEN];
+    char           *token;
     char space;
     char newline;
     struct stat     dir_stat, idx_stat;
     char            tmpstr1[300];
-    int empty = 1;
 #endif
 
     DEBUGMSGTL(("parse-mibs", "Scanning directory %s\n", dirname));
 #if !(defined(WIN32) || defined(cygwin))
-    snprintf(token, sizeof(token), "%s/%s", dirname, ".index");
-    token[ sizeof(token)-1 ] = 0;
-    if (stat(token, &idx_stat) == 0 && stat(dirname, &dir_stat) == 0) {
+    token = netsnmp_mibindex_lookup( dirname );
+    if (token && stat(token, &idx_stat) == 0 && stat(dirname, &dir_stat) == 0) {
         if (dir_stat.st_mtime < idx_stat.st_mtime) {
             DEBUGMSGTL(("parse-mibs", "The index is good\n"));
             if ((ip = fopen(token, "r")) != NULL) {
+                fgets(tmpstr, sizeof(tmpstr), ip); /* Skip dir line */
                 while (fscanf(ip, "%127s%c%299s%c", token, &space, tmpstr,
 		    &newline) == 4) {
 
-                    empty = 0;
 		    /*
 		     * If an overflow of the token or tmpstr buffers has been
 		     * found log a message and break out of the while loop,
@@ -4757,10 +4817,7 @@ add_mibdir(const char *dirname)
                     count++;
                 }
                 fclose(ip);
-                if ( !empty ) {
-                    return count;
-                }
-                DEBUGMSGTL(("parse-mibs", "Empty MIB index\n"));
+                return count;
             } else
                 DEBUGMSGTL(("parse-mibs", "Can't read index\n"));
         } else
@@ -4770,9 +4827,7 @@ add_mibdir(const char *dirname)
 #endif
 
     if ((dir = opendir(dirname))) {
-        snprintf(tmpstr, sizeof(tmpstr), "%s/.index", dirname);
-        tmpstr[ sizeof(tmpstr)-1 ] = 0;
-        ip = fopen(tmpstr, "w");
+        ip = netsnmp_mibindex_new( dirname );
         while ((file = readdir(dir))) {
             /*
              * Only parse file names that don't begin with a '.' 
@@ -4840,7 +4895,7 @@ read_mib(const char *filename)
 
 
 struct tree    *
-read_all_mibs()
+read_all_mibs(void)
 {
     struct module  *mp;
 
@@ -4854,7 +4909,7 @@ read_all_mibs()
 
 
 #ifdef TEST
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     int             i;
     struct tree    *tp;
@@ -5169,9 +5224,7 @@ find_module(int mid)
         if (mp->modid == mid)
             break;
     }
-    if (mp != 0)
-        return mp;
-    return NULL;
+    return mp;
 }
 
 

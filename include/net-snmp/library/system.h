@@ -107,6 +107,11 @@ SOFTWARE.
 
 #include <net-snmp/types.h>     /* For definition of in_addr_t */
 
+    /* Simply resolve a hostname and return first IPv4 address.
+     * Returns -1 on error */
+    int             netsnmp_gethostbyname_v4(const char* name,
+                                             in_addr_t *addr_out);
+
     in_addr_t       get_myaddr(void);
     long            get_uptime(void);
 
@@ -131,6 +136,9 @@ SOFTWARE.
 #ifndef HAVE_STRTOUL
     unsigned long   strtoul(const char *, char **, int);
 #endif
+#ifndef HAVE_STRTOULL
+    unsigned long   strtoull(const char *, char **, int);
+#endif
 #ifndef HAVE_STRTOK_R
     char           *strtok_r(char *, const char *, char **);
 #endif
@@ -148,6 +156,9 @@ SOFTWARE.
     int             netsnmp_os_prematch(const char *ospmname,
                                         const char *ospmrelprefix);
     int             netsnmp_os_kernel_width(void);
+
+    int             netsnmp_str_to_uid(const char *useroruid);
+    int             netsnmp_str_to_gid(const char *grouporgid);
 
 #ifdef __cplusplus
 }

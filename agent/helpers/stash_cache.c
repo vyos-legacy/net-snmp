@@ -1,15 +1,10 @@
 #include <net-snmp/net-snmp-config.h>
 
-#if HAVE_STRING_H
-#include <string.h>
-#else
-#include <strings.h>
-#endif
-
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 #include <net-snmp/agent/stash_cache.h>
+
 #include <net-snmp/agent/stash_to_next.h>
 
 extern NetsnmpCacheLoad _netsnmp_stash_cache_load;
@@ -32,7 +27,8 @@ netsnmp_get_new_stash_cache(void)
     netsnmp_stash_cache_info *cinfo;
 
     cinfo = SNMP_MALLOC_TYPEDEF(netsnmp_stash_cache_info);
-    cinfo->cache_length = 30;
+    if (cinfo != NULL)
+        cinfo->cache_length = 30;
     return cinfo;
 }
 
@@ -66,6 +62,7 @@ netsnmp_get_timed_bare_stash_cache_handler(int timeout, oid *rootoid, size_t roo
     }
 
     handler->myvoid = cinfo;
+    handler->data_free = free;
 
     return handler;
 }
@@ -154,7 +151,6 @@ netsnmp_stash_cache_helper(netsnmp_mib_handler *handler,
                                          cdata->val.string, cdata->val_len);
             }
         }
-        return SNMP_ERR_NOERROR;
         break;
 
     case MODE_GETNEXT:
@@ -177,7 +173,6 @@ netsnmp_stash_cache_helper(netsnmp_mib_handler *handler,
                 }
             }
         }
-        return SNMP_ERR_NOERROR;
         break;
 
     default:
@@ -185,7 +180,8 @@ netsnmp_stash_cache_helper(netsnmp_mib_handler *handler,
         return netsnmp_call_next_handler(handler, reginfo, reqinfo,
                                          requests);
     }
-    return SNMP_ERR_GENERR;     /* should never get here */
+
+    return SNMP_ERR_NOERROR;
 }
 
 /** updates a given cache depending on whether it needs to or not.

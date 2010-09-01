@@ -7,24 +7,19 @@
 void
 netsnmp_parse_iquerySecLevel(const char *token, char *line)
 {
-    char buf[1024];
     int secLevel;
 
     if ((secLevel = parse_secLevel_conf( token, line )) >= 0 ) {
         netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID,
                            NETSNMP_DS_AGENT_INTERNAL_SECLEVEL, secLevel);
     } else {
-        snprintf(buf, sizeof(buf), "Unknown security level: %s", line);
-        buf[ sizeof(buf)-1 ] = 0;
-        config_perror(buf);
+	netsnmp_config_error("Unknown security level: %s", line);
     }
 }
 
 void
 netsnmp_parse_iqueryVersion(const char *token, char *line)
 {
-    char buf[1024];
-
 #ifndef NETSNMP_DISABLE_SNMPV1
     if (!strcmp( line, "1" ))
         netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID,
@@ -41,9 +36,7 @@ netsnmp_parse_iqueryVersion(const char *token, char *line)
         netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID,
                            NETSNMP_DS_AGENT_INTERNAL_VERSION, SNMP_VERSION_3);
     else {
-        snprintf(buf, sizeof(buf), "Unknown version: %s", line);
-        buf[ sizeof(buf)-1 ] = 0;
-        config_perror(buf);
+	netsnmp_config_error("Unknown version: %s", line);
     }
 }
 
@@ -80,7 +73,7 @@ _tweak_default_iquery_session( int majorID, int minorID,
     size_t elen;
     netsnmp_session *s = netsnmp_query_get_default_session();
 
-    if (s && s->securityEngineIDLen == 0 ) {
+    if ( s && s->securityEngineIDLen == 0 ) {
         elen = snmpv3_get_engineID(eID, sizeof(eID));
         memdup( &(s->securityEngineID), eID, elen );
         s->securityEngineIDLen = elen;
@@ -186,7 +179,7 @@ netsnmp_session *netsnmp_iquery_session(char* secName,   int   version,
         ss->securityEngineIDLen = engIDLen;
         if ( version == SNMP_VERSION_3 ) {
             ss->securityNameLen = strlen(secName);
-            memdup(&(ss->securityName), (u_char*)secName, ss->securityNameLen);
+            memdup((u_char**)&(ss->securityName), (u_char*)secName, ss->securityNameLen);
         } else {
             memdup( &(ss->community), secName, strlen(secName));
             ss->community_len = strlen(secName);

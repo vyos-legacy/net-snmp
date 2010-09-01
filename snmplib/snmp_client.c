@@ -160,6 +160,7 @@ snmp_add_null_var(netsnmp_pdu *pdu, const oid * name, size_t name_length)
 }
 
 
+#include <net-snmp/library/snmp_debug.h>
 static int
 snmp_synch_input(int op,
                  netsnmp_session * session,
@@ -169,10 +170,14 @@ snmp_synch_input(int op,
     int             rpt_type;
 
     if (reqid != state->reqid && pdu && pdu->command != SNMP_MSG_REPORT) {
+        DEBUGMSGTL(("snmp_synch", "Unexpected response (ReqID: %d,%d - Cmd %d)\n",
+                                   reqid, state->reqid, pdu->command ));
         return 0;
     }
 
     state->waiting = 0;
+    DEBUGMSGTL(("snmp_synch", "Response (ReqID: %d - Cmd %d)\n",
+                               reqid, (pdu ? pdu->command : -1)));
 
     if (op == NETSNMP_CALLBACK_OP_RECEIVED_MESSAGE && pdu) {
         if (pdu->command == SNMP_MSG_REPORT) {
@@ -235,11 +240,11 @@ snmp_clone_var(netsnmp_variable_list * var, netsnmp_variable_list * newvar)
         return 1;
 
     memmove(newvar, var, sizeof(netsnmp_variable_list));
-    newvar->next_variable = 0;
-    newvar->name = 0;
-    newvar->val.string = 0;
-    newvar->data = 0;
-    newvar->dataFreeHook = 0;
+    newvar->next_variable = NULL;
+    newvar->name = NULL;
+    newvar->val.string = NULL;
+    newvar->data = NULL;
+    newvar->dataFreeHook = NULL;
     newvar->index = 0;
 
     /*
@@ -264,9 +269,13 @@ snmp_clone_var(netsnmp_variable_list * var, netsnmp_variable_list * newvar)
             memmove(newvar->val.string, var->val.string, var->val_len);
         } else {                /* fix the pointer to new local store */
             newvar->val.string = newvar->buf;
+            /*
+             * no need for a memmove, since we copied the whole var
+             * struct (and thus var->buf) at the beginning of this function.
+             */
         }
     } else {
-        newvar->val.string = 0;
+        newvar->val.string = NULL;
         newvar->val_len = 0;
     }
 
@@ -280,9 +289,9 @@ snmp_clone_var(netsnmp_variable_list * var, netsnmp_variable_list * newvar)
  * Returns 0 if successful, 1 if memory allocation fails.
  */
 int
-snmp_clone_mem(void **dstPtr, void *srcPtr, unsigned len)
+snmp_clone_mem(void **dstPtr, const void *srcPtr, unsigned len)
 {
-    *dstPtr = 0;
+    *dstPtr = NULL;
     if (srcPtr) {
         *dstPtr = malloc(len + 1);
         if (!*dstPtr) {
@@ -341,20 +350,20 @@ _clone_pdu_header(netsnmp_pdu *pdu)
 
     newpdu = (netsnmp_pdu *) malloc(sizeof(netsnmp_pdu));
     if (!newpdu)
-        return 0;
+        return NULL;
     memmove(newpdu, pdu, sizeof(netsnmp_pdu));
 
     /*
      * reset copied pointers if copy fails 
      */
-    newpdu->variables = 0;
-    newpdu->enterprise = 0;
-    newpdu->community = 0;
-    newpdu->securityEngineID = 0;
-    newpdu->securityName = 0;
-    newpdu->contextEngineID = 0;
-    newpdu->contextName = 0;
-    newpdu->transport_data = 0;
+    newpdu->variables = NULL;
+    newpdu->enterprise = NULL;
+    newpdu->community = NULL;
+    newpdu->securityEngineID = NULL;
+    newpdu->securityName = NULL;
+    newpdu->contextEngineID = NULL;
+    newpdu->contextName = NULL;
+    newpdu->transport_data = NULL;
 
     /*
      * copy buffers individually. If any copy fails, all are freed. 
@@ -375,7 +384,7 @@ _clone_pdu_header(netsnmp_pdu *pdu)
                           pdu->transport_data,
                           pdu->transport_data_length)) {
         snmp_free_pdu(newpdu);
-        return 0;
+        return NULL;
     }
     if ((sptr = find_sec_mod(newpdu->securityModel)) != NULL &&
         sptr->pdu_clone != NULL) {
@@ -418,13 +427,13 @@ _copy_varlist(netsnmp_variable_list * var,      /* source varList */
             if (newvar)
                 free((char *) newvar);
             snmp_free_varbind(newhead);
-            return 0;
+            return NULL;
         }
 
         /*
          * add cloned variable to new list  
          */
-        if (0 == newhead)
+        if (NULL == newhead)
             newhead = newvar;
         if (oldvar)
             oldvar->next_variable = newvar;
@@ -466,7 +475,7 @@ _copy_pdu_vars(netsnmp_pdu *pdu,        /* source PDU */
     int             ii, copied, drop_idx;
 
     if (!newpdu)
-        return 0;               /* where is PDU to copy to ? */
+        return NULL;            /* where is PDU to copy to ? */
 
     if (drop_err)
         drop_idx = pdu->errindex - skip_count;
@@ -477,7 +486,7 @@ _copy_pdu_vars(netsnmp_pdu *pdu,        /* source PDU */
     while (var && (skip_count-- > 0))   /* skip over pdu variables */
         var = var->next_variable;
 
-    oldvar = 0;
+    oldvar = NULL;
     ii = 0;
     copied = 0;
     if (pdu->flags & UCD_MSG_FLAG_FORCE_PDU_COPY)
@@ -580,7 +589,8 @@ snmp_split_pdu(netsnmp_pdu *pdu, int skip_count, int copy_count)
  * The command is set to the input command and the reqid, errstat, and
  * errindex are set to default values.
  * If the error status didn't indicate an error, the error index didn't
- * indicate a variable, the pdu wasn't a get response message, or there
+ * indicate a variable, the pdu wasn't a get response message, the
+ * marked variable was not present in the initial request, or there
  * would be no remaining variables, this function will return 0.
  * If everything was successful, a pointer to the fixed cloned pdu will
  * be returned.
@@ -592,17 +602,18 @@ snmp_fix_pdu(netsnmp_pdu *pdu, int command)
 
     if ((pdu->command != SNMP_MSG_RESPONSE)
         || (pdu->errstat == SNMP_ERR_NOERROR)
-        || (0 == pdu->variables)
+        || (NULL == pdu->variables)
+        || (pdu->errindex > snmp_varbind_len(pdu))
         || (pdu->errindex <= 0)) {
-        return 0;               /* pre-condition tests fail */
+        return NULL;            /* pre-condition tests fail */
     }
 
     newpdu = _clone_pdu(pdu, 1);        /* copies all except errored variable */
     if (!newpdu)
-        return 0;
+        return NULL;
     if (!newpdu->variables) {
         snmp_free_pdu(newpdu);
-        return 0;               /* no variables. "should not happen" */
+        return NULL;            /* no variables. "should not happen" */
     }
     newpdu->command = command;
     newpdu->reqid = snmp_get_next_reqid();
@@ -642,7 +653,8 @@ snmp_set_var_objid(netsnmp_variable_list * vp,
 {
     size_t          len = sizeof(oid) * name_length;
 
-    if (vp->name != vp->name_loc && vp->name != NULL) {
+    if (vp->name != vp->name_loc && vp->name != NULL &&
+        vp->name_length > (sizeof(vp->name_loc) / sizeof(oid))) {
         /*
          * Probably previously-allocated "big storage".  Better free it
          * else memory leaks possible.  
@@ -683,7 +695,7 @@ snmp_set_var_objid(netsnmp_variable_list * vp,
 
 int
 snmp_set_var_typed_value(netsnmp_variable_list * newvar, u_char type,
-                         const u_char * val_str, size_t val_len)
+                         const void * val_str, size_t val_len)
 {
     newvar->type = type;
     return snmp_set_var_value(newvar, val_str, val_len);
@@ -693,10 +705,8 @@ int
 snmp_set_var_typed_integer(netsnmp_variable_list * newvar,
                            u_char type, long val)
 {
-    const long v = val;
     newvar->type = type;
-    return snmp_set_var_value(newvar, (const u_char *)&v, sizeof(long));
-    return 0;
+    return snmp_set_var_value(newvar, &val, sizeof(long));
 }
 
 int
@@ -750,7 +760,7 @@ find_varbind_in_list( netsnmp_variable_list *vblist,
 
 int
 snmp_set_var_value(netsnmp_variable_list * vars,
-                   const u_char * value, size_t len)
+                   const void * value, size_t len)
 {
     int             largeval = 1;
 
@@ -761,13 +771,13 @@ snmp_set_var_value(netsnmp_variable_list * vars,
     if (vars->val.string && vars->val.string != vars->buf) {
         free(vars->val.string);
     }
-    vars->val.string = 0;
+    vars->val.string = NULL;
     vars->val_len = 0;
 
     /*
      * use built-in storage for smaller values 
      */
-    if (len <= (sizeof(vars->buf) - 1)) {
+    if (len <= sizeof(vars->buf)) {
         vars->val.string = (u_char *) vars->buf;
         largeval = 0;
     }
@@ -806,7 +816,8 @@ snmp_set_var_value(netsnmp_variable_list * vars,
                 }
             }
 #endif
-#if defined(SIZEOF_LONG_LONG) && (SIZEOF_LONG != SIZEOF_LONG_LONG) && (SIZEOF_LONG_LONG != SIZEOF_INTMAX_T)
+#if defined(SIZEOF_LONG_LONG) && (SIZEOF_LONG != SIZEOF_LONG_LONG)
+#if !defined(SIZEOF_INTMAX_T) || (SIZEOF_LONG_LONG != SIZEOF_INTMAX_T)
             else if (vars->val_len == sizeof(long long)){
                 const unsigned long long   *val_ullong
                     = (const unsigned long long *) value;
@@ -817,7 +828,8 @@ snmp_set_var_value(netsnmp_variable_list * vars,
                 }
             }
 #endif
-#if SIZEOF_LONG != SIZEOF_INTMAX_T
+#endif
+#if defined(SIZEOF_INTMAX_T) && (SIZEOF_LONG != SIZEOF_INTMAX_T)
             else if (vars->val_len == sizeof(intmax_t)){
                 const uintmax_t *val_uintmax_t
                     = (const uintmax_t *) value;
@@ -847,7 +859,9 @@ snmp_set_var_value(netsnmp_variable_list * vars,
                         = (const char *) value;
                     *(vars->val.integer) = (long) *val_char;
                 } else {
-                    *(vars->val.integer) = (unsigned long) *value;
+                    const u_char    *val_uchar
+                        = (const u_char *) value;
+                    *(vars->val.integer) = (unsigned long) *val_uchar;
                 }
             }
             else {
@@ -884,7 +898,7 @@ snmp_set_var_value(netsnmp_variable_list * vars,
     case ASN_BIT_STR:
     case ASN_OPAQUE:
     case ASN_NSAP:
-        if (largeval) {
+        if (vars->val_len >= sizeof(vars->buf)) {
             vars->val.string = (u_char *) malloc(vars->val_len + 1);
         }
         if (vars->val.string == NULL) {
@@ -1010,7 +1024,7 @@ snmp_synch_response_cb(netsnmp_session * ss,
         snmp_select_info(&numfds, &fdset, tvp, &block);
         if (block == 1)
             tvp = NULL;         /* block without timeout */
-        count = select(numfds, &fdset, 0, 0, tvp);
+        count = select(numfds, &fdset, NULL, NULL, tvp);
         if (count > 0) {
             snmp_read(&fdset);
         } else {
@@ -1041,9 +1055,9 @@ snmp_synch_response_cb(netsnmp_session * ss,
             }
         }
 
-        if ( ss->flags &= SNMP_FLAGS_RESP_CALLBACK ) {
+        if ( ss->flags & SNMP_FLAGS_RESP_CALLBACK ) {
             void (*cb)(void);
-            cb = ss->myvoid;
+            cb = (void (*)(void))(ss->myvoid);
             cb();        /* Used to invoke 'netsnmp_check_outstanding_agent_requests();'
                             on internal AgentX queries.  */
         }
@@ -1097,7 +1111,7 @@ snmp_sess_synch_response(void *sessp,
         snmp_sess_select_info(sessp, &numfds, &fdset, tvp, &block);
         if (block == 1)
             tvp = NULL;         /* block without timeout */
-        count = select(numfds, &fdset, 0, 0, tvp);
+        count = select(numfds, &fdset, NULL, NULL, tvp);
         if (count > 0) {
             snmp_sess_read(sessp, &fdset);
         } else
@@ -1174,14 +1188,17 @@ snmp_errstring(int errstat)
  *  over the specified SNMP session.
  *
  */
+#include <net-snmp/library/snmp_debug.h>
 static netsnmp_session *_def_query_session = NULL;
 void
 netsnmp_query_set_default_session( netsnmp_session *sess) {
+    DEBUGMSGTL(("iquery", "set default session %p\n", sess));
     _def_query_session = sess;
 }
 
 netsnmp_session *
 netsnmp_query_get_default_session( void ) {
+    DEBUGMSGTL(("iquery", "get default session %p\n", _def_query_session));
     return _def_query_session;
 }
 
@@ -1198,6 +1215,7 @@ static int _query(netsnmp_variable_list *list,
     netsnmp_variable_list *vb1, *vb2, *vtmp;
     int ret;
 
+    DEBUGMSGTL(("iquery", "query on session %p\n", session));
     /*
      * Clone the varbind list into the request PDU...
      */
@@ -1212,6 +1230,7 @@ retry:
         snmp_free_pdu(pdu);
         return SNMP_ERR_GENERR;
     }
+    DEBUGMSGTL(("iquery", "query returned %d\n", ret));
 
     /*
      * ....then copy the results back into the
@@ -1232,6 +1251,7 @@ retry:
             ret = response->errstat;
             if (request != SNMP_MSG_SET &&
                 response->errindex != 0) {
+                DEBUGMSGTL(("iquery", "retrying query (%d, %ld)\n", ret, response->errindex));
                 pdu = snmp_fix_pdu( response, request );
                 snmp_free_pdu( response );
                 response = NULL;
@@ -1247,13 +1267,7 @@ retry:
                     break;
                 }
                 vtmp = vb2->next_variable;
-                /* free old data before overwriting */
-                if (vb2->val.string) {
-                    if (vb2->val.string != &vb2->buf[0]) {
-                        free(vb2->val.string);
-                        vb2->val.string = NULL;
-                    }
-                }
+                snmp_free_var_internals( vb2 );
                 snmp_clone_var( vb1, vb2 );
                 vb2->next_variable = vtmp;
             }

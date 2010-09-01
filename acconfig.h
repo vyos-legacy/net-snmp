@@ -23,235 +23,7 @@
  */
 #ifndef NETSNMP_NO_AUTOCONF_DEFINITIONS
 
-/* define if you have type int32_t */
-#undef HAVE_INT32_T
 
-/* define if you have type uint32_t */
-#undef HAVE_UINT32_T
-
-/* define if you have type u_int32_t */
-#undef HAVE_U_INT32_T
-
-/* define if you have type int64_t */
-#undef HAVE_INT64_T
-
-/* define if you have type uint64_t */
-#undef HAVE_UINT64_T
-
-/* define if you have type u_int64_t */
-#undef HAVE_U_INT64_T
-
-/* define if you have type intptr_t */
-#undef HAVE_INTPTR_T
-
-/* define if you have type uintptr_t */
-#undef HAVE_UINTPTR_T
-
-/* got socklen_t? */
-#undef HAVE_SOCKLEN_T
-
-/* got in_addr_t? */
-#undef HAVE_IN_ADDR_T
-
-/* define if you have getdevs() */
-#undef HAVE_GETDEVS
-
-/* define if you have devstat_getdevs() */
-#undef HAVE_DEVSTAT_GETDEVS
-
-/* define if you have <netinet/in_pcb.h> */
-#undef HAVE_NETINET_IN_PCB_H
-
-/* define if you have <sys/disklabel.h> */
-#undef HAVE_SYS_DISKLABEL_H
-
-/* define if your compiler (processor) defines __FUNCTION__ for you */
-#undef HAVE_CPP_UNDERBAR_FUNCTION_DEFINED
-
-/* on aix, if you have perfstat */
-#undef HAVE_PERFSTAT
-
-/* define if you have libdb, libnm or librpm, respectively */
-#undef HAVE_LIBDB
-#undef HAVE_LIBNM
-#undef HAVE_LIBRPM
-
-/* define if you have pkginfo */
-#undef HAVE_PKGINFO
-
-/* define if you have gethostbyname */
-#undef HAVE_GETHOSTBYNAME
-
-/* define if you have the perl_eval_pv() function */
-#undef HAVE_PERL_EVAL_PV_LC
-
-/* define if you have the Perl_eval_pv() function */
-#undef HAVE_PERL_EVAL_PV_UC
-
-/* printing system */
-#undef HAVE_LPSTAT
-#undef LPSTAT_PATH
-#undef HAVE_PRINTCAP
-/* Use dmalloc to do malloc debugging? */
-#undef HAVE_DMALLOC_H
-
-/* location of UNIX kernel */
-#define KERNEL_LOC "/vmunix"
-
-/* location of mount table list */
-#define ETC_MNTTAB "/etc/mnttab"
-
-/* location of swap device (ok if not found) */
-#undef DMEM_LOC
-
-/* Command to generate ps output, the final column must be the process
-   name withOUT arguments */
-#define PSCMD "/bin/ps"
-
-/* Where is the uname command */
-#define UNAMEPROG "/bin/uname"
-
-/* define if you are using linux and /proc/net/dev has the compressed
-   field, which exists in linux kernels 2.2 and greater. */
-#undef PROC_NET_DEV_HAS_COMPRESSED
-
-/* define rtentry to ortentry on SYSV machines (alphas) */
-#undef RTENTRY
-
-/* Use BSD 4.4 routing table entries? */
-#undef RTENTRY_4_4
-
-/* Does struct sigaction have a sa_sigaction field? */
-#undef STRUCT_SIGACTION_HAS_SA_SIGACTION
-
-/* Does struct tm have a tm_gmtoff field? */
-#undef STRUCT_TM_HAS_TM_GMTOFFF
-
-/* Does struct sockaddr have a sa_len field? */
-#undef STRUCT_SOCKADDR_HAS_SA_LEN
-
-/* Does struct sockaddr have a sa_family2 field? */
-#undef STRUCT_SOCKADDR_HAS_SA_UNION_SA_GENERIC_SA_FAMILY2
-
-/* Does struct sockaddr_storage have a ss_family field? */
-#undef STRUCT_SOCKADDR_STORAGE_HAS_SS_FAMILY
-
-/* Does struct sockaddr_storage have a __ss_family field? */
-#undef STRUCT_SOCKADDR_STORAGE_HAS___SS_FAMILY
-
-/* Does struct in6_addr have a s6_un.sa6_ladd field? */
-#undef STRUCT_IN6_ADDR_HAS_S6_UN_SA6_LADDR
-
-/* rtentry structure tests */
-#undef RTENTRY_RT_NEXT
-#undef STRUCT_RTENTRY_HAS_RT_DST
-#undef STRUCT_RTENTRY_HAS_RT_UNIT
-#undef STRUCT_RTENTRY_HAS_RT_USE
-#undef STRUCT_RTENTRY_HAS_RT_REFCNT
-#undef STRUCT_RTENTRY_HAS_RT_HASH
-
-/* ifnet structure tests */
-#undef STRUCT_IFNET_HAS_IF_BAUDRATE
-#undef STRUCT_IFNET_HAS_IF_BAUDRATE_IFS_VALUE
-#undef STRUCT_IFNET_HAS_IF_SPEED
-#undef STRUCT_IFNET_HAS_IF_TYPE
-#undef STRUCT_IFNET_HAS_IF_IMCASTS
-#undef STRUCT_IFNET_HAS_IF_IQDROPS
-#undef STRUCT_IFNET_HAS_IF_LASTCHANGE_TV_SEC
-#undef STRUCT_IFNET_HAS_IF_NOPROTO
-#undef STRUCT_IFNET_HAS_IF_OMCASTS
-#undef STRUCT_IFNET_HAS_IF_XNAME
-#undef STRUCT_IFNET_HAS_IF_OBYTES
-#undef STRUCT_IFNET_HAS_IF_IBYTES
-#undef STRUCT_IFNET_HAS_IF_ADDRLIST
-
-/* tcpstat.tcps_rcvmemdrop */
-#undef STRUCT_TCPSTAT_HAS_TCPS_RCVMEMDROP
-
-/* udpstat.udps_discard */
-#undef STRUCT_UDPSTAT_HAS_UDPS_DISCARD
-
-/* udpstat.udps_discard */
-#undef STRUCT_UDPSTAT_HAS_UDPS_NOPORT
-
-/* udpstat.udps_discard */
-#undef STRUCT_UDPSTAT_HAS_UDPS_NOPORTBCAST
-
-/* udpstat.udps_discard */
-#undef STRUCT_UDPSTAT_HAS_UDPS_FULLSOCK
-
-/* arphd.at_next */
-#undef STRUCT_ARPHD_HAS_AT_NEXT
-
-/* ifaddr.ifa_next */
-#undef STRUCT_IFADDR_HAS_IFA_NEXT
-
-/* ifnet.if_mtu */
-#undef STRUCT_IFNET_HAS_IF_MTU
-
-/* swdevt.sw_nblksenabled */
-#undef STRUCT_SWDEVT_HAS_SW_NBLKSENABLED
-
-/* nlist.n_value */
-#undef STRUCT_NLIST_HAS_N_VALUE
-
-/* nlist64.n_value */
-#undef STRUCT_NLIST64_HAS_N_VALUE
-
-/* ipstat structure tests */
-#undef STRUCT_IPSTAT_HAS_IPS_CANTFORWARD
-#undef STRUCT_IPSTAT_HAS_IPS_CANTFRAG
-#undef STRUCT_IPSTAT_HAS_IPS_DELIVERED
-#undef STRUCT_IPSTAT_HAS_IPS_FRAGDROPPED
-#undef STRUCT_IPSTAT_HAS_IPS_FRAGTIMEOUT
-#undef STRUCT_IPSTAT_HAS_IPS_LOCALOUT
-#undef STRUCT_IPSTAT_HAS_IPS_NOPROTO
-#undef STRUCT_IPSTAT_HAS_IPS_NOROUTE
-#undef STRUCT_IPSTAT_HAS_IPS_ODROPPED
-#undef STRUCT_IPSTAT_HAS_IPS_OFRAGMENTS
-#undef STRUCT_IPSTAT_HAS_IPS_REASSEMBLED
-
-/* vfsstat.f_frsize */
-#undef STRUCT_STATVFS_HAS_F_FRSIZE
-
-/* vfsstat.f_files */
-#undef STRUCT_STATVFS_HAS_F_FILES
-
-/* statfs inode structure tests*/
-#undef STRUCT_STATFS_HAS_F_FILES
-#undef STRUCT_STATFS_HAS_F_FFREE
-#undef STRUCT_STATFS_HAS_F_FAVAIL
-
-/* des_ks_struct.weak_key */
-#undef STRUCT_DES_KS_STRUCT_HAS_WEAK_KEY
-
-/* ifnet needs to have _KERNEL defined */
-#undef IFNET_NEEDS_KERNEL
-
-/* sysctl works to get boottime, etc... */
-#undef NETSNMP_CAN_USE_SYSCTL
-
-/* define if SIOCGIFADDR exists in sys/ioctl.h */
-#undef SYS_IOCTL_H_HAS_SIOCGIFADDR
-
-/* Define if statfs takes 2 args and the second argument has
-   type struct fs_data. [Ultrix] */
-#undef STAT_STATFS_FS_DATA
-
-/* Define if the TCP timer constants in <netinet/tcp_timer.h>
-   depend on the integer variable `hz'.  [FreeBSD 4.x] */
-#undef TCPTV_NEEDS_HZ
-
-/* Not-to-be-compiled macros for use by configure only */
-#define config_require(x)
-#define config_exclude(x)
-#define config_arch_require(x,y)
-#define config_parse_dot_conf(w,x,y,z)
-#define config_add_mib(x)
-#define config_belongs_in(x)
-#define config_error(x)
-#define config_warning(x)
-  
 #if defined (WIN32) || defined (mingw32) || defined (cygwin)
 #define ENV_SEPARATOR ";"
 #define ENV_SEPARATOR_CHAR ';'
@@ -265,47 +37,6 @@
 @BOTTOM@
 
 /* end of definitions added by configure on-the-fly */
-
-#ifndef HAVE_STRCHR
-#ifdef HAVE_INDEX
-# define strchr index
-# define strrchr rindex
-#endif
-#endif
-
-#ifndef HAVE_INDEX
-#ifdef HAVE_STRCHR
-#ifdef mingw32
-# define index(a,b) strchr(a,b)
-# define rindex(a,b) strrchr(a,b)
-#else
-# define index strchr
-# define rindex strrchr
-#endif
-#endif
-#endif
-
-#ifndef HAVE_MEMCPY
-#ifdef HAVE_BCOPY
-# define memcpy(d, s, n) bcopy ((s), (d), (n))
-# define memmove(d, s, n) bcopy ((s), (d), (n))
-# define memcmp bcmp
-#endif
-#endif
-
-#ifndef HAVE_MEMMOVE
-#ifdef HAVE_MEMCPY
-# define memmove memcpy
-#endif
-#endif
-
-#ifndef HAVE_BCOPY
-#ifdef HAVE_MEMCPY
-# define bcopy(s, d, n) memcpy ((d), (s), (n))
-# define bzero(p,n) memset((p),(0),(n))
-# define bcmp memcmp
-#endif
-#endif
 
 /* If you have openssl 0.9.7 or above, you likely have AES support. */
 #undef NETSNMP_USE_OPENSSL
@@ -363,27 +94,6 @@
 /* default list of mibs to load */
 #define NETSNMP_DEFAULT_MIBS "IP-MIB:IF-MIB:TCP-MIB:UDP-MIB:SNMPv2-MIB:RFC1213-MIB"
 
-/* default location to look for mibs to load using the above tokens
-   and/or those in the MIBS envrionment variable*/
-#undef NETSNMP_DEFAULT_MIBDIRS
-
-/* default mib files to load, specified by path. */
-#undef NETSNMP_DEFAULT_MIBFILES
-
-/* should we compile to use special opaque types: float, double,
-   counter64, i64, ui64, union? */
-#undef NETSNMP_WITH_OPAQUE_SPECIAL_TYPES
-
-/* define if you want to compile support for both authentication and
-   privacy support. */
-#undef NETSNMP_ENABLE_SCAPI_AUTHPRIV
-
-/* define if you are using the MD5 code ...*/
-#undef NETSNMP_USE_INTERNAL_MD5
-
-/* define if you are using the codeS11 library ...*/
-#undef NETSNMP_USE_PKCS11
-
 /* debugging stuff */
 /* if defined, we optimize the code to exclude all debugging calls. */
 #undef NETSNMP_NO_DEBUGGING
@@ -398,9 +108,6 @@
    persisant information to this directory in the form of configuration
    lines: PERSISTENT_DIRECTORY/NAME.persistent.conf */
 #define NETSNMP_PERSISTENT_DIRECTORY "/var/snmp"
-
-/* PERSISTENT_MASK: the umask permissions to set up persistent files with */
-#define NETSNMP_PERSISTENT_MASK 077
 
 /* AGENT_DIRECTORY_MODE: the mode the agents should use to create
    directories with. Since the data stored here is probably sensitive, it
@@ -445,19 +152,6 @@
 
 /* Use libwrap to handle allow/deny hosts? */
 #undef NETSNMP_USE_LIBWRAP
-
-/* testing code sections. */
-#undef NETSNMP_ENABLE_TESTING_CODE 
-
-/* If you don't have root access don't exit upon kmem errors */
-#undef NETSNMP_NO_ROOT_ACCESS
-
-/* If we don't want to use kmem. */
-#undef NETSNMP_NO_KMEM_USAGE
-
-/* If you don't want the agent to report on variables it doesn't have data for */
-#undef NETSNMP_NO_DUMMY_VALUES
-
 
 /* Mib-2 tree Info */
 /* These are the system information variables. */
@@ -652,9 +346,6 @@
 /* internal define */
 #define NETSNMP_LASTFIELD -1
 
-/* configure options specified */
-#define NETSNMP_CONFIGURE_OPTIONS ""
-
 /*  Pluggable transports.  */
 
 /*  This is defined if support for the UDP/IP transport domain is
@@ -689,9 +380,21 @@
     available.  */
 #undef NETSNMP_TRANSPORT_TCPIPV6_DOMAIN
 
-/*  This is defined if support for the UDP/IP transport domain is
+/*  This is defined if support for the TLS transport domain is
     available.   */
 #undef NETSNMP_TRANSPORT_TLS_DOMAIN
+
+/*  This is defined if support for the Alias transport domain is
+    available.   */
+#undef NETSNMP_TRANSPORT_ALIAS_DOMAIN
+
+/*  This is defined if support for the SSH transport domain is
+    available.   */
+#undef NETSNMP_TRANSPORT_SSH_DOMAIN
+
+/*  This is defined if support for the DTLS/UDP transport domain is
+    available.   */
+#undef NETSNMP_TRANSPORT_DTLSUDP_DOMAIN
 
 /*  This is defined if support for stdin/out transport domain is available.   */
 #undef NETSNMP_TRANSPORT_STD_DOMAIN
@@ -705,17 +408,8 @@
 /* define this if the local security module is available */
 #undef NETSNMP_SECMOD_LOCALSM
 
-/* define if you want to build with reentrant/threaded code (incomplete)*/
-#undef NETSNMP_REENTRANT
-
 /* define if configured as a "mini-agent" */
 #undef NETSNMP_MINI_AGENT
-
-/* define if you are embedding perl in the main agent */
-#undef NETSNMP_EMBEDDED_PERL
-
-/* define if you want to build MFD module rewrites*/
-#undef NETSNMP_ENABLE_MFD_REWRITES
 
 /* this is the location of the net-snmp mib tree.  It shouldn't be
    changed, as the places it is used are expected to be constant
@@ -784,24 +478,6 @@
 #  define NETSNMP_IMPORT extern
 #endif
 
-/* define if you want to enable IPv6 support */
-#undef NETSNMP_ENABLE_IPV6
-
-/* define if you want to restrict SMUX connections to localhost by default */
-#undef NETSNMP_ENABLE_LOCAL_SMUX
-
-/* define if agentx transport is to use domain sockets only */
-#undef NETSNMP_AGENTX_DOM_SOCK_ONLY
-
-/* define if you do not want snmptrapd to register as an AgentX subagent */
-#undef NETSNMP_SNMPTRAPD_DISABLE_AGENTX
-
-/* define this if we're using the new MIT crypto API */
-#undef NETSNMP_USE_KERBEROS_MIT
-
-/* define this if you're using Heimdal Kerberos */
-#undef NETSNMP_USE_KERBEROS_HEIMDAL
-
 /* comment the next line if you are compiling with libsnmp.h 
    and are not using the UC-Davis SNMP library. */
 #define UCD_SNMP_LIBRARY 1
@@ -810,7 +486,7 @@
 #undef CMU_COMPATIBLE
 
 /* final conclusion on nlist usage */
-#if defined(HAVE_NLIST) && defined(STRUCT_NLIST_HAS_N_VALUE) && !defined(NETSNMP_DONT_USE_NLIST) && !defined(NETSNMP_NO_KMEM_USAGE)
+#if defined(HAVE_NLIST) && defined(HAVE_STRUCT_NLIST_N_VALUE) && !defined(NETSNMP_DONT_USE_NLIST) && !defined(NETSNMP_NO_KMEM_USAGE)
 #define NETSNMP_CAN_USE_NLIST
 #endif
 

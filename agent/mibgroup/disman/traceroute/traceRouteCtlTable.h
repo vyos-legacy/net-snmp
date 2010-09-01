@@ -272,7 +272,7 @@ static const char copyright[] =
     "@(#) Copyright (c) 1988, 1989, 1991, 1994, 1995, 1996, 1997, 1998, 1999, 2000\n\
 The Regents of the University of California.  All rights reserved.\n";
 static const char rcsid[] =
-    "@(#)$Id: traceRouteCtlTable.h 10899 2004-08-24 15:15:03Z dts12 $ (LBL)";
+    "@(#)$Id: traceRouteCtlTable.h 17381 2009-02-05 22:56:23Z magfr $ (LBL)";
 #endif
 
 /*
@@ -530,7 +530,7 @@ static const char rcsid[] =
 #define FD_SET(n, p)    ((p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS)))
 #define FD_CLR(n, p)    ((p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
 #define FD_ISSET(n, p)  ((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
-#define FD_ZERO(p)      bzero((char *)(p), sizeof(*(p)))
+#define FD_ZERO(p)      memset((p), '\0', sizeof(*(p)))
 #endif
 
 #define Fprintf (void)fprintf

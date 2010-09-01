@@ -1,7 +1,7 @@
 /*
  * interface data access header
  *
- * $Id: interface.h 15205 2006-09-14 17:15:32Z rstory $
+ * $Id: interface.h 17508 2009-04-20 00:59:28Z alex_b $
  */
 #ifndef NETSNMP_ACCESS_INTERFACE_H
 #define NETSNMP_ACCESS_INTERFACE_H
@@ -176,7 +176,7 @@ typedef struct netsnmp_interface_entry_s {
 typedef struct _conf_if_list {
     const char     *name;
     int             type;
-    uint64_t	    speed;
+    uint64_t speed;
     struct _conf_if_list *next;
 } netsnmp_conf_if_list;
 

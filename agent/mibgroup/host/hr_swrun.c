@@ -84,6 +84,11 @@
 #include <net-snmp/agent/auto_nlist.h>
 #include "kernel.h"
 #ifdef solaris2
+#if _SLASH_PROC_METHOD_ && defined _ILP32
+#include <net-snmp/agent/cache_handler.h>
+#include <net-snmp/agent/hardware/memory.h>
+#endif
+
 #include "kernel_sunos5.h"
 #endif
 #if defined(aix4) || defined(aix5) || defined(aix6)
@@ -145,19 +150,29 @@ int             current_proc_entry;
 #define	HRSWRUNPERF_MEM		10
 
 struct variable4 hrswrun_variables[] = {
-    {HRSWRUN_OSINDEX, ASN_INTEGER, RONLY, var_hrswrun, 1, {1}},
-    {HRSWRUN_INDEX, ASN_INTEGER, RONLY, var_hrswrun, 3, {2, 1, 1}},
-    {HRSWRUN_NAME, ASN_OCTET_STR, RONLY, var_hrswrun, 3, {2, 1, 2}},
-    {HRSWRUN_ID, ASN_OBJECT_ID, RONLY, var_hrswrun, 3, {2, 1, 3}},
-    {HRSWRUN_PATH, ASN_OCTET_STR, RONLY, var_hrswrun, 3, {2, 1, 4}},
-    {HRSWRUN_PARAMS, ASN_OCTET_STR, RONLY, var_hrswrun, 3, {2, 1, 5}},
-    {HRSWRUN_TYPE, ASN_INTEGER, RONLY, var_hrswrun, 3, {2, 1, 6}},
-    {HRSWRUN_STATUS, ASN_INTEGER, RONLY, var_hrswrun, 3, {2, 1, 7}}
+    {HRSWRUN_OSINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 1, {1}},
+    {HRSWRUN_INDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 3, {2, 1, 1}},
+    {HRSWRUN_NAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 3, {2, 1, 2}},
+    {HRSWRUN_ID, ASN_OBJECT_ID, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 3, {2, 1, 3}},
+    {HRSWRUN_PATH, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 3, {2, 1, 4}},
+    {HRSWRUN_PARAMS, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 3, {2, 1, 5}},
+    {HRSWRUN_TYPE, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 3, {2, 1, 6}},
+    {HRSWRUN_STATUS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 3, {2, 1, 7}}
 };
 
 struct variable4 hrswrunperf_variables[] = {
-    {HRSWRUNPERF_CPU, ASN_INTEGER, RONLY, var_hrswrun, 3, {1, 1, 1}},
-    {HRSWRUNPERF_MEM, ASN_INTEGER, RONLY, var_hrswrun, 3, {1, 1, 2}}
+    {HRSWRUNPERF_CPU, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 3, {1, 1, 1}},
+    {HRSWRUNPERF_MEM, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrswrun, 3, {1, 1, 2}}
 };
 
 oid             hrswrun_variables_oid[] = { 1, 3, 6, 1, 2, 1, 25, 4 };
@@ -321,7 +336,7 @@ init_hr_swrun(void)
     auto_nlist(NPROC_SYMBOL, 0, 0);
 #endif
 
-    proc_table = 0;
+    proc_table = NULL;
 
     REGISTER_MIB("host/hr_swrun", hrswrun_variables, variable4,
                  hrswrun_variables_oid);
@@ -364,7 +379,7 @@ header_hrswrun(struct variable *vp,
            (vp->namelen + 1) * sizeof(oid));
     *length = vp->namelen + 1;
 
-    *write_method = 0;
+    *write_method = (WriteMethod*)0;
     *var_len = sizeof(long);    /* default to 'long' results */
     return (MATCH_SUCCEEDED);
 }
@@ -448,7 +463,7 @@ header_hrswrunEntry(struct variable *vp,
     memcpy((char *) name, (char *) newname,
            (vp->namelen + 1) * sizeof(oid));
     *length = vp->namelen + 1;
-    *write_method = 0;
+    *write_method = (WriteMethod*)0;
     *var_len = sizeof(long);    /* default to 'long' results */
 
     DEBUGMSGTL(("host/hr_swrun", "... get process stats "));
@@ -742,8 +757,7 @@ var_hrswrun(struct variable * vp,
             sprintf(string, "/proc/%d/status", pid);
             if ((fp = fopen(string, "r")) == NULL)
                 return NULL;
-            fgets(buf, sizeof(buf), fp);        /* Name: process name */
-            if ( cp == NULL ) {
+            if (!fgets(buf, sizeof(buf), fp)) {
                 fclose(fp);
                 return NULL;    /* the process probably died */
             }
@@ -867,7 +881,7 @@ var_hrswrun(struct variable * vp,
             string[0] = '\0';
             *var_len = 0;
             fclose(fp);
-            return string;
+            return (u_char *)string;
         }
 
         /*
@@ -1151,7 +1165,32 @@ var_hrswrun(struct variable * vp,
         long_return = (lowpsinfo.pr_rssize * MMU_PAGESIZE) / 1024;
 #elif defined(solaris2)
 #if _SLASH_PROC_METHOD_
+#ifdef _ILP32
+        if(NULL != proc_buf && 0 == proc_buf->pr_rssize)
+        { /* Odds on that we are looking with a 32 bit app at a 64 bit psinfo.*/
+            netsnmp_memory_info *mem;
+            netsnmp_memory_load();
+            mem = netsnmp_memory_get_byIdx( NETSNMP_MEM_TYPE_PHYSMEM, 0 );
+            if (!mem) 
+            {
+                snmp_log(LOG_INFO, "netsnmp_memory_get_byIdx returned NULL pointer\n");
+                long_return = 0;/* Tried my best, giving up.*/
+            } 
+            else 
+            {/* 0x8000 is the maximum range of pr_pctmem. devision of 1024 is to go from B to kB*/
+                uint32_t pct_unit = (mem->size/0x8000) * (mem->units/1024);
+                long_return = proc_buf ? proc_buf->pr_pctmem * pct_unit : 0;
+            }
+        }
+        else
+        {    
+            long_return = proc_buf ? proc_buf->pr_rssize : 0;
+        
+        }
+#else /*_LP64*/
         long_return = proc_buf ? proc_buf->pr_rssize : 0;
+#endif /*_LP64*/
+
 #else
         long_return = proc_buf->p_swrss;
 #endif

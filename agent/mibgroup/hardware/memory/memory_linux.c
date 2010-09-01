@@ -10,8 +10,11 @@
  * Try to use an initial size that will cover default cases. We aren't talking
  * about huge files, so why fiddle about with reallocs?
  * I checked /proc/meminfo sizes on 3 different systems: 598, 644, 654
+ * 
+ * On newer systems, the size is up to around 930 (2.6.27 kernel)
+ *   or 1160  (2.6.28 kernel)
  */
-#define MEMINFO_INIT_SIZE   1023
+#define MEMINFO_INIT_SIZE   1279
 #define MEMINFO_STEP_SIZE   256
 #define MEMINFO_FILE   "/proc/meminfo"
 
@@ -65,8 +68,9 @@ int netsnmp_mem_arch_load( netsnmp_cache *cache, void *magic ) {
     close(statfd);
     if (bytes_read <= 0) {
         snmp_log_perror(MEMINFO_FILE);
+    } else {
+        buff[bytes_read] = '\0';
     }
-    buff[bytes_read] = '\0';
 
     /*
      * ... parse this into a more useable form...

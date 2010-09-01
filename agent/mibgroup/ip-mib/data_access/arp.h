@@ -1,7 +1,7 @@
 /*
  * arp data access header
  *
- * $Id: arp.h 13310 2005-10-29 03:31:29Z rstory $
+ * $Id: arp.h 16374 2007-05-17 13:35:57Z magfr $
  */
 /**---------------------------------------------------------------------*/
 /*
@@ -23,8 +23,7 @@ config_require(ip-mib/data_access/arp_linux)
 #else
 /*
  * couldn't determine the correct file!
- * require a bogus file to generate an error.
  */
-config_require(ip-mib/data_access/arp-unknown-arch)
+config_error(the arp data access library is not available in this environment.)
 #endif
 

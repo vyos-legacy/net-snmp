@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: ipaddress_ioctl.c 16778 2008-01-17 00:09:33Z magfr $
+ * $Id: ipaddress_ioctl.c 17596 2009-05-06 21:59:20Z nba $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -135,7 +135,9 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
     struct ifreq   *ifrp;
     struct sockaddr save_addr;
     struct sockaddr_in * si;
-    netsnmp_ipaddress_entry *entry;
+    netsnmp_ipaddress_entry *entry, *bcastentry = NULL;
+    struct address_flag_info addr_info;
+    in_addr_t       ipval;
     _ioctl_extras           *extras;
 
     if ((sd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -184,6 +186,7 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
         netsnmp_assert(AF_INET == ifrp->ifr_addr.sa_family);
         si = (struct sockaddr_in *) &ifrp->ifr_addr;
         entry->ia_address_len = sizeof(si->sin_addr.s_addr);
+        ipval = si->sin_addr.s_addr;
         memcpy(entry->ia_address, &si->sin_addr.s_addr,
                entry->ia_address_len);
 
@@ -220,6 +223,26 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
         }
 
         /*
+         * get broadcast
+         */
+        memset(&addr_info, 0, sizeof(struct address_flag_info));
+#if defined (NETSNMP_ENABLE_IPV6)
+        addr_info = netsnmp_access_other_info_get(entry->if_index, AF_INET);
+        if(addr_info.bcastflg) {
+           bcastentry = netsnmp_access_ipaddress_entry_create();
+           if(NULL == entry) {
+              rc = -3;
+              break;
+           }
+           bcastentry->if_index = entry->if_index;
+           bcastentry->ns_ia_index = ++idx_offset;
+           bcastentry->ia_address_len = sizeof(addr_info.inp->s_addr);
+           memcpy(bcastentry->ia_address, &addr_info.inp->s_addr,
+                  bcastentry->ia_address_len);
+        }
+#endif
+
+        /*
          * get netmask
          */
         ifrp->ifr_addr = save_addr;
@@ -232,7 +255,10 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
         netsnmp_assert(AF_INET == ifrp->ifr_addr.sa_family);
         si = (struct sockaddr_in *) &ifrp->ifr_addr;
         entry->ia_prefix_len =
-            netsnmp_ipaddress_ipv4_prefix_len(si->sin_addr.s_addr);
+            netsnmp_ipaddress_ipv4_prefix_len(ntohl(si->sin_addr.s_addr));
+        if(bcastentry)
+           bcastentry->ia_prefix_len = entry->ia_prefix_len;
+
 
         /*
          * get flags
@@ -246,7 +272,12 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
         }
         extras->flags = ifrp->ifr_flags;
 
-        entry->ia_type = IPADDRESSTYPE_UNICAST; /* assume unicast? */
+        if(bcastentry)
+           bcastentry->ia_type = IPADDRESSTYPE_BROADCAST;
+        if(addr_info.anycastflg)
+           entry->ia_type = IPADDRESSTYPE_ANYCAST;
+        else
+           entry->ia_type = IPADDRESSTYPE_UNICAST;
 
         /** entry->ia_prefix_oid ? */
 
@@ -256,16 +287,27 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
          *   always preferred(1).
          */
         entry->ia_status = IPADDRESSSTATUSTC_PREFERRED;
+        if(bcastentry)
+           bcastentry->ia_status = IPADDRESSSTATUSTC_PREFERRED;
 
         /*
          * can we figure out if an address is from DHCP?
          * use manual until then...
          */
-        entry->ia_origin = IPADDRESSORIGINTC_MANUAL;
+        if(IS_APIPA(ipval)) {
+           entry->ia_origin = IPADDRESSORIGINTC_RANDOM;
+           if(bcastentry)
+              bcastentry->ia_origin = IPADDRESSORIGINTC_RANDOM;
+        }
+        else {
+           entry->ia_origin = IPADDRESSORIGINTC_MANUAL;
+           if(bcastentry)
+              bcastentry->ia_origin = IPADDRESSORIGINTC_MANUAL;
+        }
 
         DEBUGIF("access:ipaddress:container") {
             DEBUGMSGT_NC(("access:ipaddress:container",
-                          " if %d: addr len %d, index 0x%x\n",
+                          " if %d: addr len %d, index 0x%lx\n",
                           i, entry->ia_address_len, entry->if_index));
             if (4 == entry->ia_address_len)
                 DEBUGMSGT_NC(("access:ipaddress:container", " address %p\n",
@@ -279,8 +321,16 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
         /*
          * add entry to container
          */
-        if (CONTAINER_INSERT(container, entry) < 0)
-        {
+        if(bcastentry){
+            if (CONTAINER_INSERT(container, bcastentry) < 0) {
+                DEBUGMSGTL(("access:ipaddress:container","error with ipaddress_entry: insert broadcast entry into container failed.\n"));
+                netsnmp_access_ipaddress_entry_free(bcastentry);
+                netsnmp_access_ipaddress_entry_free(entry);
+                continue;
+            }
+        }
+
+        if (CONTAINER_INSERT(container, entry) < 0) {
             DEBUGMSGTL(("access:ipaddress:container","error with ipaddress_entry: insert into container failed.\n"));
             netsnmp_access_ipaddress_entry_free(entry);
             continue;
@@ -368,10 +418,13 @@ _next_alias(const char *if_name)
         for(k=0;k<j;++k)
             if (alias_list[k] == i)
                 break;
-        if (k == j)
+        if (k == j) {
+            free(alias_list);
             return i;
+        }
     }
 
+    free(alias_list);
     return interfaces + 1;
 }
 
@@ -412,7 +465,7 @@ _netsnmp_ioctl_ipaddress_set_v4(netsnmp_ipaddress_entry * entry)
         int   alias_idx;
 
         if (NULL == name) {
-            DEBUGMSGT(("access:ipaddress:set", "cant find name for index %d\n",
+            DEBUGMSGT(("access:ipaddress:set", "cant find name for index %ld\n",
                        entry->if_index));
             close(fd);
             return -1;
@@ -593,4 +646,3 @@ _print_flags(short flags)
     if(unknown)
         DEBUGMSGT_NC(("access:ipaddress:container","  unknown 0x%x\n", unknown));
 }
-

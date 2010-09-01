@@ -28,7 +28,7 @@
 #include "struct.h"
 #include "util_funcs.h"
 
-#if defined(HAVE_DLFCN_H) && ( defined(HAVE_DLOPEN) || defined(HAVE_LIBDL) )
+#if defined(HAVE_DLFCN_H) && defined(HAVE_DLOPEN)
 
 #include <dlfcn.h>
 #include "dlmod.h"
@@ -45,11 +45,16 @@ static void     dlmod_free_config(void);
  * information for the dlmod mib
  */
 static struct variable4 dlmod_variables[] = {
-    {DLMODNEXTINDEX, ASN_INTEGER, RONLY, var_dlmod, 1, {1}},
-    {DLMODNAME, ASN_OCTET_STR, RWRITE, var_dlmodEntry, 3, {2, 1, 2}},
-    {DLMODPATH, ASN_OCTET_STR, RWRITE, var_dlmodEntry, 3, {2, 1, 3}},
-    {DLMODERROR, ASN_OCTET_STR, RONLY, var_dlmodEntry, 3, {2, 1, 4}},
-    {DLMODSTATUS, ASN_INTEGER, RWRITE, var_dlmodEntry, 3, {2, 1, 5}},
+    {DLMODNEXTINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_dlmod, 1, {1}},
+    {DLMODNAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+     var_dlmodEntry, 3, {2, 1, 2}},
+    {DLMODPATH, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+     var_dlmodEntry, 3, {2, 1, 3}},
+    {DLMODERROR, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_dlmodEntry, 3, {2, 1, 4}},
+    {DLMODSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_dlmodEntry, 3, {2, 1, 5}},
 };
 
 static oid      dlmod_variables_oid[] = { 1, 3, 6, 1, 4, 1, 2021, 13, 14 };
@@ -206,11 +211,18 @@ dlmod_unload_module(struct dlmod *dlm)
 
     snprintf(sym_deinit, sizeof(sym_deinit), "deinit_%s", dlm->name);
     dl_deinit = dlsym(dlm->handle, sym_deinit);
-    if (dl_deinit == NULL) {
-        snprintf(dlm->error, sizeof(dlm->error),
-                 "dlsym failed: can't find \'%s\'", sym_deinit);
-    } else {
+    if (dl_deinit) {
+        DEBUGMSGTL(("dlmod", "Calling deinit_%s()\n", dlm->name));
         dl_deinit();
+    } else {
+        snprintf(sym_deinit, sizeof(sym_deinit), "shutdown_%s", dlm->name);
+        dl_deinit = dlsym(dlm->handle, sym_deinit);
+        if (dl_deinit) {
+            DEBUGMSGTL(("dlmod", "Calling shutdown_%s()\n", dlm->name));
+            dl_deinit();
+        } else {
+            DEBUGMSGTL(("dlmod", "No destructor for %s\n", dlm->name));
+        }
     }
     dlclose(dlm->handle);
     dlm->status = DLMOD_UNLOADED;

@@ -1,15 +1,16 @@
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
+#include <net-snmp/agent/old_api.h>
+
 #if HAVE_STRING_H
 #include <string.h>
 #else
 #include <strings.h>
 #endif
 
-#include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
-
-#include <net-snmp/agent/old_api.h>
 #include <net-snmp/agent/agent_callbacks.h>
 
 #define MIB_CLIENTS_ARE_EVIL 1
@@ -67,6 +68,8 @@ netsnmp_register_old_api(const char *moduleName,
         struct variable *vp;
         netsnmp_handler_registration *reginfo =
             SNMP_MALLOC_TYPEDEF(netsnmp_handler_registration);
+        if (reginfo == NULL)
+            return SNMP_ERR_GENERR;
 
         memdup((void *) &vp,
                (void *) (struct variable *) ((char *) var + varsize * i),
@@ -77,6 +80,8 @@ netsnmp_register_old_api(const char *moduleName,
         reginfo->rootoid_len = (mibloclen + vp->namelen);
         reginfo->rootoid =
             (oid *) malloc(reginfo->rootoid_len * sizeof(oid));
+        if (reginfo->rootoid == NULL)
+            return SNMP_ERR_GENERR;
 
         memcpy(reginfo->rootoid, mibloc, mibloclen * sizeof(oid));
         memcpy(reginfo->rootoid + mibloclen, vp->name, vp->namelen
@@ -403,7 +408,7 @@ netsnmp_old_api_helper(netsnmp_mib_handler *handler,
  */
 static netsnmp_agent_session *current_agent_session = NULL;
 netsnmp_agent_session *
-netsnmp_get_current_agent_session()
+netsnmp_get_current_agent_session(void)
 {
     return current_agent_session;
 }

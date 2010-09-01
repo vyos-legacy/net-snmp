@@ -1,7 +1,7 @@
 /*
  *  UDP-MIB endpoint architecture support
  *
- * $Id: udp_endpoint_common.c 13920 2005-12-11 17:55:01Z rstory $
+ * $Id: udp_endpoint_common.c 16922 2008-05-09 21:23:43Z magfr $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -105,7 +105,8 @@ netsnmp_access_udp_endpoint_container_free(netsnmp_container *container,
          * free all items.
          */
         CONTAINER_CLEAR(container,
-                        (netsnmp_container_obj_func*)free,
+                        (netsnmp_container_obj_func*)
+                        netsnmp_access_udp_endpoint_entry_free,
                         NULL);
     }
 
@@ -153,23 +154,3 @@ netsnmp_access_udp_endpoint_entry_free(netsnmp_udp_endpoint_entry * entry)
 
     free(entry);
 }
-
-
-/**---------------------------------------------------------------------*/
-/*
- * Utility routines
- */
-
-/**
- * \internal
- */
-static void
-_entry_release(netsnmp_udp_endpoint_entry * entry, void *context)
-{
-    netsnmp_access_udp_endpoint_entry_free(entry);
-}
-
-/**---------------------------------------------------------------------*/
-/*
- *
- */

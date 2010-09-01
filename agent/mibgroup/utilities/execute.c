@@ -159,7 +159,7 @@ tokenize_exec_command( char *command, int *argc )
     if (cp) {
         argv[i++] = strdup( cp );
     }
-    argv[i] = 0;
+    argv[i] = NULL;
     *argc = i;
 
     return argv;
@@ -214,7 +214,7 @@ xx_tokenize_exec_command( char *command, int *argc )
         argv[i] = strdup( cptr2 );
         cptr2  += strlen( cptr2 )+1;
     }
-    argv[count] = 0;
+    argv[count] = NULL;
     *argc       = count;
         
     return argv;
@@ -354,7 +354,7 @@ run_exec_command( char *command, char *input,
              */
             count = read(opipe[0], &cache_ptr[offset], cache_size);
             DEBUGMSGTL(("verbose:run:exec",
-                        "    read %d bytes\n", count));
+                        "    read %d bytes\n", (int)count));
             if (0 == count) {
                 int rc;
                 /*
@@ -389,7 +389,7 @@ run_exec_command( char *command, char *input,
                         break;
                     }
                     DEBUGMSGTL(("verbose:run:exec",
-                                "    %d left in buffer\n", cache_size));
+                                "    %d left in buffer\n", (int)cache_size));
                 }
             }
             else if ((count == -1) && (EAGAIN != errno)) {

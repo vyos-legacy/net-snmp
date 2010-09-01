@@ -1,15 +1,25 @@
+/* Portions of this file are subject to the following copyright(s).  See
+ * the Net-SNMP's COPYING file for more details and other copyrights
+ * that may apply:
+ */
+/*
+ * Portions of this file are copyrighted by:
+ * Copyright (C) 2007 Apple, Inc. All rights reserved.
+ * Use is subject to license terms specified in the COPYING file
+ * distributed with the Net-SNMP package.
+ */
 #include <net-snmp/net-snmp-config.h>
+
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
+#include <net-snmp/agent/cache_handler.h>
 
 #if HAVE_STRING_H
 #include <string.h>
 #else
 #include <strings.h>
 #endif
-
-#include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
-
-#include <net-snmp/agent/cache_handler.h>
 
 static netsnmp_cache  *cache_head = NULL;
 static int             cache_outstanding_valid = 0;
@@ -117,7 +127,7 @@ netsnmp_cache_get_head(void)
 /** find existing cache
  */
 netsnmp_cache *
-netsnmp_cache_find_by_oid(oid * rootoid, int rootoid_len)
+netsnmp_cache_find_by_oid(const oid * rootoid, int rootoid_len)
 {
     netsnmp_cache  *cache;
 
@@ -135,7 +145,7 @@ netsnmp_cache_find_by_oid(oid * rootoid, int rootoid_len)
 netsnmp_cache *
 netsnmp_cache_create(int timeout, NetsnmpCacheLoad * load_hook,
                      NetsnmpCacheFree * free_hook,
-                     oid * rootoid, int rootoid_len)
+                     const oid * rootoid, int rootoid_len)
 {
     netsnmp_cache  *cache = NULL;
 
@@ -171,6 +181,31 @@ netsnmp_cache_create(int timeout, NetsnmpCacheLoad * load_hook,
     }
 
     return cache;
+}
+
+/** frees a cache
+ */
+int
+netsnmp_cache_free(netsnmp_cache *cache)
+{
+    netsnmp_cache  *pos;
+
+    if (NULL == cache)
+        return SNMPERR_SUCCESS;
+
+    for (pos = cache_head; pos; pos = pos->next) {
+        if (pos == cache) {
+            snmp_log(LOG_WARNING, "not freeing cache (still in list)\n");
+            return SNMP_ERR_GENERR;
+        }
+    }
+
+    if (cache->rootoid)
+        free(cache->rootoid);
+
+    free(cache);
+
+    return SNMPERR_SUCCESS;
 }
 
 /** callback function to call cache load function */
@@ -217,7 +252,7 @@ netsnmp_cache_timer_start(netsnmp_cache *cache)
 
     cache->flags &= ~NETSNMP_CACHE_AUTO_RELOAD;
     DEBUGMSGT(("cache_timer:start",
-               "starting timer %d for cache %p\n", cache->timer_id, cache));
+               "starting timer %lu for cache %p\n", cache->timer_id, cache));
     return cache->timer_id;
 }
 
@@ -234,7 +269,7 @@ netsnmp_cache_timer_stop(netsnmp_cache *cache)
     }
 
     DEBUGMSGT(("cache_timer:stop",
-               "stopping timer %d for cache %p\n", cache->timer_id, cache));
+               "stopping timer %lu for cache %p\n", cache->timer_id, cache));
 
     snmp_alarm_unregister(cache->timer_id);
     cache->flags |= NETSNMP_CACHE_AUTO_RELOAD;
@@ -275,7 +310,7 @@ netsnmp_cache_handler_get(netsnmp_cache* cache)
 netsnmp_mib_handler *
 netsnmp_get_cache_handler(int timeout, NetsnmpCacheLoad * load_hook,
                           NetsnmpCacheFree * free_hook,
-                          oid * rootoid, int rootoid_len)
+                          const oid * rootoid, int rootoid_len)
 {
     netsnmp_mib_handler *ret = NULL;
     netsnmp_cache  *cache = NULL;
@@ -457,7 +492,7 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
     case MODE_GET:
     case MODE_GETNEXT:
     case MODE_GETBULK:
-    case MODE_SET_RESERVE1: {
+    case MODE_SET_RESERVE1:
 
         /*
          * only touch cache once per pdu request, to prevent a cache
@@ -468,7 +503,7 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
          * maybe use a reference counter?
          */
         if (netsnmp_cache_is_valid(reqinfo, reginfo->handlerName))
-            return SNMP_ERR_NOERROR;
+            break;
 
         /*
          * call the load hook, and update the cache timestamp.
@@ -477,8 +512,7 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
         netsnmp_cache_check_and_reload(cache);
         netsnmp_cache_reqinfo_insert(cache, reqinfo, reginfo->handlerName);
         /** next handler called automatically - 'AUTO_NEXT' */
-        }
-        return SNMP_ERR_NOERROR;
+        break;
 
     case MODE_SET_RESERVE2:
     case MODE_SET_FREE:
@@ -486,7 +520,7 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
     case MODE_SET_UNDO:
         netsnmp_assert(netsnmp_cache_is_valid(reqinfo, reginfo->handlerName));
         /** next handler called automatically - 'AUTO_NEXT' */
-        return SNMP_ERR_NOERROR;
+        break;
 
         /*
          * A (successful) SET request wouldn't typically trigger a reload of
@@ -500,7 +534,7 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
             cache->valid = 0;
         }
         /** next handler called automatically - 'AUTO_NEXT' */
-        return SNMP_ERR_NOERROR;
+        break;
 
     default:
         snmp_log(LOG_WARNING, "cache_handler: Unrecognised mode (%d)\n",
@@ -508,8 +542,7 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
         netsnmp_request_set_error_all(requests, SNMP_ERR_GENERR);
         return SNMP_ERR_GENERR;
     }
-    netsnmp_request_set_error_all(requests, SNMP_ERR_GENERR);
-    return SNMP_ERR_GENERR;     /* should never get here */
+    return SNMP_ERR_NOERROR;
 }
 
 static void

@@ -45,8 +45,12 @@
 #include <ws2tcpip.h>
 #undef  HAVE_IF_NAMETOINDEX
 
+#ifndef HAVE_INET_PTON
 extern int         inet_pton(int, const char*, void*);
+#endif
+#ifndef HAVE_INET_NTOP
 extern const char *inet_ntop(int, const void*, char*, size_t);
+#endif
 const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
 #endif
 
@@ -67,9 +71,9 @@ const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
 #include <dmalloc.h>
 #endif
 
-#if STRUCT_SOCKADDR_STORAGE_HAS_SS_FAMILY
+#if HAVE_STRUCT_SOCKADDR_STORAGE_SS_FAMILY
 #define SS_FAMILY ss_family
-#elif STRUCT_SOCKADDR_STORAGE_HAS___SS_FAMILY
+#elif HAVE_STRUCT_SOCKADDR_STORAGE___SS_FAMILY
 #define SS_FAMILY __ss_family
 #endif
 
@@ -395,14 +399,15 @@ netsnmp_sockaddr_in6_2(struct sockaddr_in6 *addr,
             return 0;
         }
 
-        for (cp = peername; *cp && isdigit((int) *cp); cp++);
-        if (!*cp && atoi(peername) != 0) {
+        for (cp = peername; *cp && isdigit((unsigned char) *cp); cp++);
+        portno = atoi(peername);
+        if (!*cp &&  portno != 0) {
             /*
              * Okay, it looks like JUST a port number.  
              */
             DEBUGMSGTL(("netsnmp_sockaddr_in6", "totally numeric: %d\n",
-                        atoi(peername)));
-            addr->sin6_port = htons(atoi(peername));
+                        portno));
+            addr->sin6_port = htons(portno);
             goto resolved;
         }
 
@@ -433,13 +438,20 @@ netsnmp_sockaddr_in6_2(struct sockaddr_in6 *addr,
 #endif
 		}
                 if (*(cp + 1) == ':') {
-                    if (atoi(cp + 2) != 0 &&
+                    portno = atoi(cp+2);
+                    if (portno != 0 &&
                         inet_pton(AF_INET6, peername + 1,
                                   (void *) &(addr->sin6_addr))) {
                         DEBUGMSGTL(("netsnmp_sockaddr_in6",
                                     "IPv6 address with port suffix :%d\n",
-                                    atoi(cp + 2)));
-                        addr->sin6_port = htons(atoi(cp + 2));
+                                    portno));
+                        if (portno > 0 && portno < 0xffff) {
+                            addr->sin6_port = htons(portno);
+                        } else {
+                            DEBUGMSGTL(("netsnmp_sockaddr_in6", "invalid port number: %d", portno));
+                            return 0;
+                        }
+
 #if defined(HAVE_IF_NAMETOINDEX) && defined(HAVE_STRUCT_SOCKADDR_IN6_SIN6_SCOPE_ID)
                         addr->sin6_scope_id = if_index;
 #endif
@@ -483,13 +495,20 @@ netsnmp_sockaddr_in6_2(struct sockaddr_in6 *addr,
 	        if_index = if_nametoindex(scope_id + 1);
 #endif
 	    }
-            if (atoi(cp + 1) != 0 &&
+            portno = atoi(cp + 1);
+            if (portno != 0 &&
                 inet_pton(AF_INET6, peername,
                           (void *) &(addr->sin6_addr))) {
                 DEBUGMSGTL(("netsnmp_sockaddr_in6",
                             "IPv6 address with port suffix :%d\n",
                             atoi(cp + 1)));
-                addr->sin6_port = htons(atoi(cp + 1));
+                if (portno > 0 && portno < 0xffff) {
+                    addr->sin6_port = htons(portno);
+                } else {
+                    DEBUGMSGTL(("netsnmp_sockaddr_in6", "invalid port number: %d", portno));
+                    return 0;
+                }
+
 #if defined(HAVE_IF_NAMETOINDEX) && defined(HAVE_STRUCT_SOCKADDR_IN6_SIN6_SCOPE_ID)
                 addr->sin6_scope_id = if_index;
 #endif
@@ -517,11 +536,18 @@ netsnmp_sockaddr_in6_2(struct sockaddr_in6 *addr,
         cp = strrchr(peername, ':');
         if (cp != NULL) {
             *cp = '\0';
-            if (atoi(cp + 1) != 0) {
+            portno = atoi(cp + 1);
+            if (portno != 0) {
                 DEBUGMSGTL(("netsnmp_sockaddr_in6",
                             "hostname(?) with port suffix :%d\n",
-                            atoi(cp + 1)));
-                addr->sin6_port = htons(atoi(cp + 1));
+                            portno));
+                if (portno > 0 && portno < 0xffff) {
+                    addr->sin6_port = htons(portno);
+                } else {
+                    DEBUGMSGTL(("netsnmp_sockaddr_in6", "invalid port number: %d", portno));
+                    return 0;
+                }
+
             } else {
                 /*
                  * No idea, looks bogus but we might as well pass the full thing to
@@ -690,7 +716,11 @@ inet_make_mask_addr(int pf, void *dst, int masklength)
             mask |= maskbit;
             maskbit >>= 1;
         }
-        (*(u_char *) (&((struct in6_addr *) dst)->s6_addr[j])) = mask;
+
+	if (j < sizeof (((struct in6_addr *) dst)->s6_addr)){
+	    (*(u_char *) (&((struct in6_addr *) dst)->s6_addr[j])) = mask;
+	}
+
         break;
     default:
         return -1;              /* unsupported protocol family */
@@ -1066,39 +1096,39 @@ netsnmp_udp6_parse_security(const char *token, char *param)
      * Deal with the network part first.  
      */
     if ((strcmp(source, "default") == 0) || (strcmp(source, "::") == 0)) {
-        strnetwork = strdup("0::0");
-        strmask = strdup("0::0");
-
-        inet_pton(AF_INET6, strnetwork, &net.sin6_addr);
-        inet_pton(AF_INET6, strmask, &mask.sin6_addr);
-
-        e = (com2Sec6Entry *) malloc(sizeof(com2Sec6Entry));
-        if (e == NULL) {
-            config_perror("memory error");
-            return;
-        }
-        /*
-         * Everything is okay.  Copy the parameters to the structure allocated
-         * above and add it to END of the list.  
-         */
-        if (strmask != NULL && strnetwork != NULL) {
-            DEBUGMSGTL(("netsnmp_udp6_parse_security",
-                        "<\"%s\", %s/%s> => \"%s\"\n", community,
-                        strnetwork, strmask, secName));
-            free(strmask);
-            free(strnetwork);
-        } else {
-            DEBUGMSGTL(("netsnmp_udp6_parse_security",
-                        "Couldn't allocate enough memory\n"));
-        }
-        memmove_com2Sec6Entry(e, secName, community, net, mask, contextName);
-        if (com2Sec6ListLast != NULL) {
-            com2Sec6ListLast->next = e;
-            com2Sec6ListLast = e;
-        } else {
-            com2Sec6ListLast = com2Sec6List = e;
-        }
-
+        if ((strnetwork = strdup("0::0")) != NULL)
+	{
+	    if ((strmask = strdup("0::0")) != NULL)
+	    {
+	
+		inet_pton(AF_INET6, strnetwork, &net.sin6_addr);
+		inet_pton(AF_INET6, strmask, &mask.sin6_addr);
+		
+		e = (com2Sec6Entry *) malloc(sizeof(com2Sec6Entry));
+		if (e != NULL) {
+		    memmove_com2Sec6Entry(e, secName, community, net, mask, contextName);
+		    if (com2Sec6ListLast != NULL) {
+			com2Sec6ListLast->next = e;
+			com2Sec6ListLast = e;
+		    } else {
+			com2Sec6ListLast = com2Sec6List = e;
+		    }
+		}
+		else {
+		    config_perror ("memory error");
+		}
+		free (strmask);
+	    }
+	    else {
+		DEBUGMSGTL(("netsnmp_udp6_parse_security",
+			    "Couldn't allocate enough memory\n"));
+	    }
+	    free (strnetwork);
+	}
+	else {
+	    DEBUGMSGTL(("netsnmp_udp6_parse_security",
+			"Couldn't allocate enough memory\n"));
+	}
     } else {
         /*
          * Try interpreting as IPv6 address.  
@@ -1183,8 +1213,8 @@ netsnmp_udp6_parse_security(const char *token, char *param)
                      0, NI_NUMERICHOST)) {
                     config_perror("getnameinfo failed");
                 }
-                memmove(ai->ai_addr, &net, sizeof(struct sockaddr_in6));
-                inet_make_mask_addr(AF_INET6, &mask.sin6_addr, 127);
+                memmove(&net, ai->ai_addr, sizeof(struct sockaddr_in6));
+                inet_make_mask_addr(PF_INET6, &mask.sin6_addr, 128);
 
                 e = (com2Sec6Entry *) malloc(sizeof(com2Sec6Entry));
                 if (e == NULL) {
@@ -1301,17 +1331,19 @@ netsnmp_udp6_getSecName(void *opaque, int olength,
                 ztcommunity ? ztcommunity : "<malloc error>", str6));
 
     for (c = com2Sec6List; c != NULL; c = c->next) {
+	char str_net[INET6_ADDRSTRLEN], str_mask[INET6_ADDRSTRLEN];
         DEBUGMSGTL(("netsnmp_udp6_getSecName",
-                    "compare <\"%s\", 0x%032/0x%032x>", c->community,
-                    c->network, c->mask));
+                    "compare <\"%s\", %s/%s>", c->community,
+                    inet_ntop(AF_INET6, &c->network.sin6_addr, str_net, sizeof str_net),
+		    inet_ntop(AF_INET6, &c->mask.sin6_addr, str_mask, sizeof str_mask)));
 
         if ((community_len == (int)strlen(c->community)) &&
             (memcmp(community, c->community, community_len) == 0) &&
             (masked_address_are_equal(from->sin6_family,
                                       (struct sockaddr_storage *) from,
                                       (struct sockaddr_storage *) &c->mask,
-                                      (struct sockaddr_storage *) &c->
-                                      network) == 0)) {
+                                      (struct sockaddr_storage *) &c->network)
+					== 0)) {
             DEBUGMSG(("netsnmp_udp6_getSecName", "... SUCCESS\n"));
             if (secName != NULL) {
                 *secName = c->secName;

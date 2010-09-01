@@ -491,9 +491,6 @@
 /* Define if you have the kstat library (-lkstat).  */
 #undef HAVE_LIBKSTAT
 
-/* Define if you have the kvm library (-lkvm).  */
-#undef HAVE_LIBKVM
-
 /* Define if you have the m library (-lm).  */
 #undef HAVE_LIBM
 
@@ -542,9 +539,6 @@
 
 /* type check for in_addr_t */
 #define in_addr_t u_long
-
-/* define if your compiler (processor) defines __FUNCTION__ for you */
-#undef HAVE_CPP_UNDERBAR_FUNCTION_DEFINED
 
 /* mib pointer to the top of the extensible tree.  This has been
  assigned to UCDavis by the iana group.  Optionally, point this to the

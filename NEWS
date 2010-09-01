@@ -3,80 +3,113 @@ Please see the CHANGES file for a more detailed list of specific bugs/patches
 that have been fixed/applied, and the ChangeLog file for a comprehensive
 listing of all changes made to the code.
 
-*5.4.2.1*
-    snmpd:
-      - SECURITY ISSUE: A bug in the getbulk handling code could let
-        anyone with even minimal access crash the agent.
 
-*5.4.2*
+*5.5.dev*      (SVN snapshot)
+
+    All applications:
+      - Added the ability to "alias" transports to a more simple name
+         (see the "alias" keyword in the snmp.conf manual page)
+      - The -t (timeout) switch will accept floating point numbers (eg: .1)
+
+    snmpd:
+      - [BUG 1712988]: default/configurable max # varbinds returned by GETBULK
+      - [PATCH 1585146]: Extend range of available error codes
+      - [PATCH 1654424]: Handle row deletion issues in dataset tables
+      - [PATCH 1666737]: Include IPv6 traffic in various UDP counters
+      - [PATCH 1700157]: Fix ordering of exec tokens in MIB output
+      - [PATCH 1719253]: fix skipNFSInHostResources for multiple walks
+      - [PATCH 1723611]: New implementation of the RMON alarmTable
+      - [PATCH 1737439]: automatic link up/down traps on a walk
+      - [PATCH 1806501]: Add API for sending traps with a snmpv3 context
+      - [PATCH 1882621]: Add LVM support to the partition table
+      - [PATCH 1893468]: fixed registration of OIDs with ranges
+      - [PATCH 1901764]: Support date-based logwatch files
+      - [PATCH 1909813]: fix table_iterator handling of SORTED hint
+      - [PATCH 1916840]: new config option to set SNMPv1 trap agent address
+      - [PATCH 2103492]: implement RMON-MIB::etherStatsJabbers
+      - [PATCH 2449210]: add 64-bit usage statistics to UCD-SNMP-MIB::dskTable
+      - Add support for a user provided length variable
+	   and C string values to the watcher helper.
+      - Automatically reregister sysORTable entries from AgentX subagents.
+      - Fix various memory leaks
+      - Implement ipAddressSpinLock
+      - Implement ipNetToPhysicalLastUpdated
+      - Suppress annoying "registration != duplicate" warning for root oids
+
+    snmptrapd:
+      - [PATCH 1908288]: Run perl END block on termination
+      - Add trap handler for logging traps to a mysql database
+      - Withdraw deprecated options.
+
+    snmpnetstat:
+      - [PATCH 2564538]: Support GETBULK in v2c+ snmp versions
+
+    snmpusm:
+      - [PATCH 1591355]: Allow cloning to arbitrary engineIDs
+
     snmplib:
-      - [PATCH 1921861]: Avoid endless loop after truncating 64bit int
-      - Better handling of CONTAINER_INSERT failures with multiple indices
+      - [BUG 1619827]: Improve handling of link dependencies
+      - [PATCH  700681]: limited support for UDPv4 broadcast addresses
+      - [PATCH 1882069]: Add token for specifying an exact SNMPv3 engineID
+      - Fix assorted memory leaks
+      - Implemented RFC5343 contextEngineID probing.
+      - Support for the TSM security model for use with tunneling
 
-    snmpd:
-      - [PATCH 2023633]: add SCTP-MIB implementation (Linux only)
-      - suppress annoying "registration != duplicate" warning for root oids
+    misc:
+      - Add config reread support to "net-snmp-config --compile-subagent" code
+      - Preliminary (alpha) support for SNMP over SSH and DTLS/UDP.
+      - Preliminary (alpha) support for the TSM security model
+      - Separate user management into new net-snmp-create-v3-user script
 
-    build:
-      - [BUG 2023803]: Compilation problems on HP-UX 11.31
-      - Update to libtool 1.5.26
-
-    AIX:
-      - Add support for AIX 6.x.
-
-
-*5.4.1*
-
-    snmplib:
-      - [BUG 1619827]: link libraries against needed external libraries
-      - [PATCH 1616912]: fix memory leak in UDP transport code
-      - [PATCH 1592706]: fix memory leak when cloning varbinds
-      - Change snmp_sess_add_ex to consistently close and delete the
-        transport argument on failure, earlier the liveness of the
-        transport argument was undecided.
-
-    snmpd:
-      - [BUG 1558823]: fix ipAddressTable memory leak
-      - [BUG 1596638]: fix memory leak in ipCidrRouteTable, inetCidrRouteTable
-      - [BUG 1611524]: fix tcp connection table file descriptor leak
-      - handle row deletion issues in dataset tables
-      - [BUG 1712988]: default and configurable maximum number of
-        varbinds returnable to a GETBULK request.
-      - [PATCH 1666737]: include ipv6 counts in
-	udpInDatagrams, udpNoPorts, udpInErrors, udpOutDatagrams
-      - [PATCH 1700157]: fixes ordering of exec tokens in the resulting mib tree
-      - [PATCH 1719253]: fix skipNFSInHostResources so it does not break on the
-	second walk of the table.
+    building:
+      - Improved cross-compilation support
+      - Improved library layering & dependency handling when linking apps
+      - Improved RPM spec files, for consistency with vendor-provided packages.
+      - Mechanism for selecting build environment based on version
+      - New test scripts to test Net-SNMP transport functionality
+      - Restructure configure template
+      - Update to autoconf 2.63 & libtool 2.2.6
 
     perl:
-      - link Perl modules against the exact set of libraries needed
-      - [BUG 1619827]: properly link against libperl when configured with
-	--enable-as-needed
-      - [PATCH 1725049]: fix bulkwalk in cases of non-repeater
-
-    build:
-      - update to libtool 1.5.24 (from 1.5.22)
+      - [BUG 1619827]: improve handling of link dependencies
+      - [PATCH 1956193]: beta threadable perl module code for SNMPv1/2c usage.
 
     python:
-      - [PATCH 1716114]: Let python build in the Net-SNMP source tree
+      - [PATCH 1716114]: Let python build in source tree (Debian patch #38)
 
-    MacOSX:
-      - [PATCH 1600522]: CPU Hardware Abstraction Layer (HAL)
-        implementation for mach/darwin
-      - IF-MIB rewrite now enabled by default
-
-    Win32:
-      - fix AES support
-      - [PATCH 1706344]: fix compilation with cygwin
-
-    IRIX:
-      - [PATCH 1709748]: Optimized IRIX cpu stats
+    Linux:
+      - [PATCH 1704105]: Add IPv6 support to the inetNetToMediaTable
+      - [PATCH 1705594]: Various fixes to ipAddressPrefixTable reporting
+      - [PATCH 1708243]: Implement ipDefaultRouteTable
+      - [PATCH 1715405]: Implement ipv6ScopeZoneIndexTable
+      - [PATCH 1724602]: MfD-based ipDefaultRouterTable implementation
+      - [PATCH 1828602]: Support ipDefaultTTL and ipForwarding SETs
+      - [PATCH 1927751]: Implement icmpMsgStatsTable
+      - [PATCH 2023633]: Implement SCTP-MIB
+      - [PATCH 2053273]: Implement EtherLike MIB
 
     AIX:
-      - Fix default shared library building instead of forcing static use
+      - Add support for AIX 6.x
+      - Fix default shared library building instead of forcing static
 
     FreeBSD:
       - [BUG 1633483]: Support CPU HAL on FreeBSD4.x
+      - [PATCH 1623874]: add GNU/kFreeBSD support
+
+    IRIX:
+      - [PATCH 1709748]: Optimized IRIX cpu stats
+      - [PATCH 1675869]: CPU statistics for IRIX based on PCP
+
+    MacOSX:
+      - [PATCH 1600522]: CPU HAL implementation for mach/darwin
+
+    Solaris:
+      - [PATCH 1719730]: support for ipSystemStatsTable and ipAddressTable
+
+    Win32:
+      - [PATCH 2686248]: Fix several winExtDLL bugs.
+      - [PATCH 1706344]: Fix compilation with cygwin
+      - Fix AES support
 
 
 *5.4*

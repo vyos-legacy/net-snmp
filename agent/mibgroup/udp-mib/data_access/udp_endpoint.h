@@ -1,7 +1,7 @@
 /*
  * udp_endpoint data access header
  *
- * $Id: udp_endpoint.h 15387 2006-10-10 21:13:36Z tanders $
+ * $Id: udp_endpoint.h 17534 2009-04-23 06:41:55Z magfr $
  */
 /**---------------------------------------------------------------------*/
 /*
@@ -20,6 +20,7 @@
 config_require(udp-mib/data_access/udp_endpoint_common)
 #if defined( linux )
 config_require(udp-mib/data_access/udp_endpoint_linux)
+config_require(util_funcs/get_pid_from_inode)
 #elif defined( solaris2 )
 config_require(udp-mib/data_access/udp_endpoint_solaris2)
 #else

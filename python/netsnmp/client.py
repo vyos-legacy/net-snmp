@@ -28,6 +28,7 @@ def _parse_session_args(kargs):
         'Context':'',
         'Engineboots':0,
         'Enginetime':0,
+        'UseNumeric':0,
         }
     keys = kargs.keys()
     for key in keys:
@@ -51,7 +52,7 @@ class Varbind(object):
         self.type = STR(type)
         # parse iid out of tag if needed
         if iid == None and tag != None:
-            regex = re.compile(r'^((?:\.\d+)+|(?:\.?\w+(?:\-*\w+)+)+)\.(\d*?)$')
+            regex = re.compile(r'^((?:\.\d+)+|(?:\w+(?:\-*\w+)+))\.?(.*)$')
             match = regex.match(tag)
             if match:
                 (self.tag, self.iid) = match.group(1,2)
@@ -234,8 +235,6 @@ def snmpwalk(*args, **kargs):
                 var_list.append(arg)
             else:
                 var_list.append(Varbind(arg))
-    for var in var_list:
-        print "  ",var.tag, var.iid, "=", var.val, '(',var.type,')'
     res = sess.walk(var_list)
     return res
     

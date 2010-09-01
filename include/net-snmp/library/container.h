@@ -1,8 +1,18 @@
+/* Portions of this file are subject to the following copyright(s).  See
+ * the Net-SNMP's COPYING file for more details and other copyrights
+ * that may apply:
+ */
+/*
+ * Portions of this file are copyrighted by:
+ * Copyright (C) 2007 Apple, Inc. All rights reserved.
+ * Use is subject to license terms specified in the COPYING file
+ * distributed with the Net-SNMP package.
+ */
 #ifndef NETSNMP_CONTAINER_H
 #define NETSNMP_CONTAINER_H
 
 /*
- * $Id: container.h 16804 2008-02-13 23:37:48Z magfr $
+ * $Id: container.h 17394 2009-02-19 17:58:52Z rstory $
  *
  * WARNING: This is a recently created file, and all of it's contents are
  *          subject to change at any time.
@@ -276,6 +286,9 @@ extern "C" {
     int netsnmp_compare_mem(const char * lhs, size_t lhs_len,
                             const char * rhs, size_t rhs_len);
 
+    /** no structure, just 'char *' pointers */
+    int netsnmp_compare_direct_cstring(const void * lhs, const void * rhs);
+
     /** for_each callback to call free on data item */
     void  netsnmp_container_simple_free(void *data, void *context);
 
@@ -357,10 +370,9 @@ extern "C" {
             x = x->next;
         if(x) {
             int rc = x->insert(x,k);
-            if(rc) {
-/*                snmp_log(LOG_ERR,"error on subcontainer '%s' insert (%d)\n",
-		  x->container_name ? x->container_name : "", rc); */
-	    }
+            if(rc)
+                snmp_log(LOG_DEBUG,"error on subcontainer '%s' insert (%d)\n",
+                         x->container_name ? x->container_name : "", rc);
             else {
                 rc = CONTAINER_INSERT_HELPER(x->next, k);
                 if(rc)
@@ -400,7 +412,8 @@ extern "C" {
             rc2 = x->remove(x,k);
             /** ignore remove errors if there is a filter in place */
             if ((rc2) && (NULL == x->insert_filter)) {
-                snmp_log(LOG_ERR,"error on subcontainer remove (%d)\n", rc2);
+                snmp_log(LOG_ERR,"error on subcontainer '%s' remove (%d)\n",
+                         x->container_name ? x->container_name : "", rc2);
                 rc = rc2;
             }
             x = x->prev;
@@ -423,12 +436,15 @@ extern "C" {
             x = x->next;
         while(x) {
             netsnmp_container *tmp;
+            const char *name;
             tmp = x->prev;
+            name = x->container_name;
             if (NULL != x->container_name)
                 SNMP_FREE(x->container_name);
             rc2 = x->cfree(x);
             if (rc2) {
-                snmp_log(LOG_ERR,"error on subcontainer cfree (%d)\n", rc2);
+                snmp_log(LOG_ERR,"error on subcontainer '%s' cfree (%d)\n",
+                         name ? name : "", rc2);
                 rc = rc2;
             }
             x = tmp;

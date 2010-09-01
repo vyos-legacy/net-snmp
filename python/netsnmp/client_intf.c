@@ -39,11 +39,36 @@
 
 #define STRLEN(x) (x ? strlen(x) : 0)
 
+/* from perl/SNMP/perlsnmp.h: */
+#ifndef timeradd
+#define	timeradd(a, b, result)						      \
+  do {									      \
+    (result)->tv_sec = (a)->tv_sec + (b)->tv_sec;			      \
+    (result)->tv_usec = (a)->tv_usec + (b)->tv_usec;			      \
+    if ((result)->tv_usec >= 1000000)					      \
+      {									      \
+	++(result)->tv_sec;						      \
+	(result)->tv_usec -= 1000000;					      \
+      }									      \
+  } while (0)
+#endif
+
+#ifndef timersub
+#define	timersub(a, b, result)						      \
+  do {									      \
+    (result)->tv_sec = (a)->tv_sec - (b)->tv_sec;			      \
+    (result)->tv_usec = (a)->tv_usec - (b)->tv_usec;			      \
+    if ((result)->tv_usec < 0) {					      \
+      --(result)->tv_sec;						      \
+      (result)->tv_usec += 1000000;					      \
+    }									      \
+  } while (0)
+#endif
+
 typedef netsnmp_session SnmpSession;
 typedef struct tree SnmpMibNode;
 static void __recalc_timeout (struct timeval*,struct timeval*,
                                 struct timeval*,struct timeval*, int* );
-static in_addr_t __parse_address (char*);
 static int __is_numeric_oid (char*);
 static int __is_leaf (struct tree*);
 static int __translate_appl_type (char*);
@@ -142,26 +167,6 @@ int *block;
       *tvp = *ctvp; /* use the smaller non-zero timeout */
       timerclear(ctvp); /* used as a flag to let callback fire on timeout */
    }
-}
-
-static in_addr_t
-__parse_address(address)
-char *address;
-{
-    in_addr_t addr;
-    struct sockaddr_in saddr;
-    struct hostent *hp;
-
-    if ((addr = inet_addr(address)) != -1)
-	return addr;
-    hp = gethostbyname(address);
-    if (hp == NULL){
-        return (-1); /* error value */
-    } else {
-	memcpy(&saddr.sin_addr, hp->h_addr, hp->h_length);
-	return saddr.sin_addr.s_addr;
-    }
-
 }
 
 static int
@@ -889,8 +894,7 @@ __add_var_val_str(pdu, name, name_length, val, len, type)
     }
 
     vars->next_variable = NULL;
-    vars->name = (oid *)malloc(name_length * sizeof(oid));
-    memcpy((char *)vars->name, (char *)name, name_length * sizeof(oid));
+    vars->name = snmp_duplicate_objid(name, name_length);
     vars->name_length = name_length;
     switch (type) {
       case TYPE_INTEGER:
@@ -972,9 +976,8 @@ OCT:
             vars->val.objid = NULL;
 	    ret = FAILURE;
         } else {
+            vars->val.objid = snmp_duplicate_objid(oidbuf, vars->val_len);
             vars->val_len *= sizeof(oid);
-            vars->val.objid = (oid *)malloc(vars->val_len);
-            memcpy((char *)vars->val.objid, (char *)oidbuf, vars->val_len);
         }
         break;
 
@@ -1006,7 +1009,9 @@ int *err_ind;
    *response = NULL;
 retry:
 
-   status = snmp_synch_response(ss, pdu, response);
+   Py_BEGIN_ALLOW_THREADS
+   status = snmp_sess_synch_response(ss, pdu, response);
+   Py_END_ALLOW_THREADS
 
    if ((*response == NULL) && (status == STAT_SUCCESS)) status = STAT_ERROR;
 
@@ -1097,10 +1102,10 @@ py_netsnmp_attr_string(PyObject *obj, char * attr_name)
   return val;
 }
 
-static long
+static long long
 py_netsnmp_attr_long(PyObject *obj, char * attr_name)
 {
-  long val = -1;
+  long long val = -1;
 
   if (obj && attr_name  && PyObject_HasAttrString(obj, attr_name)) {
     PyObject *attr = PyObject_GetAttrString(obj, attr_name);
@@ -1161,6 +1166,8 @@ netsnmp_create_session(PyObject *self, PyObject *args)
 
   __libraries_init("python");
 
+  snmp_sess_init(&session);
+
   session.version = -1;
 #ifndef DISABLE_SNMPV1
   if (version == 1) {
@@ -1189,14 +1196,14 @@ netsnmp_create_session(PyObject *self, PyObject *args)
   session.timeout = timeout; /* 1000000L */
   session.authenticator = NULL;
 
-  ss = snmp_open(&session);
+  ss = snmp_sess_open(&session);
 
   if (ss == NULL) {
     if (verbose) 
       printf("error:snmp_new_session: Couldn't open SNMP session");
   }
  end:
-  return Py_BuildValue("i", (int)ss);
+  return Py_BuildValue("L", (long long)ss);
 }
 
 static PyObject *
@@ -1356,7 +1363,7 @@ netsnmp_delete_session(PyObject *self, PyObject *args)
 
   ss = (SnmpSession *)py_netsnmp_attr_long(session, "sess_ptr");
 
-  snmp_close(ss);
+  snmp_sess_close(ss);
   return (Py_BuildValue(""));
 }
 
@@ -1779,7 +1786,7 @@ netsnmp_walk(PyObject *self, PyObject *args)
   PyObject *varlist_iter;
   PyObject *varbind;
   PyObject *val_tuple = NULL;
-  PyObject *varbinds;
+  PyObject *varbinds  = NULL;
   int varlist_len = 0;
   int varlist_ind;
   netsnmp_session *ss;
@@ -2004,7 +2011,6 @@ netsnmp_walk(PyObject *self, PyObject *args)
 			  (len ? Py_BuildValue("s#", str_buf, len) :
 			   Py_BuildValue("")));
             
-    	  Py_DECREF(varbind);
 
           } else {
 	    /* Return None for this variable. */
@@ -2012,6 +2018,7 @@ netsnmp_walk(PyObject *self, PyObject *args)
 	    PyTuple_SetItem(val_tuple, result_count++, Py_BuildValue(""));
 	    printf("netsnmp_walk: bad varbind (%d)\n", varlist_ind);
           }	
+          Py_XDECREF(varbind);
         }
         /* reuse the response as the next pdu to send */
         pdu = snmp_pdu_create(SNMP_MSG_GETNEXT);
@@ -2037,6 +2044,7 @@ netsnmp_walk(PyObject *self, PyObject *args)
   }
 
  done:
+  Py_XDECREF(varbinds);
   SAFE_FREE(oid_arr);
   return (val_tuple ? val_tuple : Py_BuildValue(""));
 }

@@ -16,38 +16,13 @@
 #include <strings.h>
 #endif
 
-/*
- * needed by util_funcs.h 
- */
-#if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
-# include <time.h>
-#else
-# if HAVE_SYS_TIME_H
-#  include <sys/time.h>
-# else
-#  include <time.h>
-# endif
-#endif
-
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
-#if HAVE_NETINET_IN_H
-#include <netinet/in.h>
-#endif
-
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 /*
  * header_generic() comes from here 
  */
-#include "util_funcs.h"
+#include "util_funcs/header_generic.h"
 
 /*
  * include our .h file 
@@ -106,7 +81,7 @@ void            example_free_config_examplestr(void);
      *      2: ASN_OCTET_STR:
      *          The type of the object.
      *          Valid types are listed in <snmp_impl.h>
-     *      3: RONLY (or RWRITE):
+     *      3: NETSNMP_OLDAPI_RONLY (or NETSNMP_OLDAPI_RWRITE):
      *          Whether this object can be SET or not.
      *      4: var_example:
      *          The callback routine, used when the object is queried.
@@ -122,15 +97,24 @@ void            example_free_config_examplestr(void);
      *            to obtain the full OID of each entry.
      */
 struct variable2 example_variables[] = {
-    {EXAMPLESTRING, ASN_OCTET_STR, RONLY, var_example, 1, {1}},
-    {EXAMPLEINTEGER, ASN_INTEGER, RWRITE, var_example, 2, {2, 1}},
-    {EXAMPLEOBJECTID, ASN_OBJECT_ID, RONLY, var_example, 2, {2, 2}},
-    {EXAMPLETIMETICKS, ASN_TIMETICKS, RONLY, var_example, 1, {3}},
-    {EXAMPLEIPADDRESS, ASN_IPADDRESS, RONLY, var_example, 1, {4}},
-    {EXAMPLECOUNTER, ASN_COUNTER, RONLY, var_example, 1, {5}},
-    {EXAMPLEGAUGE, ASN_GAUGE, RONLY, var_example, 1, {6}},
-    {EXAMPLETRIGGERTRAP, ASN_INTEGER, RWRITE, var_example, 1, {7}},
-    {EXAMPLETRIGGERTRAP2, ASN_INTEGER, RWRITE, var_example, 1, {8}}
+    {EXAMPLESTRING, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_example, 1, {1}},
+    {EXAMPLEINTEGER, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_example, 2, {2, 1}},
+    {EXAMPLEOBJECTID, ASN_OBJECT_ID, NETSNMP_OLDAPI_RONLY,
+     var_example, 2, {2, 2}},
+    {EXAMPLETIMETICKS, ASN_TIMETICKS, NETSNMP_OLDAPI_RONLY,
+     var_example, 1, {3}},
+    {EXAMPLEIPADDRESS, ASN_IPADDRESS, NETSNMP_OLDAPI_RONLY,
+     var_example, 1, {4}},
+    {EXAMPLECOUNTER, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_example, 1, {5}},
+    {EXAMPLEGAUGE, ASN_GAUGE, NETSNMP_OLDAPI_RONLY,
+     var_example, 1, {6}},
+    {EXAMPLETRIGGERTRAP, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_example, 1, {7}},
+    {EXAMPLETRIGGERTRAP2, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_example, 1, {8}}
 };
 
     /*
@@ -341,7 +325,7 @@ var_example(struct variable *vp,
      */
     switch (vp->magic) {
     case EXAMPLESTRING:
-        sprintf(string, example_str);
+        strcpy(string, example_str);
         /*
          * Note that the assumption that the answer will be an
          *  integer does not hold true in this case, so the length

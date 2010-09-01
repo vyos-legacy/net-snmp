@@ -5,10 +5,14 @@
 #ifndef _MIBGROUP_LOGMATCH_H
 #define _MIBGROUP_LOGMATCH_H
 
+config_require(util_funcs/header_generic)
+config_require(util_funcs/header_simple_table)
+
 #include "mibdefs.h"
 #include <regex.h>
 
 struct logmatchstat {
+    char            filenamePattern[256];
     char            filename[256];
     char            regEx[256];
     char            name[256];

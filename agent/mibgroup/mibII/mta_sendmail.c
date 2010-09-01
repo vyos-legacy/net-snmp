@@ -101,13 +101,8 @@
 # endif
 #endif
 
-#if HAVE_STDARG_H
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
 #include <errno.h>
+#include <stdarg.h>
 
  /**/
 /** "macros and variables for registering the OID tree" */
@@ -152,31 +147,37 @@ enum {
  * structure that tells the agent, which function returns what values 
  */
 static struct variable3 mta_variables[] = {
-    {MTARECEIVEDMESSAGES, ASN_COUNTER, RONLY, var_mtaEntry, 3, {1, 1, 1}},
-    {MTASTOREDMESSAGES, ASN_GAUGE, RONLY, var_mtaEntry, 3, {1, 1, 2}},
-    {MTATRANSMITTEDMESSAGES, ASN_COUNTER, RONLY, var_mtaEntry, 3,
-     {1, 1, 3}},
-    {MTARECEIVEDVOLUME, ASN_COUNTER, RONLY, var_mtaEntry, 3, {1, 1, 4}},
-    {MTASTOREDVOLUME, ASN_GAUGE, RONLY, var_mtaEntry, 3, {1, 1, 5}},
-    {MTATRANSMITTEDVOLUME, ASN_COUNTER, RONLY, var_mtaEntry, 3, {1, 1, 6}},
+    {MTARECEIVEDMESSAGES, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_mtaEntry, 3, {1, 1, 1}},
+    {MTASTOREDMESSAGES, ASN_GAUGE, NETSNMP_OLDAPI_RONLY,
+     var_mtaEntry, 3, {1, 1, 2}},
+    {MTATRANSMITTEDMESSAGES, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_mtaEntry, 3, {1, 1, 3}},
+    {MTARECEIVEDVOLUME, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_mtaEntry, 3, {1, 1, 4}},
+    {MTASTOREDVOLUME, ASN_GAUGE, NETSNMP_OLDAPI_RONLY,
+     var_mtaEntry, 3, {1, 1, 5}},
+    {MTATRANSMITTEDVOLUME, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_mtaEntry, 3, {1, 1, 6}},
 
-    {MTAGROUPRECEIVEDMESSAGES, ASN_COUNTER, RONLY, var_mtaGroupEntry, 3,
-     {2, 1, 2}},
-    {MTAGROUPREJECTEDMESSAGES, ASN_COUNTER, RONLY, var_mtaGroupEntry, 3,
-     {2, 1, 3}},
-    {MTAGROUPSTOREDMESSAGES, ASN_GAUGE, RONLY, var_mtaGroupEntry, 3,
-     {2, 1, 4}},
-    {MTAGROUPTRANSMITTEDMESSAGES, ASN_COUNTER, RONLY, var_mtaGroupEntry, 3,
-     {2, 1, 5}},
-    {MTAGROUPRECEIVEDVOLUME, ASN_COUNTER, RONLY, var_mtaGroupEntry, 3,
-     {2, 1, 6}},
-    {MTAGROUPSTOREDVOLUME, ASN_GAUGE, RONLY, var_mtaGroupEntry, 3,
-     {2, 1, 7}},
-    {MTAGROUPTRANSMITTEDVOLUME, ASN_COUNTER, RONLY, var_mtaGroupEntry, 3,
-     {2, 1, 8}},
-    {MTAGROUPNAME, ASN_OCTET_STR, RONLY, var_mtaGroupEntry, 3, {2, 1, 25}},
-    {MTAGROUPHIERARCHY, ASN_INTEGER, RONLY, var_mtaGroupEntry, 3,
-     {2, 1, 31}}
+    {MTAGROUPRECEIVEDMESSAGES, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_mtaGroupEntry, 3, {2, 1, 2}},
+    {MTAGROUPREJECTEDMESSAGES, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_mtaGroupEntry, 3, {2, 1, 3}},
+    {MTAGROUPSTOREDMESSAGES, ASN_GAUGE, NETSNMP_OLDAPI_RONLY,
+     var_mtaGroupEntry, 3, {2, 1, 4}},
+    {MTAGROUPTRANSMITTEDMESSAGES, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_mtaGroupEntry, 3, {2, 1, 5}},
+    {MTAGROUPRECEIVEDVOLUME, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_mtaGroupEntry, 3, {2, 1, 6}},
+    {MTAGROUPSTOREDVOLUME, ASN_GAUGE, NETSNMP_OLDAPI_RONLY,
+     var_mtaGroupEntry, 3, {2, 1, 7}},
+    {MTAGROUPTRANSMITTEDVOLUME, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+     var_mtaGroupEntry, 3, {2, 1, 8}},
+    {MTAGROUPNAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_mtaGroupEntry, 3, {2, 1, 25}},
+    {MTAGROUPHIERARCHY, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_mtaGroupEntry, 3, {2, 1, 31}}
 };
  /**/
 /** "other macros and structures" */
@@ -342,37 +343,15 @@ static long     dir_cache_time = 10;    /* time (in seconds) to wait before scan
  *    ...:         additional parameters to insert into the error message string
  *
  */
-#if HAVE_STDARG_H
-    static void
+static void
 print_error(int priority, BOOL config, BOOL config_only,
             const char *function, const char *format, ...)
-#else
-    static void
-print_error(va_alist)
-     va_dcl
-#endif
 {
     va_list         ap;
     char            buffer[2 * FILENAMELEN + 200];      /* I know, that's not perfectly safe, but since I don't use more
                                                          * than two filenames in one error message, that should be enough */
 
-#if HAVE_STDARG_H
     va_start(ap, format);
-#else
-    int             priority;
-    BOOL            config;
-    BOOL            config_only;
-    const char     *function;
-    const char     *format;
-
-    va_start(ap);
-    priority = va_arg(ap, int);
-    config = va_arg(ap, BOOL);
-    config_only = va_arg(ap, BOOL);
-    function = va_arg(ap, char *);
-    format = va_arg(ap, char *);
-#endif
-
     vsnprintf(buffer, sizeof(buffer), format, ap);
 
     if (config) {
@@ -1057,9 +1036,7 @@ mta_sendmail_parse_config(const char *token, char *line)
         open_sendmailst(TRUE);
 
         if (sendmailst_fh == -1) {
-            char            str[FILENAMELEN + 50];
-            sprintf(str, "couldn't open file \"%s\"", sendmailst_fn);
-            config_perror(str);
+	    netsnmp_config_error("couldn't open file \"%s\"", sendmailst_fn);
             return;
         }
 

@@ -1,13 +1,15 @@
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
+#include <net-snmp/agent/table_dataset.h>
+
 #if HAVE_STRING_H
 #include <string.h>
 #else
 #include <strings.h>
 #endif
-
-#include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
 
 static netsnmp_data_list *auto_tables;
 
@@ -74,59 +76,6 @@ netsnmp_init_table_dataset(void) {
  * Data Set API: Table maintenance
  *
  * ================================== */
-
-/** Create a netsnmp_table_data_set structure given a table_data definition */
-netsnmp_table_data_set *
-netsnmp_create_table_data_set(const char *table_name)
-{
-    netsnmp_table_data_set *table_set =
-        SNMP_MALLOC_TYPEDEF(netsnmp_table_data_set);
-    if (!table_set)
-        return NULL;
-    table_set->table = netsnmp_create_table_data(table_name);
-    return table_set;
-}
-
-/** clones a dataset row, including all data. */
-netsnmp_table_row *
-netsnmp_table_data_set_clone_row(netsnmp_table_row *row)
-{
-    netsnmp_table_data_set_storage *data, **newrowdata;
-    netsnmp_table_row *newrow;
-
-    if (!row)
-        return NULL;
-
-    newrow = netsnmp_table_data_clone_row(row);
-    if (!newrow)
-        return NULL;
-
-    data = (netsnmp_table_data_set_storage *) row->data;
-
-    if (data) {
-        for (newrowdata =
-             (netsnmp_table_data_set_storage **) &(newrow->data); data;
-             newrowdata = &((*newrowdata)->next), data = data->next) {
-
-            memdup((u_char **) newrowdata, (u_char *) data,
-                   sizeof(netsnmp_table_data_set_storage));
-            if (!*newrowdata) {
-                netsnmp_table_dataset_delete_row(newrow);
-                return NULL;
-            }
-
-            if (data->data.voidp) {
-                memdup((u_char **) & ((*newrowdata)->data.voidp),
-                       (u_char *) data->data.voidp, data->data_len);
-                if (!(*newrowdata)->data.voidp) {
-                    netsnmp_table_dataset_delete_row(newrow);
-                    return NULL;
-                }
-            }
-        }
-    }
-    return newrow;
-}
 
 /** deletes a single dataset table data.
  *  returns the (possibly still good) next pointer of the deleted data object.
@@ -214,6 +163,59 @@ netsnmp_table_dataset_remove_and_delete_row(netsnmp_table_data_set *table,
     netsnmp_table_dataset_delete_all_data(data);
 }
 
+/** Create a netsnmp_table_data_set structure given a table_data definition */
+netsnmp_table_data_set *
+netsnmp_create_table_data_set(const char *table_name)
+{
+    netsnmp_table_data_set *table_set =
+        SNMP_MALLOC_TYPEDEF(netsnmp_table_data_set);
+    if (!table_set)
+        return NULL;
+    table_set->table = netsnmp_create_table_data(table_name);
+    return table_set;
+}
+
+/** clones a dataset row, including all data. */
+netsnmp_table_row *
+netsnmp_table_data_set_clone_row(netsnmp_table_row *row)
+{
+    netsnmp_table_data_set_storage *data, **newrowdata;
+    netsnmp_table_row *newrow;
+
+    if (!row)
+        return NULL;
+
+    newrow = netsnmp_table_data_clone_row(row);
+    if (!newrow)
+        return NULL;
+
+    data = (netsnmp_table_data_set_storage *) row->data;
+
+    if (data) {
+        for (newrowdata =
+             (netsnmp_table_data_set_storage **) &(newrow->data); data;
+             newrowdata = &((*newrowdata)->next), data = data->next) {
+
+            memdup((u_char **) newrowdata, (u_char *) data,
+                   sizeof(netsnmp_table_data_set_storage));
+            if (!*newrowdata) {
+                netsnmp_table_dataset_delete_row(newrow);
+                return NULL;
+            }
+
+            if (data->data.voidp) {
+                memdup((u_char **) & ((*newrowdata)->data.voidp),
+                       (u_char *) data->data.voidp, data->data_len);
+                if (!(*newrowdata)->data.voidp) {
+                    netsnmp_table_dataset_delete_row(newrow);
+                    return NULL;
+                }
+            }
+        }
+    }
+    return newrow;
+}
+
 /* ==================================
  *
  * Data Set API: Default row operations
@@ -272,6 +274,8 @@ netsnmp_table_set_add_default_row(netsnmp_table_data_set *table_set,
     }
 
     new_col = SNMP_MALLOC_TYPEDEF(netsnmp_table_data_set_storage);
+    if (new_col == NULL)
+        return SNMPERR_GENERR;
     new_col->type = type;
     new_col->writable = writable;
     new_col->column = column;
@@ -309,13 +313,7 @@ netsnmp_table_set_add_default_row(netsnmp_table_data_set *table_set,
  *  repeatedly for you.
  */
 void
-#if HAVE_STDARG_H
 netsnmp_table_set_multi_add_default_row(netsnmp_table_data_set *tset, ...)
-#else
-netsnmp_table_set_multi_add_default_row(va_dcl
-    )
-     va_dcl
-#endif
 {
     va_list         debugargs;
     unsigned int    column;
@@ -323,14 +321,7 @@ netsnmp_table_set_multi_add_default_row(va_dcl
     void           *data;
     size_t          data_len;
 
-#if HAVE_STDARG_H
     va_start(debugargs, tset);
-#else
-    netsnmp_table_data_set *tset;
-
-    va_start(debugargs);
-    tset = va_arg(debugargs, netsnmp_table_data_set *);
-#endif
 
     while ((column = va_arg(debugargs, unsigned int)) != 0) {
         type = va_arg(debugargs, int);
@@ -388,6 +379,8 @@ netsnmp_register_table_data_set(netsnmp_handler_registration *reginfo,
          * allocate the table if one wasn't allocated 
          */
         table_info = SNMP_MALLOC_TYPEDEF(netsnmp_table_registration_info);
+        if (table_info == NULL)
+            return SNMP_ERR_GENERR;
     }
 
     if (NULL == table_info->indexes && data_set->table->indexes_template) {
@@ -431,11 +424,14 @@ netsnmp_table_data_set_create_newrowstash
     netsnmp_table_row *newrow   = NULL;
 
     newrowstash = SNMP_MALLOC_TYPEDEF(newrow_stash);
-    newrowstash->created = 1;
-    newrow = netsnmp_table_data_set_create_row_from_defaults
-                        (datatable->default_row);
-    newrow->indexes = snmp_clone_varbind(table_info->indexes);
-    newrowstash->newrow = newrow;
+
+    if (newrowstash != NULL) {
+        newrowstash->created = 1;
+        newrow = netsnmp_table_data_set_create_row_from_defaults
+            (datatable->default_row);
+        newrow->indexes = snmp_clone_varbind(table_info->indexes);
+        newrowstash->newrow = newrow;
+    }
 
     return newrowstash;
 }
@@ -454,8 +450,6 @@ netsnmp_table_data_set_helper_handler(netsnmp_mib_handler *handler,
     netsnmp_table_row *row, *newrow = NULL;
     netsnmp_table_request_info *table_info;
     netsnmp_request_info *request;
-    oid            *suffix;
-    size_t          suffix_len;
     netsnmp_oid_stash_node **stashp = NULL;
 
     if (!handler)
@@ -465,6 +459,11 @@ netsnmp_table_data_set_helper_handler(netsnmp_mib_handler *handler,
     for (request = requests; request; request = request->next) {
         netsnmp_table_data_set *datatable =
             (netsnmp_table_data_set *) handler->myvoid;
+        const oid * const suffix =
+            requests->requestvb->name + reginfo->rootoid_len + 2;
+        const size_t suffix_len =
+            requests->requestvb->name_length - (reginfo->rootoid_len + 2);
+
         if (request->processed)
             continue;
 
@@ -473,9 +472,6 @@ netsnmp_table_data_set_helper_handler(netsnmp_mib_handler *handler,
          */
         row = netsnmp_extract_table_row(request);
         table_info = netsnmp_extract_table_info(request);
-        suffix = requests->requestvb->name + reginfo->rootoid_len + 2;
-        suffix_len = requests->requestvb->name_length -
-            (reginfo->rootoid_len + 2);
 
         if (MODE_IS_SET(reqinfo->mode)) {
 
@@ -542,6 +538,11 @@ netsnmp_table_data_set_helper_handler(netsnmp_mib_handler *handler,
                      * existing row that needs to be modified 
                      */
                     newrowstash = SNMP_MALLOC_TYPEDEF(newrow_stash);
+                    if (newrowstash == NULL) {
+                        netsnmp_set_request_error(reqinfo, request,
+                                                  SNMP_ERR_GENERR);
+                        continue;
+                    }
                     newrow = netsnmp_table_data_set_clone_row(row);
                     newrowstash->newrow = newrow;
                 }
@@ -563,7 +564,7 @@ netsnmp_table_data_set_helper_handler(netsnmp_mib_handler *handler,
             data = (netsnmp_table_data_set_storage *) row->data;
 
         if (!row || !table_info || !data) {
-            if (!MODE_IS_SET(reqinfo->mode)) {
+            if (!MODE_IS_SET(reqinfo->mode) || !table_info) {
                 netsnmp_set_request_error(reqinfo, request,
                                           SNMP_NOSUCHINSTANCE);
                 continue;
@@ -993,6 +994,7 @@ netsnmp_config_parse_table_set(const char *token, char *line)
         if (!snmp_parse_oid(tp->augments, name, &name_length)) {
             config_pwarn("I can't parse the augment tabel name");
             snmp_log(LOG_WARNING, "  can't parse %s\n", tp->augments);
+            SNMP_FREE (table_set);
             return;
         }
         if(NULL == (tp2 = get_tree(name, name_length, get_tree_head()))) {
@@ -1000,6 +1002,7 @@ netsnmp_config_parse_table_set(const char *token, char *line)
                          "I can't find mib information about augment table");
             snmp_log(LOG_WARNING, "  table %s not found in tree\n",
                      tp->augments);
+            SNMP_FREE (table_set);
             return;
         }
         _table_set_add_indexes(table_set, tp2);
@@ -1016,11 +1019,12 @@ netsnmp_config_parse_table_set(const char *token, char *line)
         type = mib_to_asn_type(tp->type);
         if (type == (u_char) - 1) {
             config_pwarn("unknown column type");
+	    SNMP_FREE (table_set);
             return;             /* xxx mem leak */
         }
 
         DEBUGMSGTL(("table_set_add_table",
-                    "adding column %s(%d) of type %d (access %d)\n",
+                    "adding column %s(%ld) of type %d (access %d)\n",
                     tp->label, tp->subid, type, tp->access));
 
         switch (tp->access) {
@@ -1031,7 +1035,7 @@ netsnmp_config_parse_table_set(const char *token, char *line)
             canwrite = 1;
         case MIB_ACCESS_READONLY:
             DEBUGMSGTL(("table_set_add_table",
-                        "adding column %d of type %d\n", tp->subid, type));
+                        "adding column %ld of type %d\n", tp->subid, type));
             netsnmp_table_set_add_default_row(table_set, tp->subid, type,
                                               canwrite, NULL, 0);
             mincol = SNMP_MIN(mincol, tp->subid);
@@ -1091,6 +1095,7 @@ netsnmp_config_parse_add_row(const char *token, char *line)
          vb = vb->next_variable) {
         if (!line) {
             config_pwarn("missing an index value");
+            SNMP_FREE (row);
             return;
         }
 
@@ -1110,6 +1115,7 @@ netsnmp_config_parse_add_row(const char *token, char *line)
                          "All columns must be specified.");
             snmp_log(LOG_WARNING,"  can't find value for column %d\n",
                      dr->column - 1);
+            SNMP_FREE (row);
             return;
         }
 
@@ -1272,7 +1278,7 @@ netsnmp_set_row_column(netsnmp_table_row *row, unsigned int column,
  * ================================== */
 
 /** adds an index to the table.  Call this repeatly for each index. */
-NETSNMP_INLINE void
+void
 netsnmp_table_dataset_add_index(netsnmp_table_data_set *table, u_char type)
 {
     if (!table)
@@ -1283,33 +1289,20 @@ netsnmp_table_dataset_add_index(netsnmp_table_data_set *table, u_char type)
 /** adds multiple indexes to a table_dataset helper object.
  *  To end the list, use a 0 after the list of ASN index types. */
 void
-#if HAVE_STDARG_H
 netsnmp_table_set_add_indexes(netsnmp_table_data_set *tset,
                               ...)
-#else
-netsnmp_table_set_add_indexes(va_alist)
-     va_dcl
-#endif
 {
     va_list         debugargs;
     int             type;
 
-#if HAVE_STDARG_H
     va_start(debugargs, tset);
-#else
-    netsnmp_table_data_set *tset;
 
-    va_start(debugargs);
-    tset = va_arg(debugargs, netsnmp_table_data_set *);
-#endif
-
-    while ((type = va_arg(debugargs, int)) != 0) {
-        netsnmp_table_dataset_add_index(tset, (u_char)type);
-    }
+    if (tset)
+        while ((type = va_arg(debugargs, int)) != 0)
+            netsnmp_table_data_add_index(tset->table, type);
 
     va_end(debugargs);
 }
 
 /** @} 
  */
-

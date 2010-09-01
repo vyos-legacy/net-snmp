@@ -87,7 +87,7 @@ netsnmp_tcp_fmtaddr(netsnmp_transport *t, void *data, int len)
             return strdup("TCP: unknown");
         }
 
-        sprintf(tmp, "TCP: [%s]:%hd",
+        sprintf(tmp, "TCP: [%s]:%hu",
                 inet_ntoa(to->sin_addr), ntohs(to->sin_port));
         return strdup(tmp);
     }
@@ -109,7 +109,7 @@ netsnmp_tcp_recv(netsnmp_transport *t, void *buf, int size,
 
     if (t != NULL && t->sock >= 0) {
 	while (rc < 0) {
-	    rc = recvfrom(t->sock, buf, size, 0, NULL, 0);
+	    rc = recvfrom(t->sock, buf, size, 0, NULL, NULL);
 	    if (rc < 0 && errno != EINTR) {
 		DEBUGMSGTL(("netsnmp_tcp", "recv fd %d err %d (\"%s\")\n",
 			    t->sock, errno, strerror(errno)));

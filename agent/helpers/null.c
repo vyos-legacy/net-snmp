@@ -1,15 +1,15 @@
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
+#include <net-snmp/agent/null.h>
+
 #if HAVE_STRING_H
 #include <string.h>
 #else
 #include <strings.h>
 #endif
-
-#include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
-
-#include <net-snmp/agent/null.h>
 
 int
 netsnmp_register_null(oid * loc, size_t loc_len)
@@ -23,14 +23,16 @@ netsnmp_register_null_context(oid * loc, size_t loc_len,
 {
     netsnmp_handler_registration *reginfo;
     reginfo = SNMP_MALLOC_TYPEDEF(netsnmp_handler_registration);
-    reginfo->handlerName = strdup("");
-    reginfo->rootoid = loc;
-    reginfo->rootoid_len = loc_len;
-    reginfo->handler =
-        netsnmp_create_handler("null", netsnmp_null_handler);
-    if (contextName)
-        reginfo->contextName = strdup(contextName);
-    reginfo->modes = HANDLER_CAN_DEFAULT;
+    if (reginfo != NULL) {
+        reginfo->handlerName = strdup("");
+        reginfo->rootoid = loc;
+        reginfo->rootoid_len = loc_len;
+        reginfo->handler =
+            netsnmp_create_handler("null", netsnmp_null_handler);
+        if (contextName)
+            reginfo->contextName = strdup(contextName);
+        reginfo->modes = HANDLER_CAN_DEFAULT | HANDLER_CAN_GETBULK;
+    }
     return netsnmp_register_handler(reginfo);
 }
 

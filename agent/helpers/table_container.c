@@ -1,9 +1,14 @@
 /*
  * table_container.c
- * $Id: table_container.c 14169 2006-01-25 16:28:12Z dts12 $
+ * $Id: table_container.c 16867 2008-03-26 07:16:29Z magfr $
  */
 
 #include <net-snmp/net-snmp-config.h>
+
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
+#include <net-snmp/agent/table_container.h>
 
 #if HAVE_STRING_H
 #include <string.h>
@@ -11,11 +16,7 @@
 #include <strings.h>
 #endif
 
-#include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
-
 #include <net-snmp/agent/table.h>
-#include <net-snmp/agent/table_container.h>
 #include <net-snmp/library/container.h>
 #include <net-snmp/library/snmp_assert.h>
 
@@ -313,6 +314,24 @@ netsnmp_container_table_register(netsnmp_handler_registration *reginfo,
     netsnmp_inject_handler(reginfo, handler );
 
     return netsnmp_register_table(reginfo, tabreg);
+}
+
+int
+netsnmp_container_table_unregister(netsnmp_handler_registration *reginfo)
+{
+    container_table_data *tad;
+
+    if (!reginfo)
+        return MIB_UNREGISTRATION_FAILED;
+    tad = (container_table_data *)
+        netsnmp_find_handler_data_by_name(reginfo, "table_container");
+    if (tad) {
+        CONTAINER_FREE( tad->table );
+        tad->table = NULL;
+        free(tad);
+        reginfo->handler->myvoid = NULL;
+    }
+    return netsnmp_unregister_table( reginfo );
 }
 
 /** retrieve the container used by the table_container helper */

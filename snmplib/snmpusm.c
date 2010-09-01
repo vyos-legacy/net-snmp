@@ -489,7 +489,7 @@ usm_calc_offsets(size_t globalDataLen,  /* SNMPv3Message + HeaderData */
      * Calculate lengths.
      */
     if ((engIDlen = asn_predict_length(ASN_OCTET_STR,
-                                       0, secEngineIDLen)) == -1) {
+                                       NULL, secEngineIDLen)) == -1) {
         return -1;
     }
 
@@ -505,29 +505,31 @@ usm_calc_offsets(size_t globalDataLen,  /* SNMPv3Message + HeaderData */
         return -1;
     }
 
-    if ((namelen = asn_predict_length(ASN_OCTET_STR, 0, secNameLen)) == -1) {
+    if ((namelen = asn_predict_length(ASN_OCTET_STR,
+                                      NULL, secNameLen)) == -1) {
         return -1;
     }
 
     if ((authlen = asn_predict_length(ASN_OCTET_STR,
-                                      0, *msgAuthParmLen)) == -1) {
+                                      NULL, *msgAuthParmLen)) == -1) {
         return -1;
     }
 
     if ((privlen = asn_predict_length(ASN_OCTET_STR,
-                                      0, *msgPrivParmLen)) == -1) {
+                                      NULL, *msgPrivParmLen)) == -1) {
         return -1;
     }
 
     *seq_len =
         engIDlen + engBtlen + engTmlen + namelen + authlen + privlen;
 
-    if ((*otstlen = asn_predict_length(ASN_SEQUENCE, 0, *seq_len)) == -1) {
+    if ((*otstlen = asn_predict_length(ASN_SEQUENCE,
+                                       NULL, *seq_len)) == -1) {
         return -1;
     }
 
     if ((*msgSecParmLen = asn_predict_length(ASN_OCTET_STR,
-                                             0, *otstlen)) == -1) {
+                                             NULL, *otstlen)) == -1) {
         return -1;
     }
 
@@ -555,7 +557,7 @@ usm_calc_offsets(size_t globalDataLen,  /* SNMPv3Message + HeaderData */
         scopedPduLen = ROUNDUP8(scopedPduLen);
 
         if ((*datalen =
-             asn_predict_length(ASN_OCTET_STR, 0, scopedPduLen)) == -1) {
+             asn_predict_length(ASN_OCTET_STR, NULL, scopedPduLen)) == -1) {
             return -1;
         }
     } else {
@@ -1358,7 +1360,7 @@ usm_rgenerate_out_msg(int msgProcModel, /* (UNUSED) */
     size_t          sp_offset = 0, mac_offset = 0;
     int             rc = 0;
 
-    DEBUGMSGTL(("usm", "USM processing has begun (offset %d)\n", *offset));
+    DEBUGMSGTL(("usm", "USM processing has begun (offset %d)\n", (int)*offset));
 
     if (secStateRef != NULL) {
         /*
@@ -1486,7 +1488,7 @@ usm_rgenerate_out_msg(int msgProcModel, /* (UNUSED) */
         if ((ciphertext = (u_char *) malloc(ciphertextlen)) == NULL) {
             DEBUGMSGTL(("usm",
                         "couldn't malloc %d bytes for encrypted PDU\n",
-                        ciphertextlen));
+                        (int)ciphertextlen));
             usm_free_usmStateReference(secStateRef);
             return SNMPERR_MALLOC;
         }
@@ -1563,6 +1565,7 @@ usm_rgenerate_out_msg(int msgProcModel, /* (UNUSED) */
             SNMP_FREE(ciphertext);
             return SNMPERR_USM_ENCRYPTIONERROR;
         }
+
 #ifdef NETSNMP_ENABLE_TESTING_CODE
         if (debug_is_token_registered("usm/dump") == SNMPERR_SUCCESS) {
             dump_chunk("usm/dump", "salt + Encrypted form: ", salt,
@@ -2581,8 +2584,8 @@ usm_process_in_msg(int msgProcModel,    /* (UNUSED) */
 
             if (remaining % 8 != 0) {
                 DEBUGMSGTL(("usm",
-                            "Ciphertext is %lu bytes, not an integer multiple of 8 (rem %d)\n",
-                            remaining, remaining % 8));
+                            "Ciphertext is %lu bytes, not an integer multiple of 8 (rem %lu)\n",
+                            (unsigned long)remaining, (unsigned long)remaining % 8));
                 if (snmp_increment_statistic(STAT_USMSTATSDECRYPTIONERRORS) ==
                     0) {
                     DEBUGMSGTL(("usm", "%s\n", "Failed increment statistic."));
@@ -2719,7 +2722,7 @@ init_usm(void)
 {
     struct snmp_secmod_def *def;
 
-    DEBUGMSGTL(("init_usm", "unit_usm: %d %d\n", usmNoPrivProtocol[0],
+    DEBUGMSGTL(("init_usm", "unit_usm: %lu %lu\n", usmNoPrivProtocol[0],
                 usmNoPrivProtocol[1]));
 
     sc_init();                  /* initalize scapi code */
@@ -2728,6 +2731,8 @@ init_usm(void)
      * register ourselves as a security service 
      */
     def = SNMP_MALLOC_STRUCT(snmp_secmod_def);
+    if (def == NULL)
+        return;
     /*
      * XXX: def->init_sess_secmod move stuff from snmp_api.c 
      */
@@ -2878,7 +2883,7 @@ usm_check_secLevel(int level, struct usmUser *user)
     if (user->userStatus != RS_ACTIVE)
         return -1;
 
-    DEBUGMSGTL(("comparex", "Comparing: %d %d ", usmNoPrivProtocol[0],
+    DEBUGMSGTL(("comparex", "Comparing: %lu %lu ", usmNoPrivProtocol[0],
                 usmNoPrivProtocol[1]));
     DEBUGMSGOID(("comparex", usmNoPrivProtocol,
                  sizeof(usmNoPrivProtocol) / sizeof(oid)));
@@ -3027,9 +3032,6 @@ usm_get_user_from_list(u_char * engineID, size_t engineIDLen,
  * engineIDLength then the engineID then the name length then the name
  * to facilitate getNext calls on a usmUser table which is indexed by
  * these values.
- * 
- * Note: userList must not be NULL (obviously), as thats a rather trivial
- * addition and is left to the API user.
  * 
  * returns the head of the list (which could change due to this add).
  */
@@ -3516,11 +3518,8 @@ usm_save_user(struct usmUser *user, const char *token, const char *type)
                                       user->privKeyLen);
     *cptr++ = ' ';
     cptr = read_config_save_octet_string(cptr, user->userPublicString,
-                                         (user->userPublicString ==
-                                          NULL) ? 0 : strlen((char *)
-                                                             user->
-                                                             userPublicString)
-                                         + 1);
+                                         user->userPublicStringLen);
+
     read_config_store(type, line);
 }
 
@@ -3596,7 +3595,7 @@ usm_read_user(char *line)
     }
 
     line = read_config_read_octet_string(line, &user->userPublicString,
-                                         &len);
+                                         &user->userPublicStringLen);
     return user;
 }
 

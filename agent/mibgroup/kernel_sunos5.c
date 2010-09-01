@@ -45,6 +45,7 @@
 #include <kstat.h>
 #include <errno.h>
 #include <time.h>
+#include <ctype.h>
 
 #include <sys/sockio.h>
 #include <sys/socket.h>
@@ -81,7 +82,7 @@ kstat_ctl_t    *kstat_fd = 0;
 static
 mibcache        Mibcache[MIBCACHE_SIZE+1] = {
     {MIB_SYSTEM, 0, (void *) -1, 0, 0, 0, 0},
-    {MIB_INTERFACES, 10 * sizeof(mib2_ifEntry_t), (void *) -1, 0, 30, 0,
+    {MIB_INTERFACES, 50 * sizeof(mib2_ifEntry_t), (void *) -1, 0, 30, 0,
      0},
     {MIB_AT, 0, (void *) -1, 0, 0, 0, 0},
     {MIB_IP, sizeof(mib2_ip_t), (void *) -1, 0, 60, 0, 0},
@@ -103,6 +104,13 @@ mibcache        Mibcache[MIBCACHE_SIZE+1] = {
     {MIB_TRANSMISSION, 0, (void *) -1, 0, 0, 0, 0},
     {MIB_SNMP, 0, (void *) -1, 0, 0, 0, 0},
 #ifdef SOLARIS_HAVE_IPV6_MIB_SUPPORT
+#ifdef SOLARIS_HAVE_RFC4293_SUPPORT
+    {MIB_IP_TRAFFIC_STATS, 20 * sizeof(mib2_ipIfStatsEntry_t), (void *)-1, 0,
+     30, 0, 0},
+    {MIB_IP6, 20 * sizeof(mib2_ipIfStatsEntry_t), (void *)-1, 0, 30, 0, 0},
+#else
+    {MIB_IP6, 20 * sizeof(mib2_ipv6IfStatsEntry_t), (void *)-1, 0, 30, 0, 0},
+#endif
     {MIB_IP6_ADDR, 20 * sizeof(mib2_ipv6AddrEntry_t), (void *)-1, 0, 30, 0, 0},
     {MIB_TCP6_CONN, 1000 * sizeof(mib2_tcp6ConnEntry_t), (void *) -1, 0, 30,
      0, 0},
@@ -131,6 +139,10 @@ mibmap          Mibmap[MIBCACHE_SIZE+1] = {
     {MIB2_TRANSMISSION, 0,},
     {MIB2_SNMP, 0,},
 #ifdef SOLARIS_HAVE_IPV6_MIB_SUPPORT
+#ifdef SOLARIS_HAVE_RFC4293_SUPPORT
+    {MIB2_IP, MIB2_IP_TRAFFIC_STATS},
+#endif
+    {MIB2_IP6, 0},
     {MIB2_IP6, MIB2_IP6_ADDR},
     {MIB2_TCP6, MIB2_TCP6_CONN},
     {MIB2_UDP6, MIB2_UDP6_ENTRY},
@@ -149,7 +161,7 @@ getentry(req_e req_type, void *bufaddr, size_t len, size_t entrysize,
          void *resp, int (*comp)(void *, void *), void *arg);
 
 static int
-getmib(int groupname, int subgroupname, void *statbuf, size_t size,
+getmib(int groupname, int subgroupname, void **statbuf, size_t *size,
        size_t entrysize, req_e req_type, void *resp, size_t *length,
        int (*comp)(void *, void *), void *arg);
 
@@ -348,7 +360,8 @@ getKstat(const char *statname, const char *varname, void *value)
     kstat_ctl_t    *ksc;
     kstat_t        *ks, *kstat_data;
     kstat_named_t  *d;
-    size_t          i, instance;
+    uint_t          i;
+    int             instance;
     char            module_name[64];
     int             ret;
     u_longlong_t    val;    /* The largest value */
@@ -700,8 +713,8 @@ getMibstat(mibgroup_e grid, void *resp, size_t entrysize,
 		       cachep->cache_size, req_type,
 		       (mib2_ifEntry_t *) & ep, &length, comp, arg);
 	} else {
-	    rc = getmib(mibgr, mibtb, cachep->cache_addr,
-			cachep->cache_size, entrysize, req_type, &ep,
+	    rc = getmib(mibgr, mibtb, &(cachep->cache_addr),
+			&(cachep->cache_size), entrysize, req_type, &ep,
 			&length, comp, arg);
 	}
 
@@ -843,7 +856,7 @@ init_mibcache_element(mibcache * cp)
  */
 
 static int
-getmib(int groupname, int subgroupname, void *statbuf, size_t size,
+getmib(int groupname, int subgroupname, void **statbuf, size_t *size,
        size_t entrysize, req_e req_type, void *resp,
        size_t *length, int (*comp)(void *, void *), void *arg)
 {
@@ -855,6 +868,7 @@ getmib(int groupname, int subgroupname, void *statbuf, size_t size,
     struct T_error_ack *tea = (struct T_error_ack *) buf;
     struct opthdr  *req;
     found_e         result = FOUND;
+    size_t oldsize;
 
     DEBUGMSGTL(("kernel_sunos5", "...... getmib (%d, %d, ...)\n",
 		groupname, subgroupname));
@@ -904,7 +918,16 @@ getmib(int groupname, int subgroupname, void *statbuf, size_t size,
     req = (struct opthdr *)(tor + 1);
     req->level = groupname;
     req->name = subgroupname;
+    /*
+     * non-zero len field is used to request extended MIB statistics
+     * on Solaris 10 Update 4 and later. The LEGACY_MIB_SIZE macro is only
+     * available for S10U4+, so we use that to see what action to take.
+     */
+#ifdef LEGACY_MIB_SIZE
+    req->len = 1;	/* ask for extended MIBs */
+#else
     req->len = 0;
+#endif
     strbuf.len = tor->OPT_length + tor->OPT_offset;
     flags = 0;
     if ((rc = putmsg(sd, &strbuf, NULL, flags))) {
@@ -959,8 +982,8 @@ getmib(int groupname, int subgroupname, void *statbuf, size_t size,
 	 * reducing the number of getmsg calls
 	 */
 
-	strbuf.buf = statbuf;
-	strbuf.maxlen = size;
+	strbuf.buf = *statbuf;
+	strbuf.maxlen = *size;
 	strbuf.len = 0;
 	flags = 0;
 	do {
@@ -975,7 +998,22 @@ getmib(int groupname, int subgroupname, void *statbuf, size_t size,
 		goto Return;
 
 	    case MOREDATA:
+		oldsize = ( ((void *)strbuf.buf) - *statbuf) + strbuf.len;
+		strbuf.buf = (void *)realloc(*statbuf,oldsize+4096);
+		if(strbuf.buf != NULL) {
+		    *statbuf = strbuf.buf;
+		    *size = oldsize + 4096;
+		    strbuf.buf = *statbuf + oldsize;
+		    strbuf.maxlen = 4096;
+		    break;
+		}
+		strbuf.buf = *statbuf + (oldsize - strbuf.len);
 	    case 0:
+		/* fix buffer to real size & position */
+		strbuf.len += ((void *)strbuf.buf) - *statbuf;
+		strbuf.buf = *statbuf;
+		strbuf.maxlen = *size;
+
 		if (req_type == GET_NEXT && result == NEED_NEXT)
 		    /*
 		     * End of buffer, so "next" is the first item in the next
@@ -988,6 +1026,8 @@ getmib(int groupname, int subgroupname, void *statbuf, size_t size,
 		break;
 	    }
 	} while (rc == MOREDATA && result != FOUND);
+
+	DEBUGMSGTL(("kernel_sunos5", "...... getmib buffer size is %d\n", *size));
 
 	if (result == FOUND) {      /* Search is successful */
 	    if (rc != MOREDATA) {
@@ -1746,13 +1786,9 @@ get_if_stats(mib2_ifEntry_t *ifp)
     if (ifp->ifType == 24)  /* Loopback */
         return (0);
 
-    if (getKstatInt(NULL, name, "ierrors", &ifp->ifInErrors) != 0) {
-        return (-1);
-    }
-
-    if (getKstatInt(NULL, name, "oerrors", &ifp->ifOutErrors) != 0) {
-        return (-1);
-    }
+    /* some? VLAN interfaces don't have error counters, so ignore failure */
+    getKstatInt(NULL, name, "ierrors", &ifp->ifInErrors);
+    getKstatInt(NULL, name, "oerrors", &ifp->ifOutErrors);
 
     /* Try to grab some additional information */
     getKstatInt(NULL, name, "collisions", &ifp->ifCollisions); 

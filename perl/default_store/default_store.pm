@@ -1,6 +1,7 @@
 package NetSNMP::default_store;
 
 use strict;
+use warnings;
 use Carp;
 
 require Exporter;
@@ -199,7 +200,7 @@ use vars qw(@ISA %EXPORT_TAGS @EXPORT_OK @EXPORT $VERSION $AUTOLOAD);
 				   NETSNMP_DS_LIB_KSM_SERVICE_NAME
 				   NETSNMP_DS_LIB_SBSM_LOCAL_PWD
 );
-$VERSION = '5.04021';
+$VERSION = '5.05';
 
 sub AUTOLOAD {
     # This AUTOLOAD is used to 'autoload' constants from the constant()

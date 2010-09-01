@@ -9,12 +9,13 @@
 extern          "C" {
 #endif
 
-#define MAX_ENGINEID_LENGTH 128
+#define MAX_ENGINEID_LENGTH 32 /* per SNMP-FRAMEWORK-MIB SnmpEngineID TC */
 
 #define ENGINEID_TYPE_IPV4    1
 #define ENGINEID_TYPE_IPV6    2
 #define ENGINEID_TYPE_MACADDR 3
 #define ENGINEID_TYPE_TEXT    4
+#define ENGINEID_TYPE_EXACT   5
 #define ENGINEID_TYPE_NETSNMP_RND 128
 
 #define	DEFAULT_NIC "eth0"

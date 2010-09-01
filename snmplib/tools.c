@@ -233,7 +233,7 @@ malloc_random(size_t * size)
  *	@return SNMPERR_SUCCESS	on success, SNMPERR_GENERR on failure.
  */
 int
-memdup(u_char ** to, const u_char * from, size_t size)
+memdup(u_char ** to, const void * from, size_t size)
 {
     if (to == NULL)
         return SNMPERR_GENERR;
@@ -771,7 +771,7 @@ marker_t
 atime_newMarker(void)
 {
     marker_t        pm = (marker_t) calloc(1, sizeof(struct timeval));
-    gettimeofday((struct timeval *) pm, 0);
+    gettimeofday((struct timeval *) pm, NULL);
     return pm;
 }
 
@@ -784,7 +784,7 @@ atime_setMarker(marker_t pm)
     if (!pm)
         return;
 
-    gettimeofday((struct timeval *) pm, 0);
+    gettimeofday((struct timeval *) pm, NULL);
 }
 
 

@@ -4,6 +4,12 @@
 
 #include <net-snmp/net-snmp-config.h>
 
+/* workaround for bug in autoconf 2.60b and 2.61 */
+#ifdef HAVE_GETMNTENT
+#undef HAVE_GETMNTENT
+#define HAVE_GETMNTENT 1 /* previously might be only "#define HAVE_GETMNTENT" */
+#endif
+
 #include <stdio.h>
 
 #if HAVE_STDLIB_H
@@ -135,7 +141,7 @@
 
 #include "struct.h"
 #include "disk.h"
-#include "util_funcs.h"
+#include "util_funcs/header_simple_table.h"
 #if USING_UCD_SNMP_ERRORMIB_MODULE
 #include "errormib.h"
 #else
@@ -163,29 +169,51 @@ struct diskpart {
     int             minpercent;
 };
 
+#define MAX_INT_32 0x7fffffff
+#define MAX_UINT_32 0xffffffff
+
 int             numdisks;
 int             allDisksIncluded = 0;
 int             maxdisks = 0;
 struct diskpart *disks;
 
 struct variable2 extensible_disk_variables[] = {
-  {MIBINDEX, ASN_INTEGER, RONLY, var_extensible_disk, 1, {MIBINDEX}},
-  {ERRORNAME, ASN_OCTET_STR, RONLY, var_extensible_disk, 1, {ERRORNAME}},
-  {DISKDEVICE, ASN_OCTET_STR, RONLY, var_extensible_disk, 1,
-   {DISKDEVICE}},
-  {DISKMINIMUM, ASN_INTEGER, RONLY, var_extensible_disk, 1,
-   {DISKMINIMUM}},
-  {DISKMINPERCENT, ASN_INTEGER, RONLY, var_extensible_disk, 1,
-   {DISKMINPERCENT}},
-  {DISKTOTAL, ASN_INTEGER, RONLY, var_extensible_disk, 1, {DISKTOTAL}},
-  {DISKAVAIL, ASN_INTEGER, RONLY, var_extensible_disk, 1, {DISKAVAIL}},
-  {DISKUSED, ASN_INTEGER, RONLY, var_extensible_disk, 1, {DISKUSED}},
-  {DISKPERCENT, ASN_INTEGER, RONLY, var_extensible_disk, 1,
-   {DISKPERCENT}},
-  {DISKPERCENTNODE, ASN_INTEGER, RONLY, var_extensible_disk, 1,
-   {DISKPERCENTNODE}},
-  {ERRORFLAG, ASN_INTEGER, RONLY, var_extensible_disk, 1, {ERRORFLAG}},
-  {ERRORMSG, ASN_OCTET_STR, RONLY, var_extensible_disk, 1, {ERRORMSG}}
+  {MIBINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {MIBINDEX}},
+  {ERRORNAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {ERRORNAME}},
+  {DISKDEVICE, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {DISKDEVICE}},
+  {DISKMINIMUM, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {DISKMINIMUM}},
+  {DISKMINPERCENT, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {DISKMINPERCENT}},
+  {DISKTOTAL, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {DISKTOTAL}},
+  {DISKAVAIL, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {DISKAVAIL}},
+  {DISKUSED, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {DISKUSED}},
+  {DISKPERCENT, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {DISKPERCENT}},
+  {DISKPERCENTNODE, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {DISKPERCENTNODE}},
+  {ERRORFLAG, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {ERRORFLAG}},
+  {ERRORMSG, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+   var_extensible_disk, 1, {ERRORMSG}},
+   {DISKTOTALLOW, ASN_UNSIGNED, NETSNMP_OLDAPI_RONLY,
+    var_extensible_disk, 1, {DISKTOTALLOW}},
+   {DISKTOTALHIGH, ASN_UNSIGNED, NETSNMP_OLDAPI_RONLY,
+    var_extensible_disk, 1, {DISKTOTALHIGH}},
+   {DISKAVAILLOW, ASN_UNSIGNED, NETSNMP_OLDAPI_RONLY,
+    var_extensible_disk, 1, {DISKAVAILLOW}},
+   {DISKAVAILHIGH, ASN_UNSIGNED, NETSNMP_OLDAPI_RONLY,
+    var_extensible_disk, 1, {DISKAVAILHIGH}},
+   {DISKUSEDLOW, ASN_UNSIGNED, NETSNMP_OLDAPI_RONLY,
+    var_extensible_disk, 1, {DISKUSEDLOW}},
+   {DISKUSEDHIGH, ASN_UNSIGNED, NETSNMP_OLDAPI_RONLY,
+    var_extensible_disk, 1, {DISKUSEDHIGH}},
 };
 
 /*
@@ -231,7 +259,6 @@ static void
 disk_parse_config(const char *token, char *cptr)
 {
 #if HAVE_FSTAB_H || HAVE_GETMNTENT || HAVE_STATFS
-  char            tmpbuf[1024];
   char            path[STRMAX];
   int             minpercent;
   int             minspace;
@@ -242,9 +269,7 @@ disk_parse_config(const char *token, char *cptr)
           disks = malloc(maxdisks * sizeof(struct diskpart));
           if (!disks) {
               config_perror("malloc failed for new disk allocation.");
-              sprintf(tmpbuf, "\tignoring:  %s", cptr);
-              tmpbuf[ sizeof(tmpbuf)-1 ] = 0;
-              config_perror(tmpbuf);
+	      netsnmp_config_error("\tignoring:  %s", cptr);
               return;
           }
           memset(disks, 0, maxdisks * sizeof(struct diskpart));
@@ -253,9 +278,7 @@ disk_parse_config(const char *token, char *cptr)
           disks = realloc(disks, maxdisks * sizeof(struct diskpart));
           if (!disks) {
               config_perror("malloc failed for new disk allocation.");
-              sprintf(tmpbuf, "\tignoring:  %s", cptr);
-              tmpbuf[ sizeof(tmpbuf)-1 ] = 0;
-              config_perror(tmpbuf);
+	      netsnmp_config_error("\tignoring:  %s", cptr);
               return;
           }
           memset(disks + maxdisks/2, 0, maxdisks/2 * sizeof(struct diskpart));
@@ -273,7 +296,7 @@ disk_parse_config(const char *token, char *cptr)
    * read optional minimum disk usage spec 
    */
   if(cptr != NULL) {
-      if(strchr(cptr, '%') == 0) {
+      if(strchr(cptr, '%') == NULL) {
           minspace = atoi(cptr);
           minpercent = -1;
       }
@@ -298,7 +321,6 @@ static void
 disk_parse_config_all(const char *token, char *cptr)
 {
 #if HAVE_FSTAB_H || HAVE_GETMNTENT || HAVE_STATFS
-  char            tmpbuf[1024];
   int             minpercent = DISKMINPERCENT;
     
   if (numdisks == maxdisks) {
@@ -307,8 +329,7 @@ disk_parse_config_all(const char *token, char *cptr)
           disks = malloc(maxdisks * sizeof(struct diskpart));
           if (!disks) {
               config_perror("malloc failed for new disk allocation.");
-              sprintf(tmpbuf, "\tignoring:  %s", cptr);
-              config_perror(tmpbuf);
+	      netsnmp_config_error("\tignoring:  %s", cptr);
               return;
           }
           memset(disks, 0, maxdisks * sizeof(struct diskpart));
@@ -317,8 +338,7 @@ disk_parse_config_all(const char *token, char *cptr)
           disks = realloc(disks, maxdisks * sizeof(struct diskpart));
           if (!disks) {
               config_perror("malloc failed for new disk allocation.");
-              sprintf(tmpbuf, "\tignoring:  %s", cptr);
-              config_perror(tmpbuf);
+	      netsnmp_config_error("\tignoring:  %s", cptr);
               return;
           }
           memset(disks + maxdisks/2, 0, maxdisks/2 * sizeof(struct diskpart));
@@ -328,7 +348,7 @@ disk_parse_config_all(const char *token, char *cptr)
    * read the minimum disk usage percent
    */
   if(cptr != NULL) {
-      if(strchr(cptr, '%') != 0) {
+      if(strchr(cptr, '%') != NULL) {
           minpercent = atoi(cptr);
       }
   }
@@ -340,8 +360,7 @@ disk_parse_config_all(const char *token, char *cptr)
    */
   if(allDisksIncluded) {
       config_perror("includeAllDisks already specified.");
-      sprintf(tmpbuf, "\tignoring: includeAllDisks %s", cptr);
-      config_perror(tmpbuf);
+      netsnmp_config_error("\tignoring: includeAllDisks %s", cptr);
   }
   else {
       allDisksIncluded = 1;
@@ -365,10 +384,7 @@ add_device(char *path, char *device, int minspace, int minpercent, int override)
           maxdisks = 50;
           disks = malloc(maxdisks * sizeof(struct diskpart));
           if (!disks) {
-              char tmpbuf[1024];
-              snprintf(tmpbuf, sizeof(tmpbuf), "\tignoring:  %s", device);
-              tmpbuf[ sizeof(tmpbuf)-1 ] = 0;
-              config_perror(tmpbuf);
+	      netsnmp_config_error("\tignoring:  %s", device);
               return;
           }
           memset(disks, 0, maxdisks * sizeof(struct diskpart));
@@ -376,11 +392,8 @@ add_device(char *path, char *device, int minspace, int minpercent, int override)
           maxdisks *= 2;
           disks = realloc(disks, maxdisks * sizeof(struct diskpart));
           if (!disks) {
-              char tmpbuf[1024];
               config_perror("malloc failed for new disk allocation.");
-              snprintf(tmpbuf, sizeof(tmpbuf), "\tignoring:  %s", device);
-              tmpbuf[ sizeof(tmpbuf)-1 ] = 0;
-              config_perror(tmpbuf);
+	      netsnmp_config_error("\tignoring:  %s", device);
               return;
           }
           memset(disks + maxdisks/2, 0, maxdisks/2 * sizeof(struct diskpart));
@@ -450,7 +463,7 @@ find_and_add_allDisks(int minpercent)
 #endif
 
   int dummy = 0;
-  char            tmpbuf[1024];
+
   /* 
    * find the device for the path and copy the device into the
    * string declared above and at the end of the routine return it
@@ -461,8 +474,7 @@ find_and_add_allDisks(int minpercent)
 #if HAVE_SETMNTENT
   mntfp = setmntent(ETC_MNTTAB, "r");
   if (!mntfp) {
-      snprintf( tmpbuf, sizeof(tmpbuf), "Can't open %s (setmntent)\n", ETC_MNTTAB );
-      config_perror(tmpbuf);
+      netsnmp_config_error("Can't open %s (setmntent)\n", ETC_MNTTAB);
       return;
   }
   while (mntfp && NULL != (mntent = getmntent(mntfp))) {
@@ -479,8 +491,7 @@ find_and_add_allDisks(int minpercent)
 #else                           /* getmentent but not setmntent */
   mntfp = fopen(ETC_MNTTAB, "r");
   if (!mntfp) {
-      snprintf( tmpbuf, sizeof(tmpbuf), "Can't open %s (fopen)\n", ETC_MNTTAB );
-      config_perror(tmpbuf);
+      netsnmp_config_error("Can't open %s (fopen)\n", ETC_MNTTAB);
       return;
   }
   while ((i = getmntent(mntfp, &mnttab)) == 0) {
@@ -519,11 +530,8 @@ find_and_add_allDisks(int minpercent)
     if (numdisks == maxdisks) {
       return;
     }
-    snprintf(tmpbuf, sizeof(tmpbuf),
-             "Couldn't find device for disk %s",
-             disks[numdisks].path);
-    tmpbuf[ sizeof(tmpbuf)-1 ] = 0;
-    config_pwarn(tmpbuf);
+    netsnmp_config_warn("Couldn't find device for disk %s",
+			disks[numdisks].path);
     disks[numdisks].minimumspace = -1;
     disks[numdisks].minpercent = -1;
     disks[numdisks].path[0] = 0;
@@ -550,7 +558,6 @@ find_device(char *path)
 #elif HAVE_STATFS
   struct statfs   statf;
 #endif
-  char            tmpbuf[1024];
   static char     device[STRMAX];
 #if defined(HAVE_GETMNTENT) && !defined(HAVE_SETMNTENT)
   int             i;
@@ -568,8 +575,7 @@ find_device(char *path)
 #if HAVE_SETMNTENT
   mntfp = setmntent(ETC_MNTTAB, "r");
   if (!mntfp) {
-      snprintf( tmpbuf, sizeof(tmpbuf), "Can't open %s (setmntent)\n", ETC_MNTTAB );
-      config_perror(tmpbuf);
+      netsnmp_config_error("Can't open %s (setmntent)\n", ETC_MNTTAB);
       return NULL;
   }
   while (mntfp && NULL != (mntent = getmntent(mntfp)))
@@ -588,8 +594,7 @@ find_device(char *path)
 #else                           /* getmentent but not setmntent */
   mntfp = fopen(ETC_MNTTAB, "r");
   if (!mntfp) {
-      snprintf( tmpbuf, sizeof(tmpbuf), "Can't open %s (fopen)\n", ETC_MNTTAB );
-      config_perror(tmpbuf);
+      netsnmp_config_error("Can't open %s (fopen)\n", ETC_MNTTAB);
       return NULL;
   }
   while ((i = getmntent(mntfp, &mnttab)) == 0)
@@ -628,9 +633,7 @@ find_device(char *path)
   }
 #endif
   else {
-    sprintf(tmpbuf, "Couldn't find device for disk %s",
-	    path);
-    config_pwarn(tmpbuf);
+    netsnmp_config_warn("Couldn't find device for disk %s", path);
   }
 #else
   config_perror("'disk' checks not supported on this architecture.");
@@ -638,38 +641,31 @@ find_device(char *path)
   return device;
 }
 
-
 /*
- * var_extensible_disk(...
- * Arguments:
- * vp     IN      - pointer to variable entry that points here
- * name    IN/OUT  - IN/name requested, OUT/name found
- * length  IN/OUT  - length of IN/OUT oid's 
- * exact   IN      - TRUE if an exact match was requested
- * var_len OUT     - length of variable or 0 if function returned
- * write_method
- * 
+ * Part of UCD-SNMP-MIB::dskEntry, which is so hard to fill 
+ * (i.e. platform dependent parts).
  */
-u_char         *
-var_extensible_disk(struct variable *vp,
-                    oid * name,
-                    size_t * length,
-                    int exact,
-                    size_t * var_len, WriteMethod ** write_method)
-{
+struct dsk_entry {
+    unsigned long long  dskTotal;
+    unsigned long long  dskUsed;
+    unsigned long long  dskAvail;
+    unsigned long       dskPercent;
+    unsigned long       dskPercentInode;
+    unsigned long       dskErrorFlag;
+};
 
-    int             percent, iserror, disknum = 0;
+/**
+ * Fill in the provided dsk_entry structure.
+ * Returns -1 on error, 0 on success.
+ */
+
+static int
+fill_dsk_entry(int disknum, struct dsk_entry *entry)
+{
+    float           multiplier;
 #if !defined(HAVE_SYS_STATVFS_H) && !defined(HAVE_STATFS)
     double          totalblks, free, used, avail, availblks;
-#else
-    static long     avail;
-#if defined(STRUCT_STATVFS_HAS_F_FILES) || defined(STRUCT_STATFS_HAS_F_FILES)
-    int             percent_inode;
 #endif
-#endif
-    static long     long_ret;
-    static char     errmsg[300];
-    float           multiplier;
 
 #if defined(HAVE_STATVFS) || defined(HAVE_STATFS)
 #ifdef STAT_STATFS_FS_DATA
@@ -690,6 +686,131 @@ var_extensible_disk(struct variable *vp,
 #define filesys sb.iu_fs
 #endif
 #endif
+
+    entry->dskPercentInode = -1;
+
+#if defined(HAVE_STATVFS) || defined(HAVE_STATFS)
+#ifdef STAT_STATFS_FS_DATA
+    if (statvfs(disks[disknum].path, &fsd) == -1)
+#else
+    if (statvfs(disks[disknum].path, &vfs) == -1)
+#endif
+    {
+        snmp_log(LOG_ERR, "Couldn't open device %s\n",
+                 disks[disknum].device);
+        setPerrorstatus("statvfs dev/disk");
+        return -1;
+    }
+#ifdef STAT_STATFS_FS_DATA
+    vfs.f_blocks = fsd.fd_btot;
+    vfs.f_bfree = fsd.fd_bfree;
+    vfs.f_bavail = fsd.fd_bfreen;
+    vfs.f_bsize = 1024;         /*  Ultrix f_bsize is a VM parameter apparently.  */
+#endif
+#if defined(HAVE_ODS)
+    vfs.f_blocks = vfs.f_spare[0];
+    vfs.f_bfree = vfs.f_spare[1];
+    vfs.f_bavail = vfs.f_spare[2];
+#endif
+
+    multiplier = (float)vfs.f_bsize / (float)1024.0;
+#ifdef HAVE_STRUCT_STATVFS_F_FRSIZE
+    if (vfs.f_frsize > 255)
+        multiplier = (float)vfs.f_frsize / (float)1024.0;
+#endif
+
+    entry->dskTotal = (unsigned long long)(vfs.f_blocks * multiplier);
+    entry->dskAvail = (unsigned long long)(vfs.f_bavail * multiplier);
+    entry->dskUsed = (unsigned long long)((vfs.f_blocks - vfs.f_bfree) * multiplier);
+
+    entry->dskPercent = 
+        vfs.f_blocks == 0 ? 0 :
+        vfs.f_bavail <= 0 ? 100 :
+        (int) ((double) (vfs.f_blocks - vfs.f_bfree) /
+               (double) (vfs.f_blocks -
+                         (vfs.f_bfree - vfs.f_bavail)) * 100.0 + 0.5);
+
+#if defined(HAVE_STRUCT_STATVFS_F_FILES) || defined HAVE_STRUCT_STATFS_F_FAVAIL
+    entry->dskPercentInode = vfs.f_favail <= 0 ? 100 :
+        (int) ((double) (vfs.f_files - vfs.f_ffree) /
+               (double) (vfs.f_files -
+                         (vfs.f_ffree - vfs.f_favail)) * 100.0 + 0.5);
+#else
+#if defined(HAVE_STRUCT_STATFS_F_FILES) && defined(HAVE_STRUCT_STATFS_F_FFREE)
+    entry->dskPercentInode = vfs.f_files == 0 ? 100.0 :
+      (int) ((double) (vfs.f_files - vfs.f_ffree) /
+              (double) (vfs.f_files) * 100.0 + 0.5);
+#endif 
+#endif /* defined(HAVE_STRUCT_STATVFS_F_FILES) */
+
+#else
+#if HAVE_FSTAB_H
+    /*
+     * read the disk information 
+     */
+    if ((file = open(disks[disknum].device, 0)) < 0) {
+        snmp_log(LOG_ERR, "Couldn't open device %s\n",
+                 disks[disknum].device);
+        setPerrorstatus("open dev/disk");
+        return -1;
+    }
+    lseek(file, (long) (SBLOCK * DEV_BSIZE), 0);
+    if (read(file, (char *) &filesys, SBSIZE) != SBSIZE) {
+        setPerrorstatus("open dev/disk");
+        snmp_log(LOG_ERR, "Error reading device %s\n",
+                 disks[disknum].device);
+        close(file);
+        return -1;
+    }
+    close(file);
+
+    totalblks = filesys.fs_dsize;
+    free = filesys.fs_cstotal.cs_nbfree * filesys.fs_frag +
+        filesys.fs_cstotal.cs_nffree;
+    used = totalblks - free;
+    availblks = totalblks * (100 - filesys.fs_minfree) / 100;
+    avail = availblks > used ? availblks - used : 0;
+    entry->dskPercent =
+        totalblks == 0 ? 0 :
+        availblks == 0 ? 100 :
+        (int) ((double) used / (double) totalblks * 100.0 + 0.5);
+    multiplier = (float)filesys.fs_fsize / (float)1024.0;
+    entry->dskTotal = (unsigned long long)(totalblks * multiplier);
+    entry->dskAvail = (unsigned long long)(avail * multiplier);
+    entry->dskUsed = (unsigned long long)(used * multiplier);
+#endif
+#endif
+
+    entry->dskErrorFlag =
+        (disks[disknum].minimumspace >= 0
+            ? entry->dskAvail < disks[disknum].minimumspace
+            : 100 - entry->dskPercent <= disks[disknum].minpercent) ? 1 : 0;
+
+    return 0;
+}
+
+/*
+ * var_extensible_disk(...
+ * Arguments:
+ * vp     IN      - pointer to variable entry that points here
+ * name    IN/OUT  - IN/name requested, OUT/name found
+ * length  IN/OUT  - length of IN/OUT oid's 
+ * exact   IN      - TRUE if an exact match was requested
+ * var_len OUT     - length of variable or 0 if function returned
+ * write_method
+ * 
+ */
+u_char         *
+var_extensible_disk(struct variable *vp,
+                    oid * name,
+                    size_t * length,
+                    int exact,
+                    size_t * var_len, WriteMethod ** write_method)
+{
+    int             ret, disknum = 0;
+    struct dsk_entry entry;
+    static long     long_ret;
+    static char     errmsg[300];
 
 tryAgain:
     if (header_simple_table
@@ -713,170 +834,86 @@ tryAgain:
         long_ret = disks[disknum].minpercent;
         return ((u_char *) (&long_ret));
     }
-#if defined(HAVE_STATVFS) || defined(HAVE_STATFS)
-#ifdef STAT_STATFS_FS_DATA
-    if (statvfs(disks[disknum].path, &fsd) == -1)
-#else
-    if (statvfs(disks[disknum].path, &vfs) == -1)
-#endif
-    {
-        snmp_log(LOG_ERR, "Couldn't open device %s\n",
-                 disks[disknum].device);
-        setPerrorstatus("statvfs dev/disk");
+
+    ret = fill_dsk_entry(disknum, &entry);
+    if (ret < 0) {
         if (!exact)
             goto tryAgain;
         return NULL;
     }
-#ifdef STAT_STATFS_FS_DATA
-    vfs.f_blocks = fsd.fd_btot;
-    vfs.f_bfree = fsd.fd_bfree;
-    vfs.f_bavail = fsd.fd_bfreen;
-    vfs.f_bsize = 1024;         /*  Ultrix f_bsize is a VM parameter apparently.  */
-#endif
-#if defined(HAVE_ODS)
-    vfs.f_blocks = vfs.f_spare[0];
-    vfs.f_bfree = vfs.f_spare[1];
-    vfs.f_bavail = vfs.f_spare[2];
-#endif
-    percent =
-        vfs.f_blocks == 0 ? 0 :
-        vfs.f_bavail <= 0 ? 100 :
-        (int) ((double) (vfs.f_blocks - vfs.f_bfree) /
-               (double) (vfs.f_blocks -
-                         (vfs.f_bfree - vfs.f_bavail)) * 100.0 + 0.5);
-    multiplier = (float)vfs.f_bsize / (float)1024.0;
-#ifdef STRUCT_STATVFS_HAS_F_FRSIZE
-    if (vfs.f_frsize > 255)
-        multiplier = (float)vfs.f_frsize / (float)1024.0;
-#endif
-    avail = (long)(vfs.f_bavail * multiplier);
-    iserror = (disks[disknum].minimumspace >= 0 ?
-               avail < disks[disknum].minimumspace :
-               100 - percent <= disks[disknum].minpercent) ? 1 : 0;
-#if defined(STRUCT_STATVFS_HAS_F_FILES) || defined STRUCT_STATFS_HAS_F_FAVAIL
-    percent_inode = vfs.f_favail <= 0 ? 100 :
-        (int) ((double) (vfs.f_files - vfs.f_ffree) /
-               (double) (vfs.f_files -
-                         (vfs.f_ffree - vfs.f_favail)) * 100.0 + 0.5);
-#else
-#if defined(STRUCT_STATFS_HAS_F_FILES) && defined(STRUCT_STATFS_HAS_F_FFREE)
-   percent_inode = vfs.f_files == 0 ? 100.0 :
-      (int) ((double) (vfs.f_files - vfs.f_ffree) /
-	          (double) (vfs.f_files) * 100.0 + 0.5);
-#endif 
-#endif /* defined(STRUCT_STATVFS_HAS_F_FILES) */ 
+
     switch (vp->magic) {
     case DISKTOTAL:
-        long_ret = (long)(vfs.f_blocks * multiplier);
+        if (entry.dskTotal > MAX_INT_32)
+            long_ret = MAX_INT_32;
+        else
+            long_ret = (long)(entry.dskTotal);
         return ((u_char *) (&long_ret));
+    case DISKTOTALLOW:
+        long_ret = entry.dskTotal & MAX_UINT_32;
+        return ((u_char *) (&long_ret));
+    case DISKTOTALHIGH:
+        long_ret = entry.dskTotal >> 32;
+        return ((u_char *) (&long_ret));
+        
     case DISKAVAIL:
-        return ((u_char *) (&avail));
+        if (entry.dskAvail > MAX_INT_32)
+            long_ret = MAX_INT_32;
+        else
+            long_ret = (long)(entry.dskAvail);
+        return ((u_char *) (&long_ret));
+    case DISKAVAILLOW:
+        long_ret = entry.dskAvail & MAX_UINT_32;
+        return ((u_char *) (&long_ret));
+    case DISKAVAILHIGH:
+        long_ret = entry.dskAvail >> 32;
+        return ((u_char *) (&long_ret));
+
     case DISKUSED:
-        long_ret = (long)((vfs.f_blocks - vfs.f_bfree) * multiplier);
+        if (entry.dskUsed > MAX_INT_32)
+            long_ret = MAX_INT_32;
+        else
+            long_ret = (long)(entry.dskUsed);
         return ((u_char *) (&long_ret));
+    case DISKUSEDLOW:
+        long_ret = entry.dskUsed & MAX_UINT_32;
+        return ((u_char *) (&long_ret));
+    case DISKUSEDHIGH:
+        long_ret = entry.dskUsed >> 32;
+        return ((u_char *) (&long_ret));
+
     case DISKPERCENT:
-        long_ret = percent;
+        long_ret = entry.dskPercent;
         return ((u_char *) (&long_ret));
-#if defined(STRUCT_STATVFS_HAS_F_FILES) || defined (STRUCT_STATFS_HAS_F_FILES)
+
     case DISKPERCENTNODE:
-        long_ret = percent_inode;
-        return ((u_char *) (&long_ret));
-#endif
+        if (entry.dskPercentInode >= 0) {
+            long_ret = entry.dskPercentInode;
+            return ((u_char *) (&long_ret));
+        } else
+            return NULL;
+
     case ERRORFLAG:
-        long_ret = iserror;
+        long_ret = entry.dskErrorFlag;
         return ((u_char *) (&long_ret));
+
     case ERRORMSG:
-        if (iserror) {
+        if (entry.dskErrorFlag) {
             if (disks[disknum].minimumspace >= 0)
                 snprintf(errmsg, sizeof(errmsg),
                         "%s: less than %d free (= %d)",
                         disks[disknum].path, disks[disknum].minimumspace,
-                        (int) avail);
+                        (int) entry.dskAvail);
             else
                 snprintf(errmsg, sizeof(errmsg),
                         "%s: less than %d%% free (= %d%%)",
                         disks[disknum].path, disks[disknum].minpercent,
-                        percent);
+                        (int)entry.dskPercent);
             errmsg[ sizeof(errmsg)-1 ] = 0;
         } else
             errmsg[0] = 0;
         *var_len = strlen(errmsg);
         return ((u_char *) (errmsg));
     }
-#else
-#if HAVE_FSTAB_H
-    /*
-     * read the disk information 
-     */
-    if ((file = open(disks[disknum].device, 0)) < 0) {
-        snmp_log(LOG_ERR, "Couldn't open device %s\n",
-                 disks[disknum].device);
-        setPerrorstatus("open dev/disk");
-        if (!exact)
-            goto tryAgain;
-        return (NULL);
-    }
-    lseek(file, (long) (SBLOCK * DEV_BSIZE), 0);
-    if (read(file, (char *) &filesys, SBSIZE) != SBSIZE) {
-        setPerrorstatus("open dev/disk");
-        snmp_log(LOG_ERR, "Error reading device %s\n",
-                 disks[disknum].device);
-        close(file);
-        if (!exact)
-            goto tryAgain;
-        return (NULL);
-    }
-    close(file);
-    totalblks = filesys.fs_dsize;
-    free = filesys.fs_cstotal.cs_nbfree * filesys.fs_frag +
-        filesys.fs_cstotal.cs_nffree;
-    used = totalblks - free;
-    availblks = totalblks * (100 - filesys.fs_minfree) / 100;
-    avail = availblks > used ? availblks - used : 0;
-    percent =
-        totalblks == 0 ? 0 :
-        availblks == 0 ? 100 :
-        (int) ((double) used / (double) totalblks * 100.0 + 0.5);
-    multiplier = (float)filesys.fs_fsize / (float)1024.0;
-    iserror =
-        (disks[disknum].minimumspace >= 0
-            ? avail * multiplier < disks[disknum].minimumspace
-            : 100 - percent <= disks[disknum].minpercent) ? 1 : 0;
-    switch (vp->magic) {
-    case DISKTOTAL:
-        long_ret = (long)(totalblks * multiplier);
-        return ((u_char *) (&long_ret));
-    case DISKAVAIL:
-        long_ret = (long)(avail * multiplier);
-        return ((u_char *) (&long_ret));
-    case DISKUSED:
-        long_ret = (long)(used * multiplier);
-        return ((u_char *) (&long_ret));
-    case DISKPERCENT:
-        long_ret = percent;
-        return ((u_char *) (&long_ret));
-    case ERRORFLAG:
-        long_ret = iserror;
-        return ((u_char *) (&long_ret));
-    case ERRORMSG:
-        if (iserror) {
-            if (disks[disknum].minimumspace >= 0)
-                snprintf(errmsg, sizeof(errmsg),
-                        "%s: less than %d free (= %d)",
-                        disks[disknum].path, disks[disknum].minimumspace,
-                        avail * filesys.fs_fsize / 1024);
-            else
-                snprintf(errmsg, sizeof(errmsg),
-                        "%s: less than %d%% free (= %d%%)",
-                        disks[disknum].path, disks[disknum].minpercent,
-                        percent);
-            errmsg[ sizeof(errmsg)-1 ] = 0;
-        } else
-            errmsg[0] = 0;
-        *var_len = strlen(errmsg);
-        return ((u_char *) (errmsg));
-    }
-#endif
-#endif
     return NULL;
 }

@@ -1,10 +1,10 @@
 #! /bin/sh -e
 ### BEGIN INIT INFO
 # Provides:           snmpd snmptrapd
-# Required-Start:     $network $local_fs
-# Required-Stop:      $network $local_fs
+# Required-Start:     $network $remote_fs $syslog
+# Required-Stop:      $network $remote_fs $syslog
 # Default-Start:      2 3 4 5
-# Default-Stop:       0 6
+# Default-Stop:       0 1 6
 # Short-Description:  SNMP agents
 # Description:        NET SNMP (Simple Network Management Protocol) Agents
 ### END INIT INFO
@@ -13,13 +13,15 @@
 #
 set -e
 
+. /lib/lsb/init-functions
+
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin
 
 test -x /usr/sbin/snmpd || exit 0
 test -x /usr/sbin/snmptrapd || exit 0
 
 # Defaults
-export MIBDIRS=/usr/share/snmp/mibs
+export MIBDIRS=/usr/share/mibs/site:/usr/share/snmp/mibs:/usr/share/mibs/iana:/usr/share/mibs/ietf:/usr/share/mibs/netsnmp
 SNMPDRUN=yes
 SNMPDOPTS='-Lsd -Lf /dev/null -p /var/run/snmpd.pid'
 TRAPDRUN=no
@@ -32,7 +34,7 @@ TRAPDOPTS='-Lsd -p /var/run/snmptrapd.pid'
 cd /
 
 # Create compatibility link to old AgentX socket location
-if [ "$SNMPDCOMPAT" = "yes" ]; then
+if [ "$SNMPDCOMPAT" = "yes" ] && [ "$1" != status ]; then
   ln -sf /var/agentx/master /var/run/agentx
 fi
 
@@ -40,12 +42,12 @@ case "$1" in
   start)
     echo -n "Starting network management services:"
     if [ "$SNMPDRUN" = "yes" -a -f /etc/snmp/snmpd.conf ]; then
-	start-stop-daemon --quiet --start --exec /usr/sbin/snmpd \
+	start-stop-daemon --quiet --start --oknodo --exec /usr/sbin/snmpd \
 	    -- $SNMPDOPTS
 	echo -n " snmpd"
     fi
     if [ "$TRAPDRUN" = "yes" -a -f /etc/snmp/snmptrapd.conf ]; then
-	start-stop-daemon --quiet --start --exec /usr/sbin/snmptrapd \
+	start-stop-daemon --quiet --start --oknodo --exec /usr/sbin/snmptrapd \
 	    -- $TRAPDOPTS
 	echo -n " snmptrapd"
     fi
@@ -86,8 +88,14 @@ case "$1" in
     fi
     echo "."
     ;;
+  status)
+    status=0
+    status_of_proc /usr/sbin/snmpd snmpd || status=$?
+    status_of_proc /usr/sbin/snmptrapd snmptrapd || status=$?
+    exit $status
+    ;;
   *)
-    echo "Usage: /etc/init.d/snmpd {start|stop|restart|reload|force-reload}"
+    echo "Usage: /etc/init.d/snmpd {start|stop|restart|reload|force-reload|status}"
     exit 1
 esac
 

@@ -5,12 +5,14 @@
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
+#include "snmp_perl.h"
+
 static PerlInterpreter *my_perl;
 
-void            boot_DynaLoader(CV * cv);
+void            boot_DynaLoader(pTHX_ CV * cv);
 
 void
-xs_init(void)
+xs_init(pTHX)
 {
     char            myfile[] = __FILE__;
     char            modulename[] = "DynaLoader::boot_DynaLoader";
@@ -47,6 +49,11 @@ maybe_source_perl_startup(void)
         goto bail_out;
 
     perl_construct(my_perl);
+
+#ifdef PERL_EXIT_DESTRUCT_END
+    PL_exit_flags |= PERL_EXIT_DESTRUCT_END;
+#endif
+
     if (perl_parse(my_perl, xs_init, 2, (char **) embedargs, NULL))
         goto bail_out;
 
@@ -58,7 +65,7 @@ maybe_source_perl_startup(void)
     return;
 
   bail_out:
-    snmp_log(LOG_ERR, "embedded perl support failed to initalize\n");
+    snmp_log(LOG_ERR, "embedded perl support failed to initialize\n");
     netsnmp_ds_set_boolean(NETSNMP_DS_APPLICATION_ID, 
 			   NETSNMP_DS_AGENT_DISABLE_PERL, 1);
     return;
@@ -138,7 +145,8 @@ void
 shutdown_perl(void)
 {
     if (netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
-			       NETSNMP_DS_AGENT_DISABLE_PERL)) {
+			       NETSNMP_DS_AGENT_DISABLE_PERL) ||
+        my_perl == NULL) {
         return;
     }
     DEBUGMSGTL(("perl", "shutting down perl\n"));

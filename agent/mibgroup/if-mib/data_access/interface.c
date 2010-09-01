@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: interface.c 16830 2008-02-22 23:52:33Z hardaker $
+ * $Id: interface.c 17594 2009-05-06 21:45:20Z nba $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -462,19 +462,19 @@ _access_interface_entry_save_name(const char *name, oid index)
     tmp = se_find_value_in_slist("interfaces", name);
     if (tmp == SE_DNE) {
         se_add_pair_to_slist("interfaces", strdup(name), index);
-        DEBUGMSGTL(("access:interface:ifIndex", "saved ifIndex %d for %s\n",
+        DEBUGMSGTL(("access:interface:ifIndex", "saved ifIndex %lu for %s\n",
                     index, name));
     }
     else
         if (index != tmp) {
             static int logged = 0;
             if (!logged) {
-                snmp_log(LOG_ERR, "IfIndex of an interface changed.\n");
+                snmp_log(LOG_ERR, "IfIndex of an interface changed. Such " \
+                         "interfaces will appear multiple times in IF-MIB.\n");
                 logged = 1;
             }
-	    se_remove_value_from_slist("interfaces", name);
-	    se_add_pair_to_slist("interfaces", strdup(name), index);
-	    DEBUGMSGTL(("access:interface:ifIndex", "ifname %s, old index %d, already existing, replaced with %d\n", name, tmp, index));
+            DEBUGMSGTL(("access:interface:ifIndex", "index %lu != tmp for %s\n",
+                         index, name));
         }
 }
 
@@ -665,6 +665,7 @@ netsnmp_access_interface_entry_guess_speed(netsnmp_interface_entry *entry)
         entry->speed = 4000000;
     else
         entry->speed = 0;
+    entry->speed_high = entry->speed / 1000000LL;
 }
 
 netsnmp_conf_if_list *
@@ -702,14 +703,12 @@ netsnmp_access_interface_entry_overrides(netsnmp_interface_entry *entry)
         netsnmp_access_interface_entry_overrides_get(entry->name);
     if (if_ptr) {
         entry->type = if_ptr->type;
-	/*
-	 * enforce speed limit
-	 */
-	if (if_ptr->speed > 4294967295)
-	    entry->speed = 4294967295;
-	else
-	    entry->speed = if_ptr->speed;
-	entry->speed_high = if_ptr->speed/1000000;
+        if (if_ptr->speed > 0xffffffff) {
+            entry->speed = 0xffffffff;
+        } else {
+            entry->speed = if_ptr->speed;
+        }
+        entry->speed_high = if_ptr->speed / 1000000LL;
     }
 }
 

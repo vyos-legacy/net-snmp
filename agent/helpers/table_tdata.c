@@ -1,16 +1,17 @@
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
+#include <net-snmp/agent/table_tdata.h>
+
 #if HAVE_STRING_H
 #include <string.h>
 #else
 #include <strings.h>
 #endif
 
-#include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
-
 #include <net-snmp/agent/table.h>
-#include <net-snmp/agent/table_tdata.h>
 #include <net-snmp/agent/table_container.h>
 #include <net-snmp/agent/read_only.h>
 
@@ -109,9 +110,8 @@ netsnmp_tdata_clone_row(netsnmp_tdata_row *row)
     }
 
     if (row->oid_index.oids) {
-        memdup((u_char **) & newrow->oid_index.oids,
-               (u_char *) row->oid_index.oids,
-               row->oid_index.len * sizeof(oid));
+        newrow->oid_index.oids =
+            snmp_duplicate_objid(row->oid_index.oids, row->oid_index.len);
         if (!newrow->oid_index.oids) {
             if (newrow->indexes)
                 snmp_free_varbind(newrow->indexes);
@@ -140,9 +140,8 @@ netsnmp_tdata_copy_row(netsnmp_tdata_row *dst_row, netsnmp_tdata_row *src_row)
     }
 
     if (src_row->oid_index.oids) {
-        memdup((u_char **) &dst_row->oid_index.oids,
-               (u_char  *)  src_row->oid_index.oids,
-               src_row->oid_index.len * sizeof(oid));
+        dst_row->oid_index.oids = snmp_duplicate_objid(src_row->oid_index.oids,
+                                                       src_row->oid_index.len);
         if (!dst_row->oid_index.oids)
             return -1;
     }
@@ -217,7 +216,7 @@ netsnmp_tdata_add_row(netsnmp_tdata     *table,
      * add this row to the stored table
      */
     CONTAINER_INSERT( table->container, row );
-    DEBUGMSGTL(("tdata_add_row", "added row (%x)\n", row));
+    DEBUGMSGTL(("tdata_add_row", "added row (%p)\n", row));
 
     return SNMPERR_SUCCESS;
 }
@@ -355,6 +354,13 @@ netsnmp_tdata_register(netsnmp_handler_registration    *reginfo,
     netsnmp_inject_handler(reginfo, netsnmp_get_tdata_handler(table));
     return netsnmp_container_table_register(reginfo, table_info,
                   table->container, TABLE_CONTAINER_KEY_NETSNMP_INDEX);
+}
+
+int
+netsnmp_tdata_unregister(netsnmp_handler_registration    *reginfo)
+{
+    /* free table; */
+    return netsnmp_container_table_unregister(reginfo);
 }
 
 /** extracts the tdata table from the request structure */

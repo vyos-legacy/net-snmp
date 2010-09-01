@@ -243,6 +243,9 @@ init_agent_read_config(const char *app)
                                 snmpd_free_trapcommunity,
                                 "community-string");
 #endif /* support for community based SNMP */
+    netsnmp_ds_register_config(ASN_OCTET_STR, app, "v1trapaddress", 
+                               NETSNMP_DS_APPLICATION_ID, 
+                               NETSNMP_DS_AGENT_TRAP_ADDR);
 #ifdef HAVE_UNISTD_H
     register_app_config_handler("agentuser",
                                 snmpd_set_agent_user, NULL, "userid");
@@ -267,8 +270,6 @@ init_agent_read_config(const char *app)
     netsnmp_ds_register_config(ASN_INTEGER, app, "maxGetbulkResponses",
                                NETSNMP_DS_APPLICATION_ID,
                                NETSNMP_DS_AGENT_MAX_GETBULKRESPONSES);
-    netsnmp_ds_register_config(ASN_OCTET_STR, app, "clientaddr",
-			       NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_CLIENT_ADDR);
     netsnmp_init_handler_conf();
 
 #include "agent_module_dot_conf.h"
@@ -284,7 +285,6 @@ update_config(void)
     snmp_call_callbacks(SNMP_CALLBACK_APPLICATION,
                         SNMPD_CALLBACK_PRE_UPDATE_CONFIG, NULL);
     free_config();
-    vacm_standard_views(0,0,NULL,NULL);
     read_configs();
 }
 

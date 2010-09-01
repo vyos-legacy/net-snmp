@@ -72,7 +72,7 @@ init_mteTriggerConf(void)
      * Find or create the specified trigger entry
      */
 struct mteTrigger *
-_find_mteTrigger_entry( char *owner, char *tname )
+_find_mteTrigger_entry( const char *owner, char *tname )
 {
     netsnmp_variable_list owner_var, tname_var;
     netsnmp_tdata_row *row;
@@ -101,7 +101,7 @@ _find_mteTrigger_entry( char *owner, char *tname )
 }
 
 struct mteTrigger *
-_find_typed_mteTrigger_entry( char *owner, char *tname, int type )
+_find_typed_mteTrigger_entry( const char *owner, char *tname, int type )
 {
     struct mteTrigger *entry = _find_mteTrigger_entry( owner, tname );
     if (!entry)
@@ -455,7 +455,7 @@ parse_mteMonitor(const char *token, char *line)
                      */
                     memcpy(oid_name_buf, buf, SPRINT_MAX_LEN);
                     cp = NULL;  /* To terminate the processing loop */
-                    DEBUGMSGTL(("disman:event:conf", "%s: Exist (%s, %d)\n",
+                    DEBUGMSGTL(("disman:event:conf", "%s: Exist (%s, %ld)\n",
                                                      tname, oid_name_buf, op));
                     break;
     
@@ -490,7 +490,7 @@ parse_mteMonitor(const char *token, char *line)
                     cp    = copy_nword(cp, buf, SPRINT_MAX_LEN);
                     value = strtol(buf, NULL, 0);
                     cp = NULL;  /* To terminate the processing loop */
-                    DEBUGMSGTL(("disman:event:conf", "%s: Bool (%s, %d, %d)\n",
+                    DEBUGMSGTL(("disman:event:conf", "%s: Bool (%s, %ld, %ld)\n",
                                               tname, oid_name_buf, op, value));
                     break;
     
@@ -502,7 +502,6 @@ parse_mteMonitor(const char *token, char *line)
                     memcpy(oid_name_buf, buf, SPRINT_MAX_LEN);
                     memset(         buf,   0, SPRINT_MAX_LEN);
                     cp  = copy_nword(cp, buf, SPRINT_MAX_LEN);
-                    if ( buf[0] != '-' )
                         value = strtol(buf, NULL, 0);
     
                     /*
@@ -511,8 +510,8 @@ parse_mteMonitor(const char *token, char *line)
                     memset( buf, 0,  strlen(buf));
                     memcpy( buf, cp, strlen(cp));
                     cp = NULL;  /* To terminate the processing loop */
-                    DEBUGMSGTL(("disman:event:conf", "%s: Thresh (%s, %d, %s)\n",
-                                              tname, oid_name_buf, op, buf));
+                    DEBUGMSGTL(("disman:event:conf", "%s: Thresh (%s, %ld, %s)\n",
+                                              tname, oid_name_buf, value, buf));
                     break;
                 }
             }
@@ -634,7 +633,6 @@ parse_mteMonitor(const char *token, char *line)
         }
         break;
     case MTE_TRIGGER_THRESHOLD:
-        if ( buf[0] != '-' ) {
             entry->mteTThFallValue  = value;
             value = strtol(buf, NULL, 0);
             entry->mteTThRiseValue  = value;
@@ -679,10 +677,7 @@ parse_mteMonitor(const char *token, char *line)
                 memcpy(entry->mteTThFallEvent,  "_mteTriggerFalling", 18);
             }
             cp = skip_token(buf);   /* skip riseThreshold value */
-        } else {
-            /* Skip absolute threshold placeholders */
-            cp = skip_token(buf);
-        }
+
         /*
          * Parse and set (optional) Delta thresholds & events
          */
@@ -1472,9 +1467,18 @@ int
 clear_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
 {
     netsnmp_tdata_row *row;
-
+   
     while (( row = netsnmp_tdata_row_first( trigger_table_data ))) {
-        netsnmp_tdata_remove_and_delete_row( trigger_table_data, row );
+        struct mteTrigger *entry = (struct mteTrigger *)
+            netsnmp_tdata_remove_and_delete_row(trigger_table_data, row);
+        if (entry) {
+            /* Remove from the callbacks list and disable triggers */
+            snmp_unregister_callback( SNMP_CALLBACK_LIBRARY,
+                                      SNMP_CALLBACK_POST_READ_CONFIG,
+                                      _mteTrigger_callback_enable, entry, 0 ); 
+            mteTrigger_disable( entry );
+            SNMP_FREE(entry);
+        }
     }
     return SNMPERR_SUCCESS;
 }

@@ -9,7 +9,7 @@ include /usr/share/cdbs/1/rules/simple-patchsys.mk
 include /usr/share/cdbs/1/class/autotools.mk
 
 LIB_VERSION = 15
-COMPAT_VERSION = 5.4.1.1
+COMPAT_VERSION = 5.5
 PYTHON_VERSION = 1.0a1
 BACKUP = aclocal.m4 configure ltmain.sh stamp-h stamp-h.in \
          include/net-snmp/net-snmp-config.h.in
@@ -23,9 +23,9 @@ DGC_DEV := $(shell \
 
 ifeq (linux,$(DEB_HOST_ARCH_OS))
 MIB_MODULES += ucd-snmp/diskio ucd-snmp/lmSensors 
-DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libsensors-dev (>= 2.8.5)" \
-                          $(DGC_DEV)
 IPV6 = --enable-ipv6
+DEB_DH_GENCONTROL_ARGS=-- -Vos-specific-dev="libsensors4-dev" \
+                          $(DGC_DEV)
 else
 ifeq (kfreebsd,$(DEB_HOST_ARCH_OS))
 IPV6 = --disable-ipv6

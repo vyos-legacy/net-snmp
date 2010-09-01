@@ -61,6 +61,7 @@ static int      write_persist_pipe(int iindex, const char *data);
  */
 extern int      asc2bin(char *p);
 extern int      bin2asc(char *p, size_t n);
+extern int      netsnmp_pass_str_to_errno(const char *buf);
 extern int      snmp_oid_min_compare(const oid *, size_t, const oid *,
                                      size_t);
 
@@ -71,8 +72,8 @@ struct variable2 extensible_persist_passthru_variables[] = {
     /*
      * bogus entry.  Only some of it is actually used. 
      */
-    {MIBINDEX, ASN_INTEGER, RWRITE, var_extensible_pass_persist, 0,
-     {MIBINDEX}},
+    {MIBINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_extensible_pass_persist, 0, {MIBINDEX}},
 };
 
 void
@@ -89,7 +90,8 @@ pass_persist_parse_config(const char *token, char *cptr)
 {
     struct extensible **ppass = &persistpassthrus, **etmp, *ptmp;
     char           *tcptr, *endopt;
-    int             i, priority;
+    int             i;
+    long int        priority;
 
     /*
      * options
@@ -172,7 +174,7 @@ pass_persist_parse_config(const char *token, char *cptr)
         if (etmp == NULL)
             return;
         for (i = 0, ptmp = (struct extensible *) persistpassthrus;
-             i < numpersistpassthrus && ptmp != 0; i++, ptmp = ptmp->next)
+             i < numpersistpassthrus && ptmp != NULL; i++, ptmp = ptmp->next)
             etmp[i] = ptmp;
         qsort(etmp, numpersistpassthrus, sizeof(struct extensible *),
               pass_persist_compare);
@@ -218,6 +220,7 @@ var_extensible_pass_persist(struct variable *vp,
     oid             newname[MAX_OID_LEN];
     int             i, rtest, newlen;
     static long     long_ret;
+    static in_addr_t addr_ret;
     char            buf[SNMP_MAXBUF];
     static char     buf2[SNMP_MAXBUF];
     static oid      objid[MAX_OID_LEN];
@@ -319,7 +322,22 @@ var_extensible_pass_persist(struct variable *vp,
                     *var_len = strlen(buf2);
                     vp->type = ASN_OCTET_STR;
                     return ((unsigned char *) buf2);
-                } else if (!strncasecmp(buf, "integer", 7)) {
+                } 
+                else if (!strncasecmp(buf, "integer64", 9)) {
+                    static struct counter64 c64;
+                    uint64_t v64 = strtoull(buf2, NULL, 10);
+                    if (sizeof(long) > 4) {    /* 64-bit machine */
+                        c64.high = v64 >> 32;
+                        c64.low = v64 & 0xffffffff;
+                    }
+                    else {    /* 32-bit machine */
+                        *((uint64_t *) &c64) = v64;
+                    }
+                    *var_len = sizeof(c64);
+                    vp->type = ASN_INTEGER64;
+                    return ((unsigned char *) &c64);
+                } 
+                else if (!strncasecmp(buf, "integer", 7)) {
                     *var_len = sizeof(long_ret);
                     long_ret = strtol(buf2, NULL, 10);
                     vp->type = ASN_INTEGER;
@@ -329,7 +347,22 @@ var_extensible_pass_persist(struct variable *vp,
                     long_ret = strtoul(buf2, NULL, 10);
                     vp->type = ASN_UNSIGNED;
                     return ((unsigned char *) &long_ret);
-                } else if (!strncasecmp(buf, "counter", 7)) {
+                } 
+                else if (!strncasecmp(buf, "counter64", 9)) {
+                    static struct counter64 c64;
+                    uint64_t v64 = strtoull(buf2, NULL, 10);
+                    if (sizeof(long) > 4) {    /* 64-bit machine */
+                        c64.high = v64 >> 32;
+                        c64.low = v64 & 0xffffffff;
+                    }
+                    else {    /* 32-bit machine */
+                        *((uint64_t *) &c64) = v64;
+                    }
+                    *var_len = sizeof(c64);
+                    vp->type = ASN_COUNTER64;
+                    return ((unsigned char *) &c64);
+                } 
+                else if (!strncasecmp(buf, "counter", 7)) {
                     *var_len = sizeof(long_ret);
                     long_ret = strtoul(buf2, NULL, 10);
                     vp->type = ASN_COUNTER;
@@ -366,13 +399,13 @@ var_extensible_pass_persist(struct variable *vp,
                         *var_len = 0;
                         return (NULL);
                     }
-                    long_ret =
+                    addr_ret =
                         (objid[0] << (8 * 3)) + (objid[1] << (8 * 2)) +
                         (objid[2] << 8) + objid[3];
-                    long_ret = htonl(long_ret);
-                    *var_len = sizeof(long_ret);
+                    addr_ret = htonl(addr_ret);
+                    *var_len = sizeof(addr_ret);
                     vp->type = ASN_IPADDRESS;
-                    return ((unsigned char *) &long_ret);
+                    return ((unsigned char *) &addr_ret);
                 }
             }
             *var_len = 0;
@@ -464,7 +497,7 @@ setPassPersist(int action,
                 buf[ sizeof(buf)-1 ] = 0;
                 break;
             case ASN_OBJECT_ID:
-                sprint_mib_oid(buf2, (oid *) var_val, var_val_len);
+                sprint_mib_oid(buf2, (oid *) var_val, var_val_len/sizeof(oid));
                 snprintf(buf, sizeof(buf), "objectid \"%s\"\n", buf2);
                 buf[ sizeof(buf)-1 ] = 0;
                 break;
@@ -492,18 +525,7 @@ setPassPersist(int action,
                 return SNMP_ERR_NOTWRITABLE;
             }
 
-            if (!strncasecmp(buf, "not-writable", 12)) {
-                return SNMP_ERR_NOTWRITABLE;
-            } else if (!strncasecmp(buf, "wrong-type", 10)) {
-                return SNMP_ERR_WRONGTYPE;
-            } else if (!strncasecmp(buf, "wrong-length", 12)) {
-                return SNMP_ERR_WRONGLENGTH;
-            } else if (!strncasecmp(buf, "wrong-value", 11)) {
-                return SNMP_ERR_WRONGVALUE;
-            } else if (!strncasecmp(buf, "inconsistent-value", 18)) {
-                return SNMP_ERR_INCONSISTENTVALUE;
-            }
-            return SNMP_ERR_NOERROR;
+            return netsnmp_pass_str_to_errno(buf);
         }
     }
     if (snmp_get_do_debugging()) {
@@ -666,7 +688,7 @@ open_persist_pipe(int iindex, char *command)
     return 1;
 }
 
-#if STRUCT_SIGACTION_HAS_SA_SIGACTION
+#if HAVE_STRUCT_SIGACTION_SA_SIGACTION
 /*
  * Generic handler 
  */
@@ -695,7 +717,7 @@ write_persist_pipe(int iindex, const char *data)
      * Setup our signal action to catch SIGPIPEs 
      */
     sa.sa_handler = NULL;
-#if STRUCT_SIGACTION_HAS_SA_SIGACTION
+#if HAVE_STRUCT_SIGACTION_SA_SIGACTION
     sa.sa_sigaction = &sigpipe_handler;
 #endif
     sigemptyset(&sa.sa_mask);
@@ -784,6 +806,13 @@ close_persist_pipe(int iindex)
         close(persist_pipes[iindex].fdIn);
         persist_pipes[iindex].fdIn = -1;
     }
+
+#if defined(WIN32) && !defined (mingw32) && !defined (HAVE_SIGNAL)
+    if (!CloseHandle(persist_pipes[iindex].pid)) {
+          DEBUGMSGTL(("ucd-snmp/pass_persist","close_persist_pipe pid: close error\n"));
+        } 
+#endif
+    
 #ifdef __uClinux__
 	/*remove the pipes*/
 	unlink(fifo_in_path);
@@ -792,7 +821,7 @@ close_persist_pipe(int iindex)
 
     if (persist_pipes[iindex].pid != -1) {
 #if HAVE_SYS_WAIT_H
-        waitpid(persist_pipes[iindex].pid, 0, 0);
+        waitpid(persist_pipes[iindex].pid, NULL, 0);
 #endif
         persist_pipes[iindex].pid = -1;
     }

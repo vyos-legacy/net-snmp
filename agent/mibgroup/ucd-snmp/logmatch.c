@@ -38,11 +38,11 @@
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 #include "struct.h"
-#include "util_funcs.h"
 #include "logmatch.h"
-#include "util_funcs.h"
+#include "util_funcs/header_generic.h"
+#include "util_funcs/header_simple_table.h"
 
-#define MAXLOGMATCH   50
+#define MAXLOGMATCH   250
 
 struct logmatchstat logmatchTable[MAXLOGMATCH];
 int             logmatchCount;
@@ -51,28 +51,37 @@ void
 init_logmatch(void)
 {
     struct variable2 logmatch_info[] = {
-        {LOGMATCH_INFO, ASN_INTEGER, RONLY, var_logmatch_table, 0}
+        {LOGMATCH_INFO, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 0}
     };
 
     struct variable2 logmatch_table[] = {
-        {LOGMATCH_INDEX, ASN_INTEGER, RONLY, var_logmatch_table, 1, {1}},
-        {LOGMATCH_NAME, ASN_OCTET_STR, RONLY, var_logmatch_table, 1, {2}},
-        {LOGMATCH_FILENAME, ASN_OCTET_STR, RONLY, var_logmatch_table, 1,
-         {3}},
-        {LOGMATCH_REGEX, ASN_OCTET_STR, RONLY, var_logmatch_table, 1, {4}},
-        {LOGMATCH_GLOBALCTR, ASN_COUNTER, RONLY, var_logmatch_table, 1,
-         {5}},
-        {LOGMATCH_GLOBALCNT, ASN_INTEGER, RONLY, var_logmatch_table, 1,
-         {6}},
-        {LOGMATCH_CURRENTCTR, ASN_COUNTER, RONLY, var_logmatch_table, 1,
-         {7}},
-        {LOGMATCH_CURRENTCNT, ASN_INTEGER, RONLY, var_logmatch_table, 1,
-         {8}},
-        {LOGMATCH_COUNTER, ASN_COUNTER, RONLY, var_logmatch_table, 1, {9}},
-        {LOGMATCH_COUNT, ASN_INTEGER, RONLY, var_logmatch_table, 1, {10}},
-        {LOGMATCH_FREQ, ASN_INTEGER, RONLY, var_logmatch_table, 1, {11}},
-        {LOGMATCH_ERROR, ASN_INTEGER, RONLY, var_logmatch_table, 1, {100}},
-        {LOGMATCH_MSG, ASN_OCTET_STR, RONLY, var_logmatch_table, 1, {101}}
+        {LOGMATCH_INDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {1}},
+        {LOGMATCH_NAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {2}},
+        {LOGMATCH_FILENAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {3}},
+        {LOGMATCH_REGEX, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {4}},
+        {LOGMATCH_GLOBALCTR, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {5}},
+        {LOGMATCH_GLOBALCNT, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {6}},
+        {LOGMATCH_CURRENTCTR, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {7}},
+        {LOGMATCH_CURRENTCNT, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {8}},
+        {LOGMATCH_COUNTER, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {9}},
+        {LOGMATCH_COUNT, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {10}},
+        {LOGMATCH_FREQ, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {11}},
+        {LOGMATCH_ERROR, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {100}},
+        {LOGMATCH_MSG, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_logmatch_table, 1, {101}}
     };
 
     /*
@@ -170,10 +179,14 @@ logmatch_parse_config(const char *token, char *cptr)
         sscanf(cptr, "%255s%c%255s%c %d %255c\n",
                logmatchTable[logmatchCount].name,
 	       &space_name,
-               logmatchTable[logmatchCount].filename,
+               logmatchTable[logmatchCount].filenamePattern,
 	       &space_path,
                &(logmatchTable[logmatchCount].frequency),
                logmatchTable[logmatchCount].regEx);
+
+        /* fill in filename with initial data */
+        strcpy(logmatchTable[logmatchCount].filename, logmatchTable[logmatchCount].filenamePattern);
+        logmatch_update_filename(logmatchTable[logmatchCount].filenamePattern, logmatchTable[logmatchCount].filename);
 
 	/*
 	 * Log an error then return if any of the strings scanned in were
@@ -251,6 +264,7 @@ updateLogmatch(int iindex)
     int             toobig;
     int             anyChanges = FALSE;
     struct stat     sb;
+    char            lastFilename[256];
 
     /*
      * ------------------------------------ 
@@ -278,7 +292,6 @@ updateLogmatch(int iindex)
 
         if ((perfile = fopen(perfilename, "r"))) {
 
-
             /*
              * ------------------------------------ 
              * the persistent data file exists so   
@@ -289,7 +302,7 @@ updateLogmatch(int iindex)
 
             pos = counter = ccounter = 0;
 
-            if (fscanf(perfile, "%lu %lu %lu", &pos, &ccounter, &counter)) {
+            if (fscanf(perfile, "%lu %lu %lu %s", &pos, &ccounter, &counter, lastFilename)) {
 
 
                 /*
@@ -300,47 +313,70 @@ updateLogmatch(int iindex)
                  * ------------------------------------ 
                  */
 
-                if ((logmatchTable[iindex].logfile =
-                    fopen(logmatchTable[iindex].filename, "r"))) {
-
+                if (logmatch_update_filename(logmatchTable[iindex].filenamePattern, lastFilename) == 0) {
 
                     /*
-                     * ------------------------------------ 
-                     * the log file could be opened; now    
-                     * let's try to set the pointer         
-                     * ------------------------------------ 
+                     * ---------------------------------
+                     * the filename is still the same as 
+                     * the one stored in the persistent
+                     * data file.
+                     * ---------------------------------
                      */
 
-                    if (!fseek
-                        (logmatchTable[iindex].logfile, pos, SEEK_SET)) {
+                    if ((logmatchTable[iindex].logfile =
+                        fopen(logmatchTable[iindex].filename, "r"))) {
 
 
                         /*
                          * ------------------------------------ 
-                         * the pointer could be set - this is   
-                         * the most that we can do: if the      
-                         * pointer is smaller than the file     
-                         * size we must assume that the pointer 
-                         * still points to where it read the    
-                         * file last time; let's restore the    
-                         * data                                 
+                         * the log file could be opened; now    
+                         * let's try to set the pointer         
                          * ------------------------------------ 
                          */
 
-                        logmatchTable[iindex].currentFilePosition = pos;
-                        logmatchTable[iindex].currentMatchCounter =
-                            ccounter;
-                        logmatchTable[iindex].globalMatchCounter = counter;
-                    }
+                        if (!fseek
+                            (logmatchTable[iindex].logfile, pos, SEEK_SET)) {
 
-                    fclose(logmatchTable[iindex].logfile);
+
+                            /*
+                             * ------------------------------------ 
+                             * the pointer could be set - this is   
+                             * the most that we can do: if the      
+                             * pointer is smaller than the file     
+                             * size we must assume that the pointer 
+                             * still points to where it read the    
+                             * file last time; let's restore the    
+                             * data                                 
+                             * ------------------------------------ 
+                             */
+
+                            logmatchTable[iindex].currentFilePosition = pos;
+                            logmatchTable[iindex].currentMatchCounter =
+                                ccounter;
+                        }
+
+                        fclose(logmatchTable[iindex].logfile);
+                    }
                 }
+                logmatchTable[iindex].globalMatchCounter = counter;
             }
 
             fclose(perfile);
         }
 
         logmatchTable[iindex].virgin = FALSE;
+    }
+
+    /*
+     * -------------------------------------------
+     * check if a new input file needs to be opened
+     * if yes, reset counter and position
+     * -------------------------------------------
+     */
+
+    if (logmatch_update_filename(logmatchTable[iindex].filenamePattern, logmatchTable[iindex].filename) == 1) {
+        logmatchTable[iindex].currentFilePosition = 0; 
+        logmatchTable[iindex].currentMatchCounter = 0;
     }
 
 
@@ -430,10 +466,11 @@ updateLogmatch(int iindex)
          * ------------------------------------ 
          */
 
-        fprintf(perfile, "%lu %lu %lu\n",
+        fprintf(perfile, "%lu %lu %lu %s\n",
                 logmatchTable[iindex].currentFilePosition,
                 logmatchTable[iindex].currentMatchCounter,
-                logmatchTable[iindex].globalMatchCounter);
+                logmatchTable[iindex].globalMatchCounter,
+                logmatchTable[iindex].filename);
 
         fclose(perfile);
     }
@@ -549,6 +586,56 @@ var_logmatch_table(struct variable *vp,
     }
 
     return NULL;
+}
+
+/*
+ * ------------------------------------------------
+ *  This function checks if the filename pattern 
+ *  contains the % character indicating a variable
+ *  filename (i.e. it uses date/time format control 
+ *  codes, see 'man date') then expands those control
+ *  codes based on current time and sets the 
+ *  filename field in the struct.
+ *  Returns 1 if the filename changed, 0 otherwise
+ *  -------------------------------------------------
+ */
+
+int logmatch_update_filename(char * pattern, char * currentFilename) {
+    time_t t;
+    struct tm *tmp;
+    char newFilename[256];
+
+    /* 
+     * -------------------------------------------------------------------
+     * if the filename pattern doesn't have the "%" character just return, 
+     * since there is no need for further processing
+     * -------------------------------------------------------------------
+     */
+    if (strstr(pattern, "%") == NULL) {
+        return 0;
+    }
+
+    t = time(NULL);
+    tmp = localtime(&t);
+
+    if (tmp == NULL) {
+        perror("localtime");
+        return 0;
+    }
+
+    /* result of expansion must fit into newFilename, otherwise returning */ 
+    if (strftime(newFilename, sizeof(newFilename), pattern, tmp) == 0) {
+        return 0;
+    }
+
+    /* if same as current filename, just return */
+    if (strcmp(currentFilename, newFilename) == 0) {
+        return 0;
+    } else {
+        /* otherwise update currentFilename and return 1 */
+        strcpy(currentFilename, newFilename); 
+        return 1;
+    }
 }
 
 #endif /* HAVE_REGEX */

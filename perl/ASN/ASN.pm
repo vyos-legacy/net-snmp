@@ -1,6 +1,7 @@
 package NetSNMP::ASN;
 
 use strict;
+use warnings;
 use Carp;
 
 require Exporter;
@@ -65,7 +66,7 @@ use vars qw(@ISA %EXPORT_TAGS @EXPORT_OK @EXPORT $VERSION $AUTOLOAD);
 	ASN_UNSIGNED
 	ASN_UNSIGNED64
 );
-$VERSION = '5.04021';
+$VERSION = '5.05';
 
 sub AUTOLOAD {
     # This AUTOLOAD is used to 'autoload' constants from the constant()

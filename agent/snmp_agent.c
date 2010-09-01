@@ -99,8 +99,6 @@ int             deny_severity = LOG_WARNING;
 #endif
 
 #include "snmpd.h"
-#include "mibgroup/struct.h"
-#include "mibgroup/util_funcs.h"
 #include <net-snmp/agent/mib_module_config.h>
 #include <net-snmp/agent/mib_modules.h>
 
@@ -115,6 +113,66 @@ int             deny_severity = LOG_WARNING;
 #ifdef USING_SMUX_MODULE
 #include "smux/smux.h"
 #endif
+
+NETSNMP_INLINE void
+netsnmp_agent_add_list_data(netsnmp_agent_request_info *ari,
+                            netsnmp_data_list *node)
+{
+    if (ari) {
+	if (ari->agent_data) {
+            netsnmp_add_list_data(&ari->agent_data, node);
+        } else {
+            ari->agent_data = node;
+	}
+    }
+}
+
+NETSNMP_INLINE int
+netsnmp_agent_remove_list_data(netsnmp_agent_request_info *ari,
+                               const char * name)
+{
+    if ((NULL == ari) || (NULL == ari->agent_data))
+        return 1;
+
+    return netsnmp_remove_list_node(&ari->agent_data, name);
+}
+
+NETSNMP_INLINE void    *
+netsnmp_agent_get_list_data(netsnmp_agent_request_info *ari,
+                            const char *name)
+{
+    if (ari) {
+        return netsnmp_get_list_data(ari->agent_data, name);
+    }
+    return NULL;
+}
+
+NETSNMP_INLINE void
+netsnmp_free_agent_data_set(netsnmp_agent_request_info *ari)
+{
+    if (ari) {
+        netsnmp_free_list_data(ari->agent_data);
+    }
+}
+
+NETSNMP_INLINE void
+netsnmp_free_agent_data_sets(netsnmp_agent_request_info *ari)
+{
+    if (ari) {
+        netsnmp_free_all_list_data(ari->agent_data);
+    }
+}
+
+NETSNMP_INLINE void
+netsnmp_free_agent_request_info(netsnmp_agent_request_info *ari)
+{
+    if (ari) {
+        if (ari->agent_data) {
+            netsnmp_free_all_list_data(ari->agent_data);
+	}
+        SNMP_FREE(ari);
+    }
+}
 
 oid      version_sysoid[] = { NETSNMP_SYSTEM_MIB };
 int      version_sysoid_len = OID_LENGTH(version_sysoid);
@@ -200,15 +258,17 @@ netsnmp_get_or_add_local_cachid(netsnmp_cachemap **cache_store,
     netsnmp_cachemap *tmpp;
 
     tmpp = SNMP_MALLOC_TYPEDEF(netsnmp_cachemap);
-    if (*cache_store) {
-        tmpp->next = *cache_store;
-        *cache_store = tmpp;
-    } else {
-        *cache_store = tmpp;
-    }
+    if (tmpp != NULL) {
+        if (*cache_store) {
+            tmpp->next = *cache_store;
+            *cache_store = tmpp;
+        } else {
+            *cache_store = tmpp;
+        }
 
-    tmpp->globalid = globalid;
-    tmpp->cacheid = localid;
+        tmpp->globalid = globalid;
+        tmpp->cacheid = localid;
+    }
     return tmpp;
 }
 
@@ -543,7 +603,7 @@ _fix_endofmibview(netsnmp_agent_session *asp)
 
 
 int
-getNextSessID()
+getNextSessID(void)
 {
     static int      SessionID = 0;
 
@@ -597,7 +657,7 @@ agent_check_and_process(int block)
         tvp->tv_usec = 0;
     }
 
-    count = select(numfds, &fdset, 0, 0, tvp);
+    count = select(numfds, &fdset, NULL, NULL, tvp);
 
     if (count > 0) {
         /*
@@ -641,6 +701,18 @@ netsnmp_addrcache_initialise(void)
     for (i = 0; i < SNMP_ADDRCACHE_SIZE; i++) {
         addrCache[i].addr = NULL;
         addrCache[i].status = SNMP_ADDRCACHE_UNUSED;
+    }
+}
+
+void netsnmp_addrcache_destroy(void)
+{
+    int             i = 0;
+
+    for (i = 0; i < SNMP_ADDRCACHE_SIZE; i++) {
+        if (addrCache[i].status == SNMP_ADDRCACHE_USED) {
+            free(addrCache[i].addr);
+            addrCache[i].status = SNMP_ADDRCACHE_UNUSED;
+        }
     }
 }
 
@@ -1153,7 +1225,7 @@ init_master_agent(void)
 {
     netsnmp_transport *transport;
     char           *cptr;
-    char            buf[SPRINT_MAX_LEN];
+    char           *buf = NULL;
     char           *st;
 
     /* default to a default cache size */
@@ -1168,15 +1240,6 @@ init_master_agent(void)
         
         return 0;               /*  No error if ! MASTER_AGENT  */
     }
-#ifdef USING_AGENTX_MASTER_MODULE
-    if (netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
-			       NETSNMP_DS_AGENT_AGENTX_MASTER) == 1)
-        real_init_master();
-#endif
-#ifdef USING_SMUX_MODULE
-    if(should_init("smux"))
-    real_init_smux();
-#endif
 
     /*
      * Have specific agent ports been specified?  
@@ -1185,13 +1248,17 @@ init_master_agent(void)
 				 NETSNMP_DS_AGENT_PORTS);
 
     if (cptr) {
-        snprintf(buf, sizeof(buf), "%s", cptr);
-        buf[ sizeof(buf)-1 ] = 0;
+        buf = strdup(cptr);
+        if (!buf) {
+            snmp_log(LOG_ERR,
+                     "Error processing transport \"%s\"\n", cptr);
+            return 1;
+        }
     } else {
         /*
          * No, so just specify the default port.  
          */
-        buf[0] = 0;
+        buf = strdup("");
     }
 
     DEBUGMSGTL(("snmp_agent", "final port spec: \"%s\"\n", buf));
@@ -1221,7 +1288,7 @@ init_master_agent(void)
             DEBUGMSGTL(("snmp_agent",
                         "init_master_agent; pseudo-transport \"none\" "
 			"requested\n"));
-            return 0;
+            break;
         }
         transport = netsnmp_transport_open_server("snmp", cptr);
 
@@ -1242,6 +1309,16 @@ init_master_agent(void)
 			"NSAP\n", cptr));
         }
     } while(st && *st != '\0');
+
+#ifdef USING_AGENTX_MASTER_MODULE
+    if (netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
+			       NETSNMP_DS_AGENT_AGENTX_MASTER) == 1)
+        real_init_master();
+#endif
+#ifdef USING_SMUX_MODULE
+    if(should_init("smux"))
+    real_init_smux();
+#endif
 
     return 0;
 }
@@ -1272,7 +1349,7 @@ init_agent_snmp_session(netsnmp_session * session, netsnmp_pdu *pdu)
         return NULL;
     }
 
-    DEBUGMSGTL(("snmp_agent","agent_sesion %08p created\n", asp));
+    DEBUGMSGTL(("snmp_agent","agent_sesion %8p created\n", asp));
     asp->session = session;
     asp->pdu = snmp_clone_pdu(pdu);
     asp->orig_pdu = snmp_clone_pdu(pdu);
@@ -1298,7 +1375,7 @@ free_agent_snmp_session(netsnmp_agent_session *asp)
     if (!asp)
         return;
 
-    DEBUGMSGTL(("snmp_agent","agent_session %08p released\n", asp));
+    DEBUGMSGTL(("snmp_agent","agent_session %8p released\n", asp));
 
     netsnmp_remove_from_delegated(asp);
     
@@ -1370,7 +1447,7 @@ netsnmp_check_for_delegated_and_add(netsnmp_agent_session *asp)
              */
             asp->next = agent_delegated_list;
             agent_delegated_list = asp;
-            DEBUGMSGTL(("snmp_agent", "delegate session == %08p\n", asp));
+            DEBUGMSGTL(("snmp_agent", "delegate session == %8p\n", asp));
         }
         return 1;
     }
@@ -1397,7 +1474,7 @@ netsnmp_remove_from_delegated(netsnmp_agent_session *asp)
         else
             agent_delegated_list = asp->next;
 
-        DEBUGMSGTL(("snmp_agent", "remove delegated session == %08p\n", asp));
+        DEBUGMSGTL(("snmp_agent", "remove delegated session == %8p\n", asp));
 
         return 1;
     }
@@ -1444,7 +1521,7 @@ netsnmp_remove_delegated_requests_for_session(netsnmp_session *sess)
      */
     if(count) {
         DEBUGMSGTL(("snmp_agent", "removed %d delegated request(s) for session "
-                    "%08p\n", count, sess));
+                    "%8p\n", count, sess));
         netsnmp_check_outstanding_agent_requests();
     }
     
@@ -1508,7 +1585,7 @@ netsnmp_wrap_up_request(netsnmp_agent_session *asp, int status)
      * done.
      */
     if (asp == netsnmp_processing_set) {
-        DEBUGMSGTL(("snmp_agent", "SET request complete, asp = %08p\n",
+        DEBUGMSGTL(("snmp_agent", "SET request complete, asp = %8p\n",
                     asp));
         netsnmp_processing_set = NULL;
     }
@@ -1696,7 +1773,7 @@ dump_sess_list(void)
 
     DEBUGMSGTL(("snmp_agent", "DUMP agent_sess_list -> "));
     for (a = agent_session_list; a != NULL; a = a->next) {
-        DEBUGMSG(("snmp_agent", "%08p[session %08p] -> ", a, a->session));
+        DEBUGMSG(("snmp_agent", "%8p[session %8p] -> ", a, a->session));
     }
     DEBUGMSG(("snmp_agent", "[NIL]\n"));
 }
@@ -1706,7 +1783,7 @@ netsnmp_remove_and_free_agent_snmp_session(netsnmp_agent_session *asp)
 {
     netsnmp_agent_session *a, **prevNext = &agent_session_list;
 
-    DEBUGMSGTL(("snmp_agent", "REMOVE session == %08p\n", asp));
+    DEBUGMSGTL(("snmp_agent", "REMOVE session == %8p\n", asp));
 
     for (a = agent_session_list; a != NULL; a = *prevNext) {
         if (a == asp) {
@@ -1735,7 +1812,7 @@ netsnmp_free_agent_snmp_session_by_session(netsnmp_session * sess,
 {
     netsnmp_agent_session *a, *next, **prevNext = &agent_session_list;
 
-    DEBUGMSGTL(("snmp_agent", "REMOVE session == %08p\n", sess));
+    DEBUGMSGTL(("snmp_agent", "REMOVE session == %8p\n", sess));
 
     for (a = agent_session_list; a != NULL; a = next) {
         if (a->session == sess) {
@@ -1854,7 +1931,7 @@ handle_snmp_packet(int op, netsnmp_session * session, int reqid,
     /*
      * done 
      */
-    DEBUGMSGTL(("snmp_agent", "end of handle_snmp_packet, asp = %08p\n",
+    DEBUGMSGTL(("snmp_agent", "end of handle_snmp_packet, asp = %8p\n",
                 asp));
     return rc;
 }
@@ -2197,20 +2274,20 @@ netsnmp_create_subtree_cache(netsnmp_agent_session *asp)
             if (asp->pdu->errindex > maxbulk) {
                 asp->pdu->errindex = maxbulk;
                 DEBUGMSGTL(("snmp_agent",
-                            "truncating number of getbulk repeats to %d\n",
+                            "truncating number of getbulk repeats to %ld\n",
                             asp->pdu->errindex));
             }
 
             asp->bulkcache =
                 (netsnmp_variable_list **) malloc(
-                    asp->pdu->errindex * r * sizeof(struct varbind_list *));
+                    (n + asp->pdu->errindex * r) * sizeof(struct varbind_list *));
 
             if (!asp->bulkcache) {
                 DEBUGMSGTL(("snmp_agent", "Bulkcache malloc failed\n"));
                 return SNMP_ERR_GENERR;
             }
         }
-        DEBUGMSGTL(("snmp_agent", "GETBULK N = %d, M = %d, R = %d\n",
+        DEBUGMSGTL(("snmp_agent", "GETBULK N = %d, M = %ld, R = %d\n",
                     n, asp->pdu->errindex, r));
     }
 
@@ -2355,6 +2432,10 @@ netsnmp_reassign_requests(netsnmp_agent_session *asp)
     asp->treecache =
         (netsnmp_tree_cache *) calloc(asp->treecache_len,
                                       sizeof(netsnmp_tree_cache));
+
+    if (asp->treecache == NULL)
+        return SNMP_ERR_GENERR;
+
     asp->treecache_num = -1;
     if (asp->cache_store) {
         netsnmp_free_cachemap(asp->cache_store);
@@ -2670,7 +2751,7 @@ netsnmp_check_outstanding_agent_requests(void)
 
             netsnmp_processing_set = netsnmp_agent_queued_list;
             DEBUGMSGTL(("snmp_agent", "SET request remains queued while "
-                        "delegated requests finish, asp = %08p\n", asp));
+                        "delegated requests finish, asp = %8p\n", asp));
             break;
         }
 
@@ -2680,7 +2761,7 @@ netsnmp_check_outstanding_agent_requests(void)
         asp = netsnmp_agent_queued_list;
         netsnmp_agent_queued_list = asp->next;
         DEBUGMSGTL(("snmp_agent",
-                    "processing queued request, asp = %08p\n", asp));
+                    "processing queued request, asp = %8p\n", asp));
 
         netsnmp_handle_request(asp, asp->status);
 
@@ -2723,7 +2804,7 @@ check_delayed_request(netsnmp_agent_session *asp)
 {
     int             status = SNMP_ERR_NOERROR;
 
-    DEBUGMSGTL(("snmp_agent", "processing delegated request, asp = %08p\n",
+    DEBUGMSGTL(("snmp_agent", "processing delegated request, asp = %8p\n",
                 asp));
 
     switch (asp->mode) {
@@ -3092,7 +3173,7 @@ netsnmp_handle_request(netsnmp_agent_session *asp, int status)
             netsnmp_add_queued(asp);
             DEBUGMSGTL(("snmp_agent",
                         "request queued while processing set, "
-                        "asp = %08p\n", asp));
+                        "asp = %8p\n", asp));
             return 1;
         }
 
@@ -3108,7 +3189,7 @@ netsnmp_handle_request(netsnmp_agent_session *asp, int status)
              */
             if (agent_delegated_list) {
                 DEBUGMSGTL(("snmp_agent", "SET request queued while "
-                            "delegated requests finish, asp = %08p\n",
+                            "delegated requests finish, asp = %8p\n",
                             asp));
                 netsnmp_add_queued(asp);
                 return 1;
@@ -3416,7 +3497,7 @@ _request_set_error(netsnmp_request_info *request, int mode, int error_value)
         case MODE_GETNEXT:
         case MODE_GETBULK:
             request->requestvb->type = error_value;
-            return SNMPERR_SUCCESS;
+            break;
 
             /*
              * These are technically illegal to set by the
@@ -3431,7 +3512,7 @@ _request_set_error(netsnmp_request_info *request, int mode, int error_value)
 
         default:
             request->status = SNMP_ERR_NOSUCHNAME;      /* WWW: correct? */
-            return SNMPERR_SUCCESS;
+            break;
         }
         break;                  /* never get here */
 
@@ -3452,7 +3533,7 @@ _request_set_error(netsnmp_request_info *request, int mode, int error_value)
              */
             request->status = error_value;
         }
-        return SNMPERR_SUCCESS;
+        break;
     }
     return SNMPERR_SUCCESS;
 }
@@ -3568,67 +3649,6 @@ netsnmp_get_agent_uptime(void)
     return netsnmp_timeval_uptime(&now);
 }
 
-
-
-NETSNMP_INLINE void
-netsnmp_agent_add_list_data(netsnmp_agent_request_info *ari,
-                            netsnmp_data_list *node)
-{
-    if (ari) {
-	if (ari->agent_data) {
-            netsnmp_add_list_data(&ari->agent_data, node);
-        } else {
-            ari->agent_data = node;
-	}
-    }
-}
-
-NETSNMP_INLINE int
-netsnmp_agent_remove_list_data(netsnmp_agent_request_info *ari,
-                               const char * name)
-{
-    if ((NULL == ari) || (NULL == ari->agent_data))
-        return 1;
-
-    return netsnmp_remove_list_node(&ari->agent_data, name);
-}
-
-NETSNMP_INLINE void    *
-netsnmp_agent_get_list_data(netsnmp_agent_request_info *ari,
-                            const char *name)
-{
-    if (ari) {
-        return netsnmp_get_list_data(ari->agent_data, name);
-    }
-    return NULL;
-}
-
-NETSNMP_INLINE void
-netsnmp_free_agent_data_set(netsnmp_agent_request_info *ari)
-{
-    if (ari) {
-        netsnmp_free_list_data(ari->agent_data);
-    }
-}
-
-NETSNMP_INLINE void
-netsnmp_free_agent_data_sets(netsnmp_agent_request_info *ari)
-{
-    if (ari) {
-        netsnmp_free_all_list_data(ari->agent_data);
-    }
-}
-
-NETSNMP_INLINE void
-netsnmp_free_agent_request_info(netsnmp_agent_request_info *ari)
-{
-    if (ari) {
-        if (ari->agent_data) {
-            netsnmp_free_all_list_data(ari->agent_data);
-	}
-        SNMP_FREE(ari);
-    }
-}
 
 /*************************************************************************
  *

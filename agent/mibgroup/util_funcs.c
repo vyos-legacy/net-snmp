@@ -86,7 +86,9 @@
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
 #endif
-
+#ifdef HAVE_PTHREAD_H
+#include <pthread.h>
+#endif
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -280,7 +282,7 @@ get_exec_output(struct extensible *ex)
             /*
              * XXX  Use SNMP_FILEMODE_CLOSED instead of 644? 
              */
-        if ((cfd = open(cachefile, O_WRONLY | O_TRUNC | O_CREAT, 0644)) < 0) {
+        if ((cfd = open(cachefile, O_WRONLY | O_TRUNC | O_CREAT, 0600)) < 0) {
                 snmp_log(LOG_ERR,"can not create cache file\n");
                 setPerrorstatus(cachefile);
                 cachetime = 0;
@@ -629,10 +631,17 @@ get_exec_pipes(char *cmd, int *fdIn, int *fdOut, int *pid)
       return 0;
     }
     
+    DEBUGMSGTL(("util_funcs","child hProcess (stored in pid): %d\n",(int)pi.hProcess));
+    DEBUGMSGTL(("util_funcs","child dwProcessId (task manager): %d\n",(int)pi.dwProcessId));
+
     /* Set global child process handle */
     *pid = (int)pi.hProcess;
 
-    /* Close pipe handles to make sure that no handles to the write end of the
+    /* Cleanup */
+    if (!CloseHandle(pi.hThread))
+      DEBUGMSGTL(("util_funcs","get_exec_pipes CloseHandle pi.hThread: %d\n",cmd));
+
+   /* Close pipe handles to make sure that no handles to the write end of the
      * output pipe are maintained in this process or else the pipe will
      * not close when the child process exits and any calls to ReadFile 
      * will hang.
@@ -754,168 +763,6 @@ sprint_mib_oid(char *buf, oid name[], size_t len)
         while (*buf != 0)
             buf++;
     }
-}
-
-/*******************************************************************-o-******
- * header_simple_table
- *
- * Parameters:
- *	  *vp		 Variable data.
- *	  *name		 Fully instantiated OID name.
- *	  *length	 Length of name.
- *	   exact	 TRUE if an exact match is desired.
- *	  *var_len	 Hook for size of returned data type.
- *	(**write_method) Hook for write method (UNUSED).
- *	   max
- *      
- * Returns:
- *	0	If name matches vp->name (accounting for 'exact') and is
- *			not greater in length than 'max'.
- *	1	Otherwise.
- *
- *
- * Compare 'name' to vp->name for the best match or an exact match (if
- *	requested).  Also check that 'name' is not longer than 'max' if
- *	max is greater-than/equal 0.
- * Store a successful match in 'name', and increment the OID instance if
- *	the match was not exact.  
- *
- * 'name' and 'length' are undefined upon failure.
- *
- */
-int
-header_simple_table(struct variable *vp, oid * name, size_t * length,
-                    int exact, size_t * var_len,
-                    WriteMethod ** write_method, int max)
-{
-    int             i, rtest;   /* Set to:      -1      If name < vp->name,
-                                 *              1       If name > vp->name,
-                                 *              0       Otherwise.
-                                 */
-    oid             newname[MAX_OID_LEN];
-
-    for (i = 0, rtest = 0;
-         i < (int) vp->namelen && i < (int) (*length) && !rtest; i++) {
-        if (name[i] != vp->name[i]) {
-            if (name[i] < vp->name[i])
-                rtest = -1;
-            else
-                rtest = 1;
-        }
-    }
-    if (rtest > 0 ||
-        (exact == 1
-         && (rtest || (int) *length != (int) (vp->namelen + 1)))) {
-        if (var_len)
-            *var_len = 0;
-        return MATCH_FAILED;
-    }
-
-    memset(newname, 0, sizeof(newname));
-
-    if (((int) *length) <= (int) vp->namelen || rtest == -1) {
-        memmove(newname, vp->name, (int) vp->namelen * sizeof(oid));
-        newname[vp->namelen] = 1;
-        *length = vp->namelen + 1;
-    } else if (((int) *length) > (int) vp->namelen + 1) {       /* exact case checked earlier */
-        *length = vp->namelen + 1;
-        memmove(newname, name, (*length) * sizeof(oid));
-        if (name[*length - 1] < ULONG_MAX) {
-            newname[*length - 1] = name[*length - 1] + 1;
-        } else {
-            /*
-             * Careful not to overflow...  
-             */
-            newname[*length - 1] = name[*length - 1];
-        }
-    } else {
-        *length = vp->namelen + 1;
-        memmove(newname, name, (*length) * sizeof(oid));
-        if (!exact) {
-            if (name[*length - 1] < ULONG_MAX) {
-                newname[*length - 1] = name[*length - 1] + 1;
-            } else {
-                /*
-                 * Careful not to overflow...  
-                 */
-                newname[*length - 1] = name[*length - 1];
-            }
-        } else {
-            newname[*length - 1] = name[*length - 1];
-        }
-    }
-    if ((max >= 0 && ((int)newname[*length - 1] > max)) ||
-               ( 0 == newname[*length - 1] )) {
-        if (var_len)
-            *var_len = 0;
-        return MATCH_FAILED;
-    }
-
-    memmove(name, newname, (*length) * sizeof(oid));
-    if (write_method)
-        *write_method = 0;
-    if (var_len)
-        *var_len = sizeof(long);        /* default */
-    return (MATCH_SUCCEEDED);
-}
-
-/*
- * header_generic(...
- * Arguments:
- * vp     IN      - pointer to variable entry that points here
- * name    IN/OUT  - IN/name requested, OUT/name found
- * length  IN/OUT  - length of IN/OUT oid's 
- * exact   IN      - TRUE if an exact match was requested
- * var_len OUT     - length of variable or 0 if function returned
- * write_method
- * 
- */
-
-/*******************************************************************-o-******
- * generic_header
- *
- * Parameters:
- *	  *vp	   (I)     Pointer to variable entry that points here.
- *	  *name	   (I/O)   Input name requested, output name found.
- *	  *length  (I/O)   Length of input and output oid's.
- *	   exact   (I)     TRUE if an exact match was requested.
- *	  *var_len (O)     Length of variable or 0 if function returned.
- *	(**write_method)   Hook to name a write method (UNUSED).
- *      
- * Returns:
- *	MATCH_SUCCEEDED	If vp->name matches name (accounting for exact bit).
- *	MATCH_FAILED	Otherwise,
- *
- *
- * Check whether variable (vp) matches name.
- */
-int
-header_generic(struct variable *vp,
-               oid * name,
-               size_t * length,
-               int exact, size_t * var_len, WriteMethod ** write_method)
-{
-    oid             newname[MAX_OID_LEN];
-    int             result;
-
-    DEBUGMSGTL(("util_funcs", "header_generic: "));
-    DEBUGMSGOID(("util_funcs", name, *length));
-    DEBUGMSG(("util_funcs", " exact=%d\n", exact));
-
-    memcpy((char *) newname, (char *) vp->name,
-           (int) vp->namelen * sizeof(oid));
-    newname[vp->namelen] = 0;
-    result = snmp_oid_compare(name, *length, newname, vp->namelen + 1);
-    DEBUGMSGTL(("util_funcs", "  result: %d\n", result));
-    if ((exact && (result != 0)) || (!exact && (result >= 0)))
-        return (MATCH_FAILED);
-    memcpy((char *) name, (char *) newname,
-           ((int) vp->namelen + 1) * sizeof(oid));
-    *length = vp->namelen + 1;
-
-    *write_method = 0;
-    *var_len = sizeof(long);    /* default to 'long' results */
-    return (MATCH_SUCCEEDED);
 }
 
 /*
@@ -1188,3 +1035,151 @@ Retrieve_Table_Data(mib_table_t t, int *max_idx)
     *max_idx = table->next_index - 1;
     return table->data;
 }
+
+#if defined(HAVE_PTHREAD_H)
+prefix_cbx *net_snmp_create_prefix_info(unsigned long OnLinkFlag,
+                                        unsigned long AutonomousFlag,
+                                        char *in6ptr)
+{
+   prefix_cbx *node = SNMP_MALLOC_TYPEDEF(prefix_cbx);
+   if(!in6ptr) {
+      free(node);
+      return NULL;
+   }
+   if(!node) {
+      free(node);
+      return NULL;
+   }
+   node->next_info = NULL;
+   node->ipAddressPrefixOnLinkFlag = OnLinkFlag;
+   node->ipAddressPrefixAutonomousFlag = AutonomousFlag;
+   memcpy(node->in6p, in6ptr, sizeof(node->in6p));
+
+   return node;
+}
+
+int net_snmp_find_prefix_info(prefix_cbx **head,
+                              char *address,
+                              prefix_cbx *node_to_find,
+                              pthread_mutex_t *lockid)
+{
+    int iret;
+    memset(node_to_find, 0, sizeof(prefix_cbx));
+    if(!*head)
+       return -1;
+    memcpy(node_to_find->in6p, address, sizeof(node_to_find->in6p));
+
+    iret = net_snmp_search_update_prefix_info(head, node_to_find, 1, lockid);
+    if(iret < 0) {
+       DEBUGMSGTL(("util_funcs:prefix", "Unable to search the list\n"));
+       return -1;
+    } else if (!iret) {
+       DEBUGMSGTL(("util_funcs:prefix", "Could not find prefix info\n"));
+       return -1;
+    } else
+       return 0;
+}
+
+int net_snmp_update_prefix_info(prefix_cbx **head,
+                                prefix_cbx *node_to_update,
+                                pthread_mutex_t *lockid)
+{
+    int iret;
+    iret = net_snmp_search_update_prefix_info(head, node_to_update, 0, lockid);
+    if(iret < 0) {
+       DEBUGMSGTL(("util_funcs:prefix", "Unable to update prefix info\n"));
+       return -1;
+    } else if (!iret) {
+       DEBUGMSGTL(("util_funcs:prefix", "Unable to find the node to update\n"));
+       return -1;
+    } else
+       return 0;
+}
+
+int net_snmp_search_update_prefix_info(prefix_cbx **head,
+                                       prefix_cbx *node_to_use,
+                                       int functionality,
+                                       pthread_mutex_t *lockid)
+{
+
+   /* We define functionality based on need                                                         *
+    * 0 - Need to do a search and update. We have to provide the node_to_use structure filled fully *
+    * 1 - Need to do only search. Provide the node_to_use with in6p value filled                    */
+
+    prefix_cbx *temp_node;
+    netsnmp_assert(NULL != head);
+    netsnmp_assert(NULL != node_to_use);
+
+    if(functionality > 1)
+       return -1;
+    if(!node_to_use)
+       return -1;
+
+
+    if (!functionality) {
+       if (!*head) {
+           *head = node_to_use;
+           return 1;
+       }
+
+       pthread_mutex_lock( lockid );
+       for (temp_node = *head; temp_node->next_info != NULL ; temp_node = temp_node->next_info) {
+            if (0 == strcmp(temp_node->in6p, node_to_use->in6p)) {
+                temp_node->ipAddressPrefixOnLinkFlag = node_to_use->ipAddressPrefixOnLinkFlag;
+                temp_node->ipAddressPrefixAutonomousFlag = node_to_use->ipAddressPrefixAutonomousFlag;
+                pthread_mutex_unlock( lockid );
+                return 2;
+            }
+       }
+       temp_node->next_info = node_to_use;
+       pthread_mutex_unlock( lockid );
+       return 1;
+    } else {
+         pthread_mutex_lock( lockid );
+         for (temp_node = *head; temp_node != NULL ; temp_node = temp_node->next_info) {
+              if (0 == strcmp(temp_node->in6p, node_to_use->in6p)) {
+                /*need yo put sem here as i read here */
+                node_to_use->ipAddressPrefixOnLinkFlag = temp_node->ipAddressPrefixOnLinkFlag;
+                node_to_use->ipAddressPrefixAutonomousFlag = temp_node->ipAddressPrefixAutonomousFlag;
+                pthread_mutex_unlock( lockid );
+                return 1;
+              }
+         }
+         pthread_mutex_unlock( lockid );
+         return 0;
+    }
+}
+
+int net_snmp_delete_prefix_info(prefix_cbx **head,
+                                char *address,
+                                pthread_mutex_t *lockid)
+{
+
+    prefix_cbx *temp_node,*prev_node;
+    if(!address)
+       return -1;
+    if(!head)
+       return -1;
+
+   /*Need to acquire lock here */
+    pthread_mutex_lock( lockid );
+    for (temp_node = *head, prev_node = NULL; temp_node;
+         prev_node = temp_node, temp_node = temp_node->next_info) {
+
+         if (temp_node->in6p && strcmp(temp_node->in6p, address) == 0) {
+            if (prev_node)
+                prev_node->next_info = temp_node->next_info;
+            else
+                *head = temp_node->next_info;
+            free(temp_node);
+            pthread_mutex_unlock( lockid );
+            return 1;
+        }
+
+    }
+   /*Release Lock here */
+    pthread_mutex_unlock( lockid );
+    return 0;
+}
+#endif
+

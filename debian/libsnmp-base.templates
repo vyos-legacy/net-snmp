@@ -1,0 +1,10 @@
+Template: libsnmp-base/download_mibs
+Type: boolean
+Default: false
+_Description: Download and extract MIBs from RFCs and IANA?
+ Various snmp software needs extracted MIBs from RFCs and IANA - 
+ which cannot be shipped - to be working as expected. These MIBs can be
+ automatically fetched and extracted as part of installing this package.
+ .
+ This will take several minutes to complete, even with a fast internet
+ connection.

@@ -1,9 +1,14 @@
 /*
  * table_array.c
- * $Id: table_array.c 14356 2006-03-08 22:48:18Z rstory $
+ * $Id: table_array.c 15962 2007-03-14 22:09:18Z tanders $
  */
 
 #include <net-snmp/net-snmp-config.h>
+
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
+#include <net-snmp/agent/table_array.h>
 
 #if HAVE_STRING_H
 #include <string.h>
@@ -11,11 +16,7 @@
 #include <strings.h>
 #endif
 
-#include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
-
 #include <net-snmp/agent/table.h>
-#include <net-snmp/agent/table_array.h>
 #include <net-snmp/library/container.h>
 #include <net-snmp/library/snmp_assert.h>
 
@@ -570,6 +571,8 @@ group_requests(netsnmp_agent_request_info *agtreq_info,
             DEBUGMSG(("table_array:group", "\n"));
             g = (netsnmp_request_group *) tmp;
             i = SNMP_MALLOC_TYPEDEF(netsnmp_request_group_item);
+            if (i == NULL)
+                return;
             i->ri = current;
             i->tri = tblreq_info;
             i->next = g->list;
@@ -585,6 +588,8 @@ group_requests(netsnmp_agent_request_info *agtreq_info,
         DEBUGMSG(("table_array:group", "\n"));
         g = SNMP_MALLOC_TYPEDEF(netsnmp_request_group);
         i = SNMP_MALLOC_TYPEDEF(netsnmp_request_group_item);
+        if (i == NULL || g == NULL)
+            return;
         g->list = i;
         g->table = tad->table;
         i->ri = current;

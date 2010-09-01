@@ -52,8 +52,10 @@ for s in $sections; do
 	    rm -f $f
 	else
 	    #echo mv $f ${f}snmp
-	    sed -e "s/^\(\.TH \"[^\"]*\"\|\.TH [^\"][^ ]*\) *${s}/\1 ${s}snmp/" < $f > ${f}snmp
+	    sed -e "s/^\(\.TH \"[^\"]*\"\|\.TH [^\"][^ ]*\) *${s}/\1 ${s}snmp/" < $f > ${f}tmp
+	    sed -e "s/^\(\.so .*\)${s}$/\1${s}snmp/" < ${f}tmp > ${f}snmp
 	    rm -f $f
+	    rm -f ${f}tmp
 	fi
     done
 done

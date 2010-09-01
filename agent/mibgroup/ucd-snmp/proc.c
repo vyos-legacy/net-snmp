@@ -54,6 +54,9 @@
 
 #include "struct.h"
 #include "proc.h"
+#ifdef USING_HOST_DATA_ACCESS_SWRUN_MODULE
+#include <net-snmp/data_access/swrun.h>
+#endif
 #ifdef USING_UCD_SNMP_ERRORMIB_MODULE
 #include "errormib.h"
 #else
@@ -76,21 +79,24 @@ init_proc(void)
      * information at 
      */
     struct variable2 extensible_proc_variables[] = {
-        {MIBINDEX, ASN_INTEGER, RONLY, var_extensible_proc, 1, {MIBINDEX}},
-        {ERRORNAME, ASN_OCTET_STR, RONLY, var_extensible_proc, 1,
-         {ERRORNAME}},
-        {PROCMIN, ASN_INTEGER, RONLY, var_extensible_proc, 1, {PROCMIN}},
-        {PROCMAX, ASN_INTEGER, RONLY, var_extensible_proc, 1, {PROCMAX}},
-        {PROCCOUNT, ASN_INTEGER, RONLY, var_extensible_proc, 1,
-         {PROCCOUNT}},
-        {ERRORFLAG, ASN_INTEGER, RONLY, var_extensible_proc, 1,
-         {ERRORFLAG}},
-        {ERRORMSG, ASN_OCTET_STR, RONLY, var_extensible_proc, 1,
-         {ERRORMSG}},
-        {ERRORFIX, ASN_INTEGER, RWRITE, var_extensible_proc, 1,
-         {ERRORFIX}},
-        {ERRORFIXCMD, ASN_OCTET_STR, RONLY, var_extensible_proc, 1,
-         {ERRORFIXCMD}}
+        {MIBINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_extensible_proc, 1, {MIBINDEX}},
+        {ERRORNAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_proc, 1, {ERRORNAME}},
+        {PROCMIN, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_extensible_proc, 1, {PROCMIN}},
+        {PROCMAX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_extensible_proc, 1, {PROCMAX}},
+        {PROCCOUNT, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_extensible_proc, 1, {PROCCOUNT}},
+        {ERRORFLAG, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_extensible_proc, 1, {ERRORFLAG}},
+        {ERRORMSG, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_proc, 1, {ERRORMSG}},
+        {ERRORFIX, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_extensible_proc, 1, {ERRORFIX}},
+        {ERRORFIXCMD, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_proc, 1, {ERRORFIXCMD}}
     };
 
     /*
@@ -347,6 +353,14 @@ get_proc_instance(struct myproc *proc, oid inst)
         proc = proc->next;
     return (proc);
 }
+
+#ifdef USING_HOST_DATA_ACCESS_SWRUN_MODULE
+int
+sh_count_procs(char *procname)
+{
+    return swrun_count_processes_by_name( procname );
+}
+#else
 
 #ifdef bsdi2
 #include <sys/param.h>
@@ -852,3 +866,4 @@ sh_count_procs(char *procname)
     return (ret);
 }
 #endif
+#endif   /* !USING_HOST_DATA_ACCESS_SWRUN_MODULE */

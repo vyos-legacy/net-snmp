@@ -1,6 +1,7 @@
 package NetSNMP::OID;
 
 use strict;
+use warnings;
 use Carp;
 
 require Exporter;
@@ -91,7 +92,7 @@ use vars qw(@ISA %EXPORT_TAGS @EXPORT_OK @EXPORT $VERSION $AUTOLOAD);
 	snmp_oid_compare
         compare
 );
-$VERSION = '5.04021';
+$VERSION = '5.05';
 
 sub new {
     my $type = shift;
@@ -140,6 +141,8 @@ sub to_array($) {
     my $self = shift;
     return $self->{oidptr}->to_array();
 }
+
+sub DESTROY {}
 
 sub AUTOLOAD {
     # This AUTOLOAD is used to 'autoload' constants from the constant()

@@ -58,6 +58,7 @@
 #include <net-snmp/utilities.h>
 
 #include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/agent_trap.h>
 #include <net-snmp/agent/snmp_agent.h>
 #include <net-snmp/agent/agent_callbacks.h>
@@ -153,6 +154,7 @@ init_traps(void)
 static void
 free_trap_session(struct trap_sink *sp)
 {
+    DEBUGMSGTL(("trap", "freeing callback trap session (%p, %p)\n", sp, sp->sesp));
     snmp_close(sp->sesp);
     free(sp);
 }
@@ -168,7 +170,7 @@ add_trap_session(netsnmp_session * ss, int pdutype, int confirm,
          * something else wants to handle notification registrations 
          */
         struct agent_add_trap_args args;
-        DEBUGMSGTL(("trap", "adding callback trap sink\n"));
+        DEBUGMSGTL(("trap", "adding callback trap sink (%p)\n", ss));
         args.ss = ss;
         args.confirm = confirm;
         snmp_call_callbacks(SNMP_CALLBACK_APPLICATION,
@@ -197,8 +199,9 @@ add_trap_session(netsnmp_session * ss, int pdutype, int confirm,
 int
 remove_trap_session(netsnmp_session * ss)
 {
-    struct trap_sink *sp = sinks, *prev = 0;
+    struct trap_sink *sp = sinks, *prev = NULL;
 
+    DEBUGMSGTL(("trap", "removing trap sessions\n"));
     while (sp) {
         if (sp->sesp == ss) {
             if (prev) {
@@ -216,6 +219,7 @@ remove_trap_session(netsnmp_session * ss)
             /*
              * free_trap_session(sp);  
              */
+            DEBUGMSGTL(("trap", "removing trap session (%p, %p)\n", sp, sp->sesp));
             free(sp);
             return 1;
         }
@@ -254,7 +258,7 @@ create_trap_session2(const char *sink, const char* sinkport,
     if ((NULL == netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
                                        NETSNMP_DS_LIB_CLIENT_ADDR)) && 
         ((0 == strcmp("localhost",sink)) || (0 == strcmp("127.0.0.1",sink))))
-        session.localname = "localhost";
+        session.localname = strdup("localhost");
 
     t = netsnmp_tdomain_transport_full("snmptrap", sink, 0, NULL, sinkport);
     if (t != NULL) {
@@ -318,6 +322,7 @@ void
 snmpd_free_trapsinks(void)
 {
     struct trap_sink *sp = sinks;
+    DEBUGMSGTL(("trap", "freeing trap sessions\n"));
     while (sp) {
         sinks = sinks->next;
         free_trap_session(sp);
@@ -338,7 +343,6 @@ convert_v2pdu_to_v1( netsnmp_pdu* template_v2pdu )
     netsnmp_pdu           *template_v1pdu;
     netsnmp_variable_list *first_vb, *vblist;
     netsnmp_variable_list *var;
-    size_t                 len;
 
     /*
      * Make a copy of the v2 Trap PDU
@@ -418,9 +422,10 @@ convert_v2pdu_to_v1( netsnmp_pdu* template_v2pdu )
                              snmptrapenterprise_oid,
                              snmptrapenterprise_oid_len);
         if (var) {
-            memdup((u_char**)&template_v1pdu->enterprise,
-                   (const u_char*)var->val.objid, var->val_len);
             template_v1pdu->enterprise_length = var->val_len/sizeof(oid);
+            template_v1pdu->enterprise =
+                snmp_duplicate_objid(var->val.objid,
+                                     template_v1pdu->enterprise_length);
         } else {
             template_v1pdu->enterprise        = NULL;
             template_v1pdu->enterprise_length = 0;		/* XXX ??? */
@@ -430,10 +435,10 @@ convert_v2pdu_to_v1( netsnmp_pdu* template_v2pdu )
          * For enterprise-specific traps, split the snmpTrapOID value
          *   into enterprise and specific trap
          */
-        len = vblist->val_len / sizeof(oid);
+        size_t len = vblist->val_len / sizeof(oid);
         if ( len <= 2 ) {
             snmp_log(LOG_WARNING,
-                     "send_trap: v2 trapOID too short (%d)\n", len);
+                     "send_trap: v2 trapOID too short (%d)\n", (int)len);
             snmp_free_pdu(template_v1pdu);
             return NULL;
         }
@@ -443,8 +448,8 @@ convert_v2pdu_to_v1( netsnmp_pdu* template_v2pdu )
         if (vblist->val.objid[len-1] == 0)
             len--;
         SNMP_FREE(template_v1pdu->enterprise);
-        memdup((u_char**)&template_v1pdu->enterprise,
-               (u_char *)vblist->val.objid, len*sizeof(oid));
+        template_v1pdu->enterprise =
+            snmp_duplicate_objid(vblist->val.objid, len);
         template_v1pdu->enterprise_length = len;
     }
     var = find_varbind_in_list( vblist, agentaddr_oid,
@@ -639,6 +644,8 @@ netsnmp_send_traps(int trap, int specific,
     in_addr_t             *pdu_in_addr_t;
     u_long                 uptime;
     struct trap_sink *sink;
+    const char            *v1trapaddress;
+    int                    res;
 
     DEBUGMSGTL(( "trap", "send_trap %d %d ", trap, specific));
     DEBUGMSGOID(("trap", enterprise, enterprise_length));
@@ -792,9 +799,27 @@ netsnmp_send_traps(int trap, int specific,
      * Ensure that the v1 trap PDU includes the local IP address
      */
        pdu_in_addr_t = (in_addr_t *) template_v1pdu->agent_addr;
-      *pdu_in_addr_t = get_myaddr();
+       v1trapaddress = netsnmp_ds_get_string(NETSNMP_DS_APPLICATION_ID,
+                                      NETSNMP_DS_AGENT_TRAP_ADDR);
+       if (v1trapaddress != NULL) {
+           /* "v1trapaddress" was specified in config, try to resolve it */
+           res = netsnmp_gethostbyname_v4(v1trapaddress, pdu_in_addr_t);
+       }
+       if (v1trapaddress == NULL || res < 0) {
+           /* "v1trapaddress" was not specified in config or the resolution failed,
+            * try any local address */
+           *pdu_in_addr_t = get_myaddr();
+       }
+
     }
 
+	/* A context name was provided, so copy it and its length to the v2 pdu
+	 * template. */
+	if (context != NULL)
+	{
+		template_v2pdu->contextName    = strdup(context);
+		template_v2pdu->contextNameLen = strlen(context);
+	}
 
     /*
      *  Now loop through the list of trap sinks
@@ -896,7 +921,7 @@ send_trap_to_sess(netsnmp_session * sess, netsnmp_pdu *template_pdu)
     if (!sess || !template_pdu)
         return;
 
-    DEBUGMSGTL(("trap", "sending trap type=%d, version=%d\n",
+    DEBUGMSGTL(("trap", "sending trap type=%d, version=%ld\n",
                 template_pdu->command, sess->version));
 
 #ifndef NETSNMP_DISABLE_SNMPV1
@@ -949,6 +974,21 @@ send_trap_vars(int trap, int specific, netsnmp_variable_list * vars)
     else
         send_enterprise_trap_vars(trap, specific, trap_version_id,
                                   OID_LENGTH(trap_version_id), vars);
+}
+
+/* Send a trap under a context */
+void send_trap_vars_with_context(int trap, int specific, 
+              netsnmp_variable_list *vars, char *context)
+{
+    if (trap == SNMP_TRAP_ENTERPRISESPECIFIC)
+        netsnmp_send_traps(trap, specific, objid_enterprisetrap,
+                                  OID_LENGTH(objid_enterprisetrap), vars,
+								  context, 0);
+    else
+        netsnmp_send_traps(trap, specific, trap_version_id,
+                                  OID_LENGTH(trap_version_id), vars, 
+								  context, 0);
+    	
 }
 
 /**
@@ -1007,6 +1047,25 @@ void
 send_v2trap(netsnmp_variable_list * vars)
 {
     send_trap_vars(-1, -1, vars);
+}
+
+/**
+ * Similar to send_v2trap(), with the added ability to specify a context.  If
+ * the last parameter is NULL, then this call is equivalent to send_v2trap().
+ *
+ * @param vars is used to supply the list of variable bindings for the trap.
+ * 
+ * @param context is used to specify the context of the trap.
+ *
+ * @return void
+ *
+ * @see send_v2trap
+ */
+void send_v3trap(netsnmp_variable_list *vars, char *context)
+{
+    netsnmp_send_traps(-1, -1, 
+					trap_version_id, OID_LENGTH(trap_version_id),
+                    vars, context, 0);
 }
 
 void
@@ -1075,7 +1134,6 @@ snmpd_parse_config_authtrap(const char *token, char *cptr)
 void
 snmpd_parse_config_trapsink(const char *token, char *cptr)
 {
-    char            tmpbuf[1024];
     char           *sp, *cp, *pp = NULL;
     char            *st;
 
@@ -1088,9 +1146,7 @@ snmpd_parse_config_trapsink(const char *token, char *cptr)
     if (pp)
 	config_pwarn("The separate port argument to trapsink is deprecated");
     if (create_v1_trap_session(sp, pp, cp ? cp : snmp_trapcommunity) == 0) {
-        snprintf(tmpbuf, sizeof(tmpbuf), "cannot create trapsink: %s", cptr);
-        tmpbuf[sizeof(tmpbuf)-1] = '\0';
-        config_perror(tmpbuf);
+	netsnmp_config_error("cannot create trapsink: %s", cptr);
     }
 }
 #endif
@@ -1099,10 +1155,7 @@ snmpd_parse_config_trapsink(const char *token, char *cptr)
 void
 snmpd_parse_config_trap2sink(const char *word, char *cptr)
 {
-    char            tmpbuf[1024];
-    char           *sp, *cp, *pp = NULL;
-    int             sinkport;
-    char            *st;
+    char           *st, *sp, *cp, *pp = NULL;
 
     if (!snmp_trapcommunity)
         snmp_trapcommunity = strdup("public");
@@ -1113,19 +1166,14 @@ snmpd_parse_config_trap2sink(const char *word, char *cptr)
     if (pp)
 	config_pwarn("The separate port argument to trapsink2 is deprecated");
     if (create_v2_trap_session(sp, pp, cp ? cp : snmp_trapcommunity) == 0) {
-        snprintf(tmpbuf, sizeof(tmpbuf), "cannot create trap2sink: %s", cptr);
-        tmpbuf[sizeof(tmpbuf)-1] = '\0';
-        config_perror(tmpbuf);
+	netsnmp_config_error("cannot create trap2sink: %s", cptr);
     }
 }
 
 void
 snmpd_parse_config_informsink(const char *word, char *cptr)
 {
-    char            tmpbuf[1024];
-    char           *sp, *cp, *pp = NULL;
-    int             sinkport;
-    char            *st;
+    char           *st, *sp, *cp, *pp = NULL;
 
     if (!snmp_trapcommunity)
         snmp_trapcommunity = strdup("public");
@@ -1136,9 +1184,7 @@ snmpd_parse_config_informsink(const char *word, char *cptr)
     if (pp)
 	config_pwarn("The separate port argument to informsink is deprecated");
     if (create_v2_inform_session(sp, pp, cp ? cp : snmp_trapcommunity) == 0) {
-        snprintf(tmpbuf, sizeof(tmpbuf), "cannot create informsink: %s", cptr);
-        tmpbuf[sizeof(tmpbuf)-1] = '\0';
-        config_perror(tmpbuf);
+	netsnmp_config_error("cannot create informsink: %s", cptr);
     }
 }
 #endif

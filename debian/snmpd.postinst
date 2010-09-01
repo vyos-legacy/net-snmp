@@ -3,8 +3,11 @@
 set -e
 
 if [ "x$1" = xconfigure ]; then
-	adduser --quiet --system --no-create-home --home /var/lib/snmp snmp
-	chown -R snmp /var/lib/snmp
+	if [ ! `getent group snmp >/dev/null` ]; then
+		 deluser --quiet --system snmp
+	fi
+	adduser --quiet --system --group --no-create-home --home /var/lib/snmp snmp
+	chown -R snmp:snmp /var/lib/snmp
 fi
 
 . /usr/share/debconf/confmodule

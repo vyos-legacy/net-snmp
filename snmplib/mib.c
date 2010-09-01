@@ -1,7 +1,7 @@
 /*
  * mib.c
  *
- * $Id: mib.c 17137 2008-07-30 07:57:19Z dts12 $
+ * $Id: mib.c 17639 2009-06-01 15:50:45Z dts12 $
  *
  * Update: 1998-07-17 <jhy@gsu.edu>
  * Added print_oid_report* functions.
@@ -42,6 +42,24 @@ SOFTWARE.
 #include <stdio.h>
 #include <ctype.h>
 #include <sys/types.h>
+
+#if HAVE_DIRENT_H
+# include <dirent.h>
+# define NAMLEN(dirent) strlen((dirent)->d_name)
+#else
+# define dirent direct
+# define NAMLEN(dirent) (dirent)->d_namlen
+# if HAVE_SYS_NDIR_H
+#  include <sys/ndir.h>
+# endif
+# if HAVE_SYS_DIR_H
+#  include <sys/dir.h>
+# endif
+# if HAVE_NDIR_H
+#  include <ndir.h>
+# endif
+#endif
+
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
@@ -2109,9 +2127,10 @@ handle_print_numeric(const char *token, char *line)
     char       *st;
 
     value = strtok_r(line, " \t\n", &st);
-    if ((strcasecmp(value, "yes")  == 0) || 
-	(strcasecmp(value, "true") == 0) ||
-	(*value == '1')) {
+    if (value && (
+	    (strcasecmp(value, "yes")  == 0) || 
+	    (strcasecmp(value, "true") == 0) ||
+	    (*value == '1') )) {
 
         netsnmp_ds_set_int(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_OID_OUTPUT_FORMAT,
                                                   NETSNMP_OID_OUTPUT_NUMERIC);
@@ -2324,7 +2343,9 @@ register_mib_handlers(void)
 
     netsnmp_ds_register_premib(ASN_BOOLEAN, "snmp", "showMibErrors",
                        NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_MIB_ERRORS);
-    netsnmp_ds_register_premib(ASN_BOOLEAN, "snmp", "strictCommentTerm",
+    netsnmp_ds_register_premib(ASN_BOOLEAN, "snmp", "commentToEOL",     /* Describes actual behaviour */
+                       NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_MIB_COMMENT_TERM);
+    netsnmp_ds_register_premib(ASN_BOOLEAN, "snmp", "strictCommentTerm",    /* Backward compatibility */
                        NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_MIB_COMMENT_TERM);
     netsnmp_ds_register_premib(ASN_BOOLEAN, "snmp", "mibAllowUnderline",
                        NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_MIB_PARSE_LABEL);
@@ -2539,6 +2560,7 @@ netsnmp_init_mib(void)
      */
     netsnmp_fixup_mib_directory();
     env_var = strdup(netsnmp_get_mib_directory());
+    netsnmp_mibindex_load();
 
     DEBUGMSGTL(("init_mib",
                 "Seen MIBDIRS: Looking in '%s' for mib dirs ...\n",
@@ -2604,7 +2626,7 @@ netsnmp_init_mib(void)
     while (entry) {
         if (strcasecmp(entry, DEBUG_ALWAYS_TOKEN) == 0) {
             read_all_mibs();
-        } else if (strstr(entry, "/") != 0) {
+        } else if (strstr(entry, "/") != NULL) {
             read_mib(entry);
         } else {
             netsnmp_read_module(entry);
@@ -2645,7 +2667,7 @@ netsnmp_init_mib(void)
 #endif
     }
 
-    if (env_var != 0) {
+    if (env_var != NULL) {
         DEBUGMSGTL(("init_mib",
                     "Seen MIBFILES: Looking in '%s' for mib files ...\n",
                     env_var));
@@ -2700,13 +2722,145 @@ netsnmp_init_mib(void)
     }
 }
 
-#ifndef NETSNMP_CLEAN_NAMESPACE
+#ifndef NETSNMP_NO_LEGACY_DEFINITIONS
 void
 init_mib(void)
 {
     netsnmp_init_mib();
 }
 #endif
+
+
+/*
+ * Handle MIB indexes centrally
+ */
+static int _mibindex     = 0;   /* Last index in use */
+static int _mibindex_max = 0;   /* Size of index array */
+char     **_mibindexes   = NULL;
+
+int _mibindex_add( const char *dirname, int i );
+void
+netsnmp_mibindex_load( void )
+{
+    DIR *dir;
+    struct dirent *file;
+    FILE *fp;
+    char tmpbuf[ 300];
+    char tmpbuf2[300];
+    int  i;
+    char *cp;
+
+    /*
+     * Open the MIB index directory, or create it (empty)
+     */
+    snprintf( tmpbuf, sizeof(tmpbuf), "%s/mib_indexes",
+              get_persistent_directory());
+    tmpbuf[sizeof(tmpbuf)-1] = 0;
+    dir = opendir( tmpbuf );
+    if ( dir == NULL ) {
+        DEBUGMSGTL(("mibindex", "load: (new)\n"));
+        mkdirhier( tmpbuf, NETSNMP_AGENT_DIRECTORY_MODE, 0);
+        return;
+    }
+
+    /*
+     * Create a list of which directory each file refers to
+     */
+    while ((file = readdir( dir ))) {
+        if ( !isdigit(file->d_name[0]))
+            continue;
+        i = atoi( file->d_name );
+
+        snprintf( tmpbuf, sizeof(tmpbuf), "%s/mib_indexes/%d",
+              get_persistent_directory(), i );
+        tmpbuf[sizeof(tmpbuf)-1] = 0;
+        fp = fopen( tmpbuf, "r" );
+        cp = fgets( tmpbuf2, sizeof(tmpbuf2), fp );
+        if ( !cp ) {
+            DEBUGMSGTL(("mibindex", "Empty MIB index (%d)\n", i));
+            fclose(fp);
+            continue;
+        }
+        tmpbuf2[strlen(tmpbuf2)-1] = 0;
+        DEBUGMSGTL(("mibindex", "load: (%d) %s\n", i, tmpbuf2));
+        (void)_mibindex_add( tmpbuf2+4, i );  /* Skip 'DIR ' */
+        fclose( fp );
+    }
+    closedir( dir );
+}
+
+char *
+netsnmp_mibindex_lookup( const char *dirname )
+{
+    int i;
+    static char tmpbuf[300];
+
+    for (i=0; i<_mibindex; i++) {
+        if ( _mibindexes[i] &&
+             strcmp( _mibindexes[i], dirname ) == 0) {
+             snprintf(tmpbuf, sizeof(tmpbuf), "%s/mib_indexes/%d",
+                      get_persistent_directory(), i);
+             tmpbuf[sizeof(tmpbuf)-1] = 0;
+             DEBUGMSGTL(("mibindex", "lookup: %s (%d) %s\n", dirname, i, tmpbuf ));
+             return tmpbuf;
+        }
+    }
+    DEBUGMSGTL(("mibindex", "lookup: (none)\n"));
+    return NULL;
+}
+
+int
+_mibindex_add( const char *dirname, int i )
+{
+    char **cpp;
+
+    DEBUGMSGTL(("mibindex", "add: %s (%d)\n", dirname, i ));
+    if ( i == -1 )
+        i = _mibindex++;
+    if ( i >= _mibindex_max ) {
+        /*
+         * If the index array is full (or non-exitent)
+         *   then expand (or create) it
+         */
+        cpp = (char **)malloc( (10+i) * sizeof(char*));
+        if ( _mibindexes ) {
+            memcpy( cpp, _mibindexes, _mibindex * sizeof(char*));
+            free(_mibindexes);
+        }
+        _mibindexes   = cpp;
+        _mibindex_max = i+10;
+    }
+    DEBUGMSGTL(("mibindex", "add: %d/%d/%d\n", i, _mibindex, _mibindex_max ));
+
+    _mibindexes[ i ] = strdup( dirname );
+    if ( i >= _mibindex )
+        _mibindex = i+1;
+
+    return i;
+}
+    
+FILE *
+netsnmp_mibindex_new( const char *dirname )
+{
+    FILE *fp;
+    char  tmpbuf[300];
+    char *cp;
+    int   i;
+
+    cp = netsnmp_mibindex_lookup( dirname );
+    if (!cp) {
+        i  = _mibindex_add( dirname, -1 );
+        snprintf( tmpbuf, sizeof(tmpbuf), "%s/mib_indexes/%d",
+                  get_persistent_directory(), i );
+        tmpbuf[sizeof(tmpbuf)-1] = 0;
+        cp = tmpbuf;
+    }
+    DEBUGMSGTL(("mibindex", "new: %s (%s)\n", dirname, cp ));
+    fp = fopen( cp, "w" );
+    if (fp)
+        fprintf( fp, "DIR %s\n", dirname );
+    return fp;
+}
 
 
 /**
@@ -2724,6 +2878,15 @@ shutdown_mib(void)
     }
     tree_head = NULL;
     Mib = NULL;
+    if (_mibindexes) {
+        int i;
+        for (i = 0; i < _mibindex; ++i)
+            SNMP_FREE(_mibindexes[i]);
+        free(_mibindexes);
+        _mibindex = 0;
+        _mibindex_max = 0;
+        _mibindexes = NULL;
+    }
     if (Prefix != NULL && Prefix != &Standard_Prefix[0])
         SNMP_FREE(Prefix);
     if (Prefix)
@@ -3271,7 +3434,7 @@ sprint_realloc_variable(u_char ** buf, size_t * buf_len,
          * Handle rare case where tree is empty.  
          */
         return sprint_realloc_by_type(buf, buf_len, out_len, allow_realloc,
-                                      variable, 0, 0, 0);
+                                      variable, NULL, NULL, NULL);
     }
 }
 
@@ -3342,10 +3505,6 @@ sprint_realloc_value(u_char ** buf, size_t * buf_len,
                      const oid * objid, size_t objidlen,
                      const netsnmp_variable_list * variable)
 {
-#ifndef NETSNMP_DISABLE_MIB_LOADING
-    struct tree    *subtree = tree_head;
-#endif /* NETSNMP_DISABLE_MIB_LOADING */
-
     if (variable->type == SNMP_NOSUCHOBJECT) {
         return snmp_strcat(buf, buf_len, out_len, allow_realloc,
                            (const u_char *)
@@ -3361,27 +3520,29 @@ sprint_realloc_value(u_char ** buf, size_t * buf_len,
     } else {
 #ifndef NETSNMP_DISABLE_MIB_LOADING
         const char *units = NULL;
-        subtree = get_tree(objid, objidlen, subtree);
+        struct tree *subtree = tree_head;
+	subtree = get_tree(objid, objidlen, subtree);
         if (subtree && !netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID,
                                             NETSNMP_DS_LIB_DONT_PRINT_UNITS)) {
             units = subtree->units;
         }
-        if (subtree && subtree->printomat) {
-            return (*subtree->printomat) (buf, buf_len, out_len,
-                                          allow_realloc, variable,
-                                          subtree->enums, subtree->hint,
-                                          units);
-        } else {
-            return sprint_realloc_by_type(buf, buf_len, out_len,
-                                          allow_realloc, variable,
-                                          subtree->enums, subtree->hint,
-                                          units);
-        }
-#else
+        if (subtree) {
+	    if(subtree->printomat) {
+		return (*subtree->printomat) (buf, buf_len, out_len,
+					      allow_realloc, variable,
+					      subtree->enums, subtree->hint,
+					      units);
+	    } else {
+		return sprint_realloc_by_type(buf, buf_len, out_len,
+					      allow_realloc, variable,
+					      subtree->enums, subtree->hint,
+					      units);
+	    }
+	}
+#endif /* NETSNMP_DISABLE_MIB_LOADING */
         return sprint_realloc_by_type(buf, buf_len, out_len,
                                       allow_realloc, variable,
                                       NULL, NULL, NULL);
-#endif /* NETSNMP_DISABLE_MIB_LOADING */
     }
 }
 
@@ -3531,8 +3692,8 @@ build_oid_segment(netsnmp_variable_list * var)
 
     if (var->name_length > MAX_OID_LEN) {
         DEBUGMSGTL(("build_oid_segment",
-                    "Something terribly wrong, namelen = %d\n",
-                    var->name_length));
+                    "Something terribly wrong, namelen = %lu\n",
+                    (unsigned long)var->name_length));
         return SNMPERR_GENERR;
     }
 
@@ -3656,7 +3817,7 @@ parse_one_oid_index(oid ** oidStart, size_t * oidLen,
                 snmp_set_var_value(var, (u_char *) oidLen, sizeof(long));
             }
             DEBUGMSGTL(("parse_oid_indexes",
-                        "Parsed int(%d): %d\n", var->type,
+                        "Parsed int(%d): %ld\n", var->type,
                         *var->val.integer));
             break;
 
@@ -3667,7 +3828,7 @@ parse_one_oid_index(oid ** oidStart, size_t * oidLen,
             for (i = 0; i < 4 && i < *oidLen; ++i) {
                 if (oidIndex[i] > 255) {
                     DEBUGMSGTL(("parse_oid_indexes",
-                                "illegal oid in index: %d\n", oidIndex[0]));
+                                "illegal oid in index: %ld\n", oidIndex[0]));
                         return SNMPERR_GENERR;  /* sub-identifier too large */
                     }
                     uitmp = uitmp + (oidIndex[i] << (8*(3-i)));
@@ -3825,6 +3986,7 @@ dump_realloc_oid_to_inetaddress(const int addr_type, const oid * objid, size_t o
     if (buf) {
         int             i, len;
         char            intbuf[64], * p;
+        unsigned char  *zc;
         unsigned long   zone;
 
         memset(intbuf, 0, 64);
@@ -3842,7 +4004,12 @@ dump_realloc_oid_to_inetaddress(const int addr_type, const oid * objid, size_t o
                 len = sprintf(p, "%lu.%lu.%lu.%lu", objid[0], objid[1], objid[2], objid[3]);
                 p += len;
                 if (addr_type == IPV4Z) {
-                    zone = ntohl((long)objid[4]);
+                    zc = (unsigned char*)&zone;
+                    zc[0] = (u_char)(objid[4]);
+                    zc[1] = (u_char)(objid[5]);
+                    zc[2] = (u_char)(objid[6]);
+                    zc[3] = (u_char)(objid[7]);
+                    zone = ntohl(zone);
                     len = sprintf(p, "%%%lu", zone);
                     p += len;
                 }
@@ -3863,7 +4030,12 @@ dump_realloc_oid_to_inetaddress(const int addr_type, const oid * objid, size_t o
                 p-- ; /* do not include the last ':' */
 
                 if (addr_type == IPV6Z) {
-                    zone = ntohl((long)objid[16]);
+                    zc = (unsigned char*)&zone;
+                    zc[0] = (u_char)(objid[16]);
+                    zc[1] = (u_char)(objid[17]);
+                    zc[2] = (u_char)(objid[18]);
+                    zc[3] = (u_char)(objid[19]);
+                    zone = ntohl(zone);
                     len = sprintf(p, "%%%lu", zone);
                     p += len;
                 }
@@ -5406,14 +5578,14 @@ _add_strings_to_oid(void *tp, char *cp,
                 (*objidlen)++;
             }
 
+            if (!cp)
+                goto bad_id;
             while (*cp && *cp != doingquote) {
                 if (*objidlen >= maxlen)
                     goto bad_id;
                 objid[*objidlen] = *cp++;
                 (*objidlen)++;
             }
-            if (!cp)
-                goto bad_id;
             cp2 = cp + 1;
             if (!*cp2)
                 cp2 = NULL;
@@ -5713,7 +5885,7 @@ print_subtree_oid_report(FILE * f, struct tree *tree, int count)
     while (1) {
         register struct tree *ntp;
 
-        tp = 0;
+        tp = NULL;
         for (ntp = tree->child_list; ntp; ntp = ntp->next_peer) {
             if (ntp->reported)
                 continue;

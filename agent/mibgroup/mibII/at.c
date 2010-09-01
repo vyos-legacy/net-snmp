@@ -25,7 +25,7 @@
 #if HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
-#if defined(IFNET_NEEDS_KERNEL) && !defined(_KERNEL)
+#if defined(NETSNMP_IFNET_NEEDS_KERNEL) && !defined(_KERNEL)
 #define _KERNEL 1
 #define _I_DEFINED_KERNEL
 #endif
@@ -128,9 +128,9 @@
 #ifndef solaris2
 static void     ARP_Scan_Init(void);
 #ifdef ARP_SCAN_FOUR_ARGUMENTS
-static int      ARP_Scan_Next(u_long *, char *, u_long *, u_short *);
+static int      ARP_Scan_Next(in_addr_t *, char *, u_long *, u_short *);
 #else
-static int      ARP_Scan_Next(u_long *, char *, u_long *);
+static int      ARP_Scan_Next(in_addr_t *, char *, u_long *);
 #endif
 #endif
 #endif
@@ -146,9 +146,12 @@ static int      ARP_Scan_Next(u_long *, char *, u_long *);
  * information at 
  */
 struct variable1 at_variables[] = {
-    {ATIFINDEX, ASN_INTEGER, RONLY, var_atEntry, 1, {1}},
-    {ATPHYSADDRESS, ASN_OCTET_STR, RONLY, var_atEntry, 1, {2}},
-    {ATNETADDRESS, ASN_IPADDRESS, RONLY, var_atEntry, 1, {3}}
+    {ATIFINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_atEntry, 1, {1}},
+    {ATPHYSADDRESS, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_atEntry, 1, {2}},
+    {ATNETADDRESS, ASN_IPADDRESS, NETSNMP_OLDAPI_RONLY,
+     var_atEntry, 1, {3}}
 };
 
 /*
@@ -206,7 +209,8 @@ var_atEntry(struct variable *vp,
     oid             lowest[16];
     oid             current[16];
     static char     PhysAddr[6], LowPhysAddr[6];
-    u_long          Addr, LowAddr, foundone;
+    in_addr_t       Addr, LowAddr;
+    int             foundone;
     static in_addr_t      addr_ret;
 #ifdef ARP_SCAN_FOUR_ARGUMENTS
     u_short         ifIndex, lowIfIndex = 0;
@@ -300,7 +304,7 @@ var_atEntry(struct variable *vp,
 
     memcpy((char *) name, (char *) lowest, oid_length * sizeof(oid));
     *length = oid_length;
-    *write_method = 0;
+    *write_method = (WriteMethod*)0;
     switch (vp->magic) {
     case IPMEDIAIFINDEX:       /* also ATIFINDEX */
         *var_len = sizeof long_return;
@@ -506,7 +510,7 @@ static int      arptab_size, arptab_current;
 static char    *lim, *rtnext;
 static char    *at = 0;
 #else
-#ifdef STRUCT_ARPHD_HAS_AT_NEXT
+#ifdef HAVE_STRUCT_ARPHD_AT_NEXT
 static struct arphd *at = 0;
 static struct arptab *at_ptr, at_entry;
 static struct arpcom at_com;
@@ -576,7 +580,7 @@ ARP_Scan_Init(void)
 #ifdef ARPTAB_SIZE_SYMBOL
         auto_nlist(ARPTAB_SIZE_SYMBOL, (char *) &arptab_size,
                    sizeof arptab_size);
-#ifdef STRUCT_ARPHD_HAS_AT_NEXT
+#ifdef HAVE_STRUCT_ARPHD_AT_NEXT
         at = (struct arphd *) malloc(arptab_size * sizeof(struct arphd));
 #else
         at = (struct arptab *) malloc(arptab_size * sizeof(struct arptab));
@@ -585,7 +589,7 @@ ARP_Scan_Init(void)
         return;
 #endif
     }
-#ifdef STRUCT_ARPHD_HAS_AT_NEXT
+#ifdef HAVE_STRUCT_ARPHD_AT_NEXT
     auto_nlist(ARPTAB_SYMBOL, (char *) at,
                arptab_size * sizeof(struct arphd));
     at_ptr = at[0].at_next;
@@ -712,11 +716,11 @@ ARP_Scan_Init(void)
 
 #ifdef ARP_SCAN_FOUR_ARGUMENTS
 static int
-ARP_Scan_Next(u_long * IPAddr, char *PhysAddr, u_long * ifType,
+ARP_Scan_Next(in_addr_t * IPAddr, char *PhysAddr, u_long * ifType,
               u_short * ifIndex)
 #else
 static int
-ARP_Scan_Next(u_long * IPAddr, char *PhysAddr, u_long * ifType)
+ARP_Scan_Next(in_addr_t * IPAddr, char *PhysAddr, u_long * ifType)
 #endif
 {
 #ifndef NETSNMP_CAN_USE_SYSCTL
@@ -765,7 +769,7 @@ ARP_Scan_Next(u_long * IPAddr, char *PhysAddr, u_long * ifType)
     register struct arptab *atab;
 
     while (arptab_current < arptab_size) {
-#ifdef STRUCT_ARPHD_HAS_AT_NEXT
+#ifdef HAVE_STRUCT_ARPHD_AT_NEXT
         /*
          * The arp table is an array of linked lists of arptab entries.
          * Unused slots have pointers back to the array entry itself 
@@ -794,9 +798,9 @@ ARP_Scan_Next(u_long * IPAddr, char *PhysAddr, u_long * ifType)
         at_ptr = at_entry.at_next;
         atab = &at_entry;
         *ifIndex = at_com.ac_if.if_index;       /* not strictly ARPHD */
-#else                           /* STRUCT_ARPHD_HAS_AT_NEXT */
+#else                           /* HAVE_STRUCT_ARPHD_AT_NEXT */
         atab = &at[arptab_current++];
-#endif                          /* STRUCT_ARPHD_HAS_AT_NEXT */
+#endif                          /* HAVE_STRUCT_ARPHD_AT_NEXT */
         if (!(atab->at_flags & ATF_COM))
             continue;
         *ifType = (atab->at_flags & ATF_PERM) ? 4 : 3;

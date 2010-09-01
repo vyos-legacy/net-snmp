@@ -33,6 +33,12 @@ SOFTWARE.
  * distributed with the Net-SNMP package.
  */
 /*
+ * Portions of this file are copyrighted by:
+ * Copyright (C) 2007 Apple, Inc. All rights reserved.
+ * Use is subject to license terms specified in the COPYING file
+ * distributed with the Net-SNMP package.
+ */
+/*
  * System dependent routines go here
  */
 #include <net-snmp/net-snmp-config.h>
@@ -40,6 +46,12 @@ SOFTWARE.
 #include <ctype.h>
 #include <errno.h>
 
+#if HAVE_IO_H
+#include <io.h>
+#endif
+#if HAVE_DIRECT_H
+#include <direct.h>
+#endif
 #if HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -77,6 +89,10 @@ SOFTWARE.
 #if HAVE_NET_IF_H
 #include <net/if.h>
 #endif
+#if HAVE_NETDB_H
+#include <netdb.h>
+#endif
+
 
 #if HAVE_SYS_SOCKIO_H
 #include <sys/sockio.h>
@@ -138,6 +154,17 @@ SOFTWARE.
 #include <sys/systeminfo.h>
 #endif
 
+#if defined(darwin9)
+#include <crt_externs.h>        /* for _NSGetArgv() */
+#endif
+
+#if HAVE_PWD_H
+#include <pwd.h>
+#endif
+#if HAVE_GRP_H
+#include <grp.h>
+#endif
+
 #include <net-snmp/types.h>
 #include <net-snmp/output_api.h>
 #include <net-snmp/utilities.h>
@@ -155,6 +182,31 @@ SOFTWARE.
 #else
 # define LOOPBACK    0x7f000001
 #endif
+
+static void
+_daemon_prep(int stderr_log)
+{
+    /* Avoid keeping any directory in use. */
+    chdir("/");
+
+    if (stderr_log)
+        return;
+
+    /*
+     * Close inherited file descriptors to avoid
+     * keeping unnecessary references.
+     */
+    close(0);
+    close(1);
+    close(2);
+
+    /*
+     * Redirect std{in,out,err} to /dev/null, just in case.
+     */
+    open("/dev/null", O_RDWR);
+    dup(0);
+    dup(0);
+}
 
 /**
  * fork current process into the background.
@@ -184,6 +236,22 @@ netsnmp_daemonize(int quit_immediately, int stderr_log)
     int i = 0;
     DEBUGMSGT(("daemonize","deamonizing...\n"));
 #if HAVE_FORK
+#if defined(darwin9)
+     char            path [PATH_MAX] = "";
+     uint32_t        size = sizeof (path);
+
+     /*
+      * if we are already launched in a "daemonized state", just
+      * close & redirect the file descriptors
+      */
+     if(getppid() <= 2) {
+         _daemon_prep(stderr_log);
+         return 0;
+     }
+
+     if (_NSGetExecutablePath (path, &size))
+         return -1;
+#endif
     /*
      * Fork to return control to the invoking process and to
      * guarantee that we aren't a process group leader.
@@ -225,26 +293,22 @@ netsnmp_daemonize(int quit_immediately, int stderr_log)
             
             DEBUGMSGT(("daemonize","child continuing\n"));
 
-            /* Avoid keeping any directory in use. */
-            chdir("/");
-            
-            if (!stderr_log) {
-                /*
-                 * Close inherited file descriptors to avoid
-                 * keeping unnecessary references.
-                 */
-                close(0);
-                close(1);
-                close(2);
-                
-                /*
-                 * Redirect std{in,out,err} to /dev/null, just in
-                 * case.
-                 */
-                open("/dev/null", O_RDWR);
-                dup(0);
-                dup(0);
-            }
+#if ! defined(darwin9)
+            _daemon_prep(stderr_log);
+#else
+             /*
+              * Some darwin calls (using mach ports) don't work after
+              * a fork. So, now that we've forked, we re-exec ourself
+              * to ensure that the child's mach ports are all set up correctly,
+              * the getppid call above will prevent the exec child from
+              * forking...
+              */
+             char * const *argv = *_NSGetArgv ();
+             DEBUGMSGT(("daemonize","re-execing forked child\n"));
+             execv (path, argv);
+             snmp_log(LOG_ERR,"Forked child unable to re-exec - %s.\n", strerror (errno));
+             exit (0);
+#endif
         }
 #endif /* !WIN32 */
     }
@@ -636,7 +700,7 @@ get_myaddr(void)
 
     for (ifrp = ifc.ifc_req;
         (char *)ifrp < (char *)ifc.ifc_req + ifc.ifc_len;
-#ifdef STRUCT_SOCKADDR_HAS_SA_LEN
+#ifdef HAVE_STRUCT_SOCKADDR_SA_LEN
         ifrp = (struct ifreq *)(((char *) ifrp) +
                                 sizeof(ifrp->ifr_name) +
                                 ifrp->ifr_addr.sa_len)
@@ -823,6 +887,84 @@ get_uptime(void)
 }
 
 #endif                          /* ! WIN32 */
+/*******************************************************************/
+
+int
+netsnmp_gethostbyname_v4(const char* name, in_addr_t *addr_out)
+{
+
+#if HAVE_GETADDRINFO
+    struct addrinfo *addrs = NULL;
+    struct addrinfo hint;
+    int             err;
+
+    memset(&hint, 0, sizeof hint);
+    hint.ai_flags = 0;
+    hint.ai_family = PF_INET;
+    hint.ai_socktype = SOCK_DGRAM;
+    hint.ai_protocol = 0;
+
+    err = getaddrinfo(name, NULL, &hint, &addrs);
+    if (err != 0) {
+#if HAVE_GAI_STRERROR
+        snmp_log(LOG_ERR, "getaddrinfo: %s %s\n", name,
+                 gai_strerror(err));
+#else
+        snmp_log(LOG_ERR, "getaddrinfo: %s (error %d)\n", name,
+                 err);
+#endif
+        return -1;
+    }
+    if (addrs != NULL) {
+        memcpy(addr_out,
+               &((struct sockaddr_in *) addrs->ai_addr)->sin_addr,
+               sizeof(in_addr_t));
+        freeaddrinfo(addrs);
+    } else {
+        DEBUGMSGTL(("get_thisaddr",
+                    "Failed to resolve IPv4 hostname\n"));
+    }
+    return 0;
+
+#elif HAVE_GETHOSTBYNAME
+    struct hostent *hp = NULL;
+
+    hp = gethostbyname(name);
+    if (hp == NULL) {
+        DEBUGMSGTL(("get_thisaddr",
+                    "hostname (couldn't resolve)\n"));
+        return -1;
+    } else if (hp->h_addrtype != AF_INET) {
+        DEBUGMSGTL(("get_thisaddr",
+                    "hostname (not AF_INET!)\n"));
+        return -1;
+    } else {
+        DEBUGMSGTL(("get_thisaddr",
+                    "hostname (resolved okay)\n"));
+        memcpy(addr_out, hp->h_addr, sizeof(in_addr_t));
+    }
+    return 0;
+
+#elif HAVE_GETIPNODEBYNAME
+    struct hostent *hp = NULL;
+    int             err;
+
+    hp = getipnodebyname(peername, AF_INET, 0, &err);
+    if (hp == NULL) {
+        DEBUGMSGTL(("get_thisaddr",
+                    "hostname (couldn't resolve = %d)\n", err));
+        return -1;
+    }
+    DEBUGMSGTL(("get_thisaddr",
+                "hostname (resolved okay)\n"));
+    memcpy(addr_out, hp->h_addr, sizeof(in_addr_t));
+    return 0;
+
+#else /* HAVE_GETIPNODEBYNAME */
+    return -1;
+#endif
+}
+
 /*******************************************************************/
 
 #ifndef HAVE_STRNCASECMP
@@ -1051,7 +1193,6 @@ mkdirhier(const char *pathname, mode_t mode, int skiplast)
             /*
              * DNE, make it 
              */
-            snmp_log(LOG_INFO, "Creating directory: %s\n", buf);
 #ifdef WIN32
             if (CreateDirectory(buf, NULL) == 0)
 #else
@@ -1060,6 +1201,8 @@ mkdirhier(const char *pathname, mode_t mode, int skiplast)
             {
                 free(ourcopy);
                 return SNMPERR_GENERR;
+            } else {
+                snmp_log(LOG_INFO, "Created directory: %s\n", buf);
             }
         } else {
             /*
@@ -1188,3 +1331,45 @@ netsnmp_os_kernel_width(void)
 #endif
 }
 
+int netsnmp_str_to_uid(const char *useroruid) {
+    int uid;
+#if HAVE_GETPWNAM && HAVE_PWD_H
+    struct passwd *pwd;
+#endif
+
+    uid = atoi(useroruid);
+
+    if ( uid == 0 ) {
+#if HAVE_GETPWNAM && HAVE_PWD_H
+        pwd = getpwnam( useroruid );
+        if (pwd)
+            uid = pwd->pw_uid;
+        else
+#endif
+            snmp_log(LOG_WARNING, "Can't identify user (%s).\n", useroruid);
+    }
+    return uid;
+    
+}
+
+int netsnmp_str_to_gid(const char *grouporgid) {
+    int gid;
+#if HAVE_GETGRNAM && HAVE_GRP_H
+    struct group  *grp;
+#endif
+
+    gid = atoi(grouporgid);
+
+    if ( gid == 0 ) {
+#if HAVE_GETGRNAM && HAVE_GRP_H
+        grp = getgrnam( grouporgid );
+        if (grp)
+            gid = grp->gr_gid;
+        else
+#endif
+            snmp_log(LOG_WARNING, "Can't identify group (%s).\n",
+                     grouporgid);
+    }
+
+    return gid;
+}

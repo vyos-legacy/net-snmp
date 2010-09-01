@@ -41,28 +41,28 @@ init_versioninfo(void)
      * information at 
      */
     struct variable2 extensible_version_variables[] = {
-        {MIBINDEX, ASN_INTEGER, RONLY, var_extensible_version, 1,
-         {MIBINDEX}},
-        {VERTAG, ASN_OCTET_STR, RONLY, var_extensible_version, 1,
-         {VERTAG}},
-        {VERDATE, ASN_OCTET_STR, RONLY, var_extensible_version, 1,
-         {VERDATE}},
-        {VERCDATE, ASN_OCTET_STR, RONLY, var_extensible_version, 1,
-         {VERCDATE}},
-        {VERIDENT, ASN_OCTET_STR, RONLY, var_extensible_version, 1,
-         {VERIDENT}},
-        {VERCONFIG, ASN_OCTET_STR, RONLY, var_extensible_version, 1,
-         {VERCONFIG}},
-        {VERCLEARCACHE, ASN_INTEGER, RWRITE, var_extensible_version, 1,
-         {VERCLEARCACHE}},
-        {VERUPDATECONFIG, ASN_INTEGER, RWRITE, var_extensible_version, 1,
-         {VERUPDATECONFIG}},
-        {VERRESTARTAGENT, ASN_INTEGER, RWRITE, var_extensible_version, 1,
-         {VERRESTARTAGENT}},
-        {VERSAVEPERSISTENT, ASN_INTEGER, RWRITE, var_extensible_version, 1,
-         {VERSAVEPERSISTENT}},
-        {VERDEBUGGING, ASN_INTEGER, RWRITE, var_extensible_version, 1,
-         {VERDEBUGGING}}
+        {MIBINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_extensible_version, 1, {MIBINDEX}},
+        {VERTAG, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_version, 1, {VERTAG}},
+        {VERDATE, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_version, 1, {VERDATE}},
+        {VERCDATE, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_version, 1, {VERCDATE}},
+        {VERIDENT, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_version, 1, {VERIDENT}},
+        {VERCONFIG, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_version, 1, {VERCONFIG}},
+        {VERCLEARCACHE, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_extensible_version, 1, {VERCLEARCACHE}},
+        {VERUPDATECONFIG, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_extensible_version, 1, {VERUPDATECONFIG}},
+        {VERRESTARTAGENT, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_extensible_version, 1, {VERRESTARTAGENT}},
+        {VERSAVEPERSISTENT, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_extensible_version, 1, {VERSAVEPERSISTENT}},
+        {VERDEBUGGING, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_extensible_version, 1, {VERDEBUGGING}}
     };
 
     /*
@@ -109,22 +109,22 @@ var_extensible_version(struct variable *vp,
         long_ret = name[8];
         return ((u_char *) (&long_ret));
     case VERTAG:
-        sprintf(errmsg, netsnmp_get_version());
+        strcpy(errmsg, netsnmp_get_version());
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERDATE:
-        sprintf(errmsg, "$Date: 2006-09-14 17:48:50 -0700 (Thu, 14 Sep 2006) $");
+        sprintf(errmsg, "$Date: 2008-12-29 15:34:58 -0800 (Mon, 29 Dec 2008) $");
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERCDATE:
         curtime = time(NULL);
         cptr = ctime(&curtime);
-        sprintf(errmsg, cptr);
+        strcpy(errmsg, cptr);
         *var_len = strlen(errmsg) - 1;
         return ((u_char *) errmsg);
     case VERIDENT:
         sprintf(errmsg,
-                "$Id: versioninfo.c 15220 2006-09-15 00:48:50Z tanders $");
+                "$Id: versioninfo.c 17326 2008-12-29 23:34:58Z magfr $");
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERCONFIG:

@@ -49,11 +49,11 @@
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/auto_nlist.h>
+#include <net-snmp/agent/sysORTable.h>
 
-#include "util_funcs.h"
+#include "util_funcs/MIB_STATS_CACHE_TIMEOUT.h"
 #include "tcp.h"
 #include "tcpTable.h"
-#include "sysORTable.h"
 
 #ifndef MIB_STATS_CACHE_TIMEOUT
 #define MIB_STATS_CACHE_TIMEOUT	5
@@ -380,7 +380,7 @@ tcp_handler(netsnmp_mib_handler          *handler,
         break;
     case TCPINERRS:
         ret_value = tcpstat.tcps_rcvbadsum + tcpstat.tcps_rcvbadoff
-#ifdef STRUCT_TCPSTAT_HAS_TCPS_RCVMEMDROP
+#ifdef HAVE_STRUCT_TCPSTAT_TCPS_RCVMEMDROP
             + tcpstat.tcps_rcvmemdrop
 #endif
             + tcpstat.tcps_rcvshort;

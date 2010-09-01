@@ -53,13 +53,14 @@ struct variable2 mteObjectsTable_variables[] = {
      * magic number        , variable type , ro/rw , callback fn  , L, oidsuffix 
      */
 #define   MTEOBJECTSID          5
-    {MTEOBJECTSID, ASN_OBJECT_ID, RWRITE, var_mteObjectsTable, 2, {1, 3}},
+    {MTEOBJECTSID, ASN_OBJECT_ID, NETSNMP_OLDAPI_RWRITE,
+     var_mteObjectsTable, 2, {1, 3}},
 #define   MTEOBJECTSIDWILDCARD  6
-    {MTEOBJECTSIDWILDCARD, ASN_INTEGER, RWRITE, var_mteObjectsTable, 2,
-     {1, 4}},
+    {MTEOBJECTSIDWILDCARD, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_mteObjectsTable, 2, {1, 4}},
 #define   MTEOBJECTSENTRYSTATUS  7
-    {MTEOBJECTSENTRYSTATUS, ASN_INTEGER, RWRITE, var_mteObjectsTable, 2,
-     {1, 5}},
+    {MTEOBJECTSENTRYSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_mteObjectsTable, 2, {1, 5}},
 
 };
 /*
@@ -642,6 +643,8 @@ write_mteObjectsEntryStatus(int action,
 
 
             StorageNew = SNMP_MALLOC_STRUCT(mteObjectsTable_data);
+            if (StorageNew == NULL)
+                return SNMP_ERR_GENERR;
             StorageNew->mteOwner = netsnmp_strdup_and_null(vp->val.string,
                                                            vp->val_len);
             StorageNew->mteOwnerLen = vp->val_len;
@@ -889,6 +892,8 @@ mte_add_object_to_table(const char *owner, const char *objname,
      * malloc initial struct 
      */
     StorageNew = SNMP_MALLOC_STRUCT(mteObjectsTable_data);
+    if (StorageNew == NULL)
+        return SNMP_ERR_GENERR;
     StorageNew->mteOwner = netsnmp_strdup_and_null(owner, strlen(owner));
     StorageNew->mteOwnerLen = strlen(owner);
     StorageNew->mteObjectsName = netsnmp_strdup_and_null(objname,

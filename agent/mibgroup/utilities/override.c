@@ -15,8 +15,6 @@
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
-#include "util_funcs.h"
-
 typedef struct override_data_s {
     int             type;
     void           *value;
@@ -183,7 +181,6 @@ netsnmp_parse_override(const char *token, char *line)
         config_perror("memory allocation failure");
         return;
     }
-
     thedata->type = type;
 
     switch (type) {
@@ -247,8 +244,7 @@ netsnmp_parse_override(const char *token, char *line)
     the_reg->modes = (readwrite) ? HANDLER_CAN_RWRITE : HANDLER_CAN_RONLY;
     the_reg->handler =
         netsnmp_create_handler("override", override_handler);
-    memdup((u_char **) & the_reg->rootoid, (const u_char *) oidbuf,
-           oidbuf_len * sizeof(oid));
+    the_reg->rootoid = snmp_duplicate_objid(oidbuf, oidbuf_len);
     the_reg->rootoid_len = oidbuf_len;
     if (!the_reg->rootoid || !the_reg->handler || !the_reg->handlerName) {
         if (the_reg->handler)

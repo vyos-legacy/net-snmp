@@ -7,7 +7,10 @@
 #     modify it under the same terms as Perl itself.
 
 package SNMP;
-$VERSION = '5.04021';   # current release version number
+$VERSION = '5.05';   # current release version number
+
+use strict;
+use warnings;
 
 require Exporter;
 require DynaLoader;
@@ -43,14 +46,17 @@ use NetSNMP::default_store (':all');
         snmp_getnext
         snmp_set
         snmp_trap
+	SNMP_API_TRADITIONAL
+	SNMP_API_SINGLE
 );
 
 sub AUTOLOAD {
+    no strict;
     # This AUTOLOAD is used to 'autoload' constants from the constant()
     # XS function.  If a constant is not found then control is passed
     # to the AUTOLOAD in AutoLoader.
     my($val,$pack,$file,$line);
-    local($constname);
+    my $constname;
     ($constname = $AUTOLOAD) =~ s/.*:://;
     # croak "&$module::constant not defined" if $constname eq 'constant';
     $val = constant($constname, @_ ? $_[0] : 0);
@@ -74,15 +80,22 @@ bootstrap SNMP;
 # Preloaded methods go here.
 
 # Package variables
-tie $SNMP::debugging, SNMP::DEBUGGING;
-tie $SNMP::debug_internals, SNMP::DEBUG_INTERNALS;
-tie $SNMP::dump_packet, SNMP::DUMP_PACKET;
-tie %SNMP::MIB, SNMP::MIB;
-tie $SNMP::save_descriptions, SNMP::MIB::SAVE_DESCR;
-tie $SNMP::replace_newer, SNMP::MIB::REPLACE_NEWER;
-tie $SNMP::mib_options, SNMP::MIB::MIB_OPTIONS;
+tie $SNMP::debugging,         'SNMP::DEBUGGING';
+tie $SNMP::debug_internals,   'SNMP::DEBUG_INTERNALS';
+tie $SNMP::dump_packet,       'SNMP::DUMP_PACKET';
+tie %SNMP::MIB,               'SNMP::MIB';
+tie $SNMP::save_descriptions, 'SNMP::MIB::SAVE_DESCR';
+tie $SNMP::replace_newer,     'SNMP::MIB::REPLACE_NEWER';
+tie $SNMP::mib_options,       'SNMP::MIB::MIB_OPTIONS';
 
 %SNMP::V3_SEC_LEVEL_MAP = (noAuthNoPriv => 1, authNoPriv => 2, authPriv =>3);
+
+use vars qw(
+  $auto_init_mib $use_long_names $use_sprint_value $use_enums
+  $use_numeric %MIB $verbose $debugging $dump_packet $save_descriptions
+  $best_guess $non_increasing $replace_newer %session_params
+  $debug_internals $mib_options
+);
 
 $auto_init_mib = 1; # enable automatic MIB loading at session creation time
 $use_long_names = 0; # non-zero to prefer longer mib textual identifiers rather
@@ -317,12 +330,24 @@ sub snmp_trap {
     $sess->trap(@_);
 }
 
+#--------------------------------------------------------------------- 
+# Preserves the ability to call MainLoop() with no args so we don't 
+# break old code
+#
+# Alternately, MainLoop() could be called as an object method, 
+# ( $sess->MainLoop() ) , so that $self winds up in @_.  Then it would 
+# be more like :
+# my $self = shift;
+# .... 
+# SNMP::_main_loop(......, $self->{SessPtr});
+#--------------------------------------------------------------------- 
 sub MainLoop {
+    my $ss = shift if(&SNMP::_api_mode() == SNMP::SNMP_API_SINGLE());
     my $time = shift;
     my $callback = shift;
     my $time_sec = ($time ? int $time : 0);
     my $time_usec = ($time ? int(($time-$time_sec)*1000000) : 0);
-    SNMP::_main_loop($time_sec,$time_usec,$callback);
+    SNMP::_main_loop($time_sec,$time_usec,$callback,(defined($ss) ? $ss->{SessPtr} : ()));
 }
 
 sub finish {
@@ -486,7 +511,7 @@ sub new {
        $this->{Context} ||= 
 	   NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
 		         NetSNMP::default_store::NETSNMP_DS_LIB_CONTEXT()) || '';
-       $this->{AuthProto} ||= 'DEFAULT'; # defaults to the library's default
+       $this->{AuthProto} ||= 'DEFAULT'; # use the library's default
        $this->{AuthPass} ||=
        NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
 		     NetSNMP::default_store::NETSNMP_DS_LIB_AUTHPASSPHRASE()) ||
@@ -498,7 +523,7 @@ sub new {
        $this->{AuthLocalizedKey} ||= '';
        $this->{PrivLocalizedKey} ||= '';
 
-       $this->{PrivProto} ||= 'DEFAULT';  # defaults to hte library's default
+       $this->{PrivProto} ||= 'DEFAULT';  # use the library's default
        $this->{PrivPass} ||=
        NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
 		     NetSNMP::default_store::NETSNMP_DS_LIB_PRIVPASSPHRASE()) ||
@@ -641,8 +666,6 @@ sub get {
 }
 
 
-use strict;
-
 my $have_netsnmp_oid = eval { require NetSNMP::OID; };
 sub gettable {
 
@@ -685,7 +708,7 @@ sub gettable {
 	    if ($parse_indexes) {
 		# get indexes
 		my @indexes =
-		  @{$SNMP::MIB{$textnode}{'children'}[0]{'indexes'} || [] };
+		  @{$SNMP::MIB{$textnode}{'children'}[0]{'indexes'} || []};
 		# quick translate into a hash
 		map { $indexes{$_} = 1; } @indexes;
 	    }
@@ -912,7 +935,6 @@ sub _gettable_end_routine {
 	}
     }
 }
-no strict;
 
 
 sub fget {
@@ -935,8 +957,8 @@ sub fget {
 
    SNMP::_get($this, $this->{RetryNoSuch}, $varbind_list_ref, $cb);
 
-   foreach $varbind (@$varbind_list_ref) {
-     $sub = $this->{VarFormats}{$varbind->[$SNMP::Varbind::tag_f]} ||
+   foreach my $varbind (@$varbind_list_ref) {
+     my $sub = $this->{VarFormats}{$varbind->[$SNMP::Varbind::tag_f]} ||
 	 $this->{TypeFormats}{$varbind->[$SNMP::Varbind::type_f]};
      &$sub($varbind) if defined $sub;
      push(@res, $varbind->[$SNMP::Varbind::val_f]);
@@ -988,8 +1010,8 @@ sub fgetnext {
 
    SNMP::_getnext($this, $varbind_list_ref, $cb);
 
-   foreach $varbind (@$varbind_list_ref) {
-     $sub = $this->{VarFormats}{$varbind->[$SNMP::Varbind::tag_f]} ||
+   foreach my $varbind (@$varbind_list_ref) {
+     my $sub = $this->{VarFormats}{$varbind->[$SNMP::Varbind::tag_f]} ||
 	 $this->{TypeFormats}{$varbind->[$SNMP::Varbind::type_f]};
      &$sub($varbind) if defined $sub;
      push(@res, $varbind->[$SNMP::Varbind::val_f]);
@@ -1068,7 +1090,7 @@ sub bulkwalk {
    return defined($cb) ? $res[0] : \@res;
 }
 
-%trap_type = (coldStart => 0, warmStart => 1, linkDown => 2, linkUp => 3,
+my %trap_type = (coldStart => 0, warmStart => 1, linkDown => 2, linkUp => 3,
 	      authFailure => 4, egpNeighborLoss => 5, specific => 6 );
 sub trap {
 # (v1) enterprise, agent, generic, specific, uptime, <vars>
@@ -1160,7 +1182,7 @@ sub inform {
 }
 
 package SNMP::TrapSession;
-@ISA = ('SNMP::Session');
+@SNMP::TrapSession::ISA = ('SNMP::Session');
 
 sub new {
    my $type = shift;
@@ -1175,11 +1197,11 @@ sub new {
 
 package SNMP::Varbind;
 
-$tag_f = 0;
-$iid_f = 1;
-$val_f = 2;
-$type_f = 3;
-$time_f = 4;
+my $tag_f = 0;
+my $iid_f = 1;
+my $val_f = 2;
+my $type_f = 3;
+my $time_f = 4;
 
 sub new {
    my $type = shift;
@@ -1301,7 +1323,7 @@ sub FETCH {
     my $key = shift;
 
     if (!defined $this->{$key}) {
-	tie(%{$this->{$key}}, SNMP::MIB::NODE, $key) or return undef;
+	tie(%{$this->{$key}}, 'SNMP::MIB::NODE', $key) or return undef;
     }
     $this->{$key};
 }
@@ -1335,6 +1357,7 @@ my %node_elements =
      parent => 0,   # parent node
      children => 0, # array reference of children nodes
      indexes => 0,  # returns array of column labels
+     implied => 0,  # boolean: is the last index IMPLIED
      varbinds => 0, # returns array of trap/notification varbinds
      nextNode => 0, # next lexico node (BUG! does not return in lexico order)
      type => 0,     # returns simple type (see getType for values)
@@ -1850,7 +1873,7 @@ which are passed to getnext/getbulk as appropriate.
 
 Note 2: callback support is only available in the SNMP module version
 5.04 and above.  To test for this in code intending to support both
-versions prior to 5.04 and and 5.04 and up, the following should work:
+versions prior to 5.04 and 5.04 and up, the following should work:
 
   if ($response = $sess->gettable('ifTable', callback => \&my_sub)) {
       # got a response, gettable doesn't support callback
@@ -2276,6 +2299,14 @@ be set prior to MIB initialization/parsing)
 =item reference
 
 returns the REFERENCE clause
+
+=item indexes
+
+returns the objects in the INDEX clause
+
+=item implied
+
+returns true if the last object in the INDEX is IMPLIED
 
 =back
 

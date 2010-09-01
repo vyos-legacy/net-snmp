@@ -65,6 +65,12 @@
 #define INADDR_NONE	-1
 #endif
 
+#ifdef  MSG_DONTWAIT
+#define NETSNMP_DONTWAIT MSG_DONTWAIT
+#else
+#define NETSNMP_DONTWAIT 0
+#endif
+
 static netsnmp_tdomain udpDomain;
 
 typedef struct netsnmp_udp_addr_pair_s {
@@ -86,10 +92,11 @@ netsnmp_sockaddr_in2(struct sockaddr_in *addr,
  * address if data is NULL.  
  */
 
-static char *
+char *
 netsnmp_udp_fmtaddr(netsnmp_transport *t, void *data, int len)
 {
     netsnmp_udp_addr_pair *addr_pair = NULL;
+    struct hostent *host;
 
     if (data != NULL && len == sizeof(netsnmp_udp_addr_pair)) {
 	addr_pair = (netsnmp_udp_addr_pair *) data;
@@ -106,6 +113,9 @@ netsnmp_udp_fmtaddr(netsnmp_transport *t, void *data, int len)
         if (to == NULL) {
             sprintf(tmp, "UDP: unknown->[%s]",
                     inet_ntoa(addr_pair->local_addr));
+        } else if ( t && t->flags & NETSNMP_TRANSPORT_FLAG_HOSTNAME ) {
+            host = gethostbyaddr((char *)&to->sin_addr, 4, AF_INET);
+            return (host ? strdup(host->h_name) : NULL); 
         } else {
             sprintf(tmp, "UDP: [%s]:%hu->",
                     inet_ntoa(to->sin_addr), ntohs(to->sin_port));
@@ -121,7 +131,7 @@ netsnmp_udp_fmtaddr(netsnmp_transport *t, void *data, int len)
 
 # define netsnmp_dstaddr(x) (&(((struct in_pktinfo *)(CMSG_DATA(x)))->ipi_addr))
 
-static int netsnmp_udp_recvfrom(int s, void *buf, int len, struct sockaddr *from, socklen_t *fromlen, struct in_addr *dstip)
+int netsnmp_udp_recvfrom(int s, void *buf, int len, struct sockaddr *from, socklen_t *fromlen, struct in_addr *dstip)
 {
     int r;
     struct iovec iov[1];
@@ -140,7 +150,7 @@ static int netsnmp_udp_recvfrom(int s, void *buf, int len, struct sockaddr *from
     msg.msg_control = &cmsg;
     msg.msg_controllen = sizeof(cmsg);
 
-    r = recvmsg(s, &msg, 0);
+    r = recvmsg(s, &msg, NETSNMP_DONTWAIT);
 
     if (r == -1) {
         return -1;
@@ -157,7 +167,7 @@ static int netsnmp_udp_recvfrom(int s, void *buf, int len, struct sockaddr *from
     return r;
 }
 
-static int netsnmp_udp_sendto(int fd, struct in_addr *srcip, struct sockaddr *remote,
+int netsnmp_udp_sendto(int fd, struct in_addr *srcip, struct sockaddr *remote,
 			void *data, int len)
 {
     struct iovec iov = { data, len };
@@ -167,6 +177,7 @@ static int netsnmp_udp_sendto(int fd, struct in_addr *srcip, struct sockaddr *re
     } cmsg;
     struct msghdr m;
 
+    memset(&cmsg, 0, sizeof(cmsg));
     cmsg.cm.cmsg_len = sizeof(struct cmsghdr) + sizeof(struct in_pktinfo);
     cmsg.cm.cmsg_level = SOL_IP;
     cmsg.cm.cmsg_type = IP_PKTINFO;
@@ -215,7 +226,7 @@ netsnmp_udp_recv(netsnmp_transport *t, void *buf, int size,
 #if defined(linux) && defined(IP_PKTINFO)
             rc = netsnmp_udp_recvfrom(t->sock, buf, size, from, &fromlen, &(addr_pair->local_addr));
 #else
-            rc = recvfrom(t->sock, buf, size, 0, from, &fromlen);
+            rc = recvfrom(t->sock, buf, size, NETSNMP_DONTWAIT, from, &fromlen);
 #endif /* linux && IP_PKTINFO */
 	    if (rc < 0 && errno != EINTR) {
 		break;
@@ -308,7 +319,7 @@ static int
 _sock_buffer_maximize(int s, int optname, const char *buftype, int size)
 {
     int            curbuf = 0;
-    size_t         curbuflen = sizeof(int);
+    socklen_t      curbuflen = sizeof(int);
     int            lo, mid, hi;
 
     /*
@@ -468,7 +479,7 @@ netsnmp_sock_buffer_set(int s, int optname, int local, int size)
 #else
     const char     *buftype;
     int            curbuf = 0;
-    size_t         curbuflen = sizeof(int);
+    socklen_t      curbuflen = sizeof(int);
 
 #   ifndef  SO_SNDBUF
     if (SO_SNDBUF == optname) {
@@ -671,7 +682,6 @@ netsnmp_udp_transport(struct sockaddr_in *addr, int local)
             struct sockaddr_in client_addr;
             netsnmp_sockaddr_in2(&client_addr, client_socket, NULL);
             addr_pair.local_addr = client_addr.sin_addr;
-            client_addr.sin_port = 0;
             rc = bind(t->sock, (struct sockaddr *)&client_addr,
                   sizeof(struct sockaddr));
             if ( rc != 0 ) {
@@ -774,16 +784,7 @@ int
 netsnmp_sockaddr_in2(struct sockaddr_in *addr,
                      const char *inpeername, const char *default_target)
 {
-#if HAVE_GETADDRINFO
-    struct addrinfo *addrs = NULL;
-    struct addrinfo hint;
-    int             err;
-#elif HAVE_GETIPNODEBYNAME
-    struct hostent *hp = NULL;
-    int             err;
-#elif HAVE_GETHOSTBYNAME
-    struct hostent *hp = NULL;
-#endif
+    int ret;
 
     if (addr == NULL) {
         return 0;
@@ -856,12 +857,12 @@ netsnmp_sockaddr_in2(struct sockaddr_in *addr,
                 if (host == NULL) {
                     DEBUGMSGTL(("netsnmp_sockaddr_in",
                                 "servname not numeric, "
-				"check if it really is a destination)"));
+				"check if it really is a destination)\n"));
                     host = port;
                     port = NULL;
                 } else {
                     DEBUGMSGTL(("netsnmp_sockaddr_in",
-                                "servname not numeric"));
+                                "servname not numeric\n"));
                     free(peername);
                     return 0;
                 }
@@ -878,74 +879,25 @@ netsnmp_sockaddr_in2(struct sockaddr_in *addr,
             DEBUGMSGTL(("netsnmp_sockaddr_in",
                         "check destination %s\n", host));
 
-#if HAVE_GETADDRINFO
-            memset(&hint, 0, sizeof hint);
-            hint.ai_flags = 0;
-            hint.ai_family = PF_INET;
-            hint.ai_socktype = SOCK_DGRAM;
-            hint.ai_protocol = 0;
 
-            err = getaddrinfo(peername, NULL, &hint, &addrs);
-            if (err != 0) {
-#if HAVE_GAI_STRERROR
-                snmp_log(LOG_ERR, "getaddrinfo: %s %s\n", peername,
-                         gai_strerror(err));
-#else
-                snmp_log(LOG_ERR, "getaddrinfo: %s (error %d)\n", peername,
-                         err);
-#endif
-                free(peername);
-                return 0;
-            }
-            if (addrs != NULL) {
-                DEBUGMSGTL(("netsnmp_sockaddr_in",
-                            "hostname (resolved okay)\n"));
-                memcpy(&addr->sin_addr,
-                       &((struct sockaddr_in *) addrs->ai_addr)->sin_addr,
-                       sizeof(struct in_addr));
-                freeaddrinfo(addrs);
-            }
-            else {
-                DEBUGMSGTL(("netsnmp_sockaddr_in",
-                            "Failed to resolve IPv4 hostname\n"));
-            }
-#elif HAVE_GETHOSTBYNAME
-            hp = gethostbyname(host);
-            if (hp == NULL) {
-                DEBUGMSGTL(("netsnmp_sockaddr_in",
-                            "hostname (couldn't resolve)\n"));
-                free(peername);
-                return 0;
-            } else if (hp->h_addrtype != AF_INET) {
-                DEBUGMSGTL(("netsnmp_sockaddr_in",
-                            "hostname (not AF_INET!)\n"));
-                free(peername);
-                return 0;
+            if (strcmp(peername, "255.255.255.255") == 0 ) {
+                /*
+                 * The explicit broadcast address hack
+                 */
+                DEBUGMSGTL(("netsnmp_sockaddr_in", "Explicit UDP broadcast\n"));
+                addr->sin_addr.s_addr = INADDR_NONE;
             } else {
+                ret =
+                    netsnmp_gethostbyname_v4(peername, &addr->sin_addr.s_addr);
+                if (ret < 0) {
+                    DEBUGMSGTL(("netsnmp_sockaddr_in",
+                                "couldn't resolve hostname\n"));
+                    free(peername);
+                    return 0;
+                }
                 DEBUGMSGTL(("netsnmp_sockaddr_in",
                             "hostname (resolved okay)\n"));
-                memcpy(&addr->sin_addr, hp->h_addr, hp->h_length);
             }
-#elif HAVE_GETIPNODEBYNAME
-            hp = getipnodebyname(peername, AF_INET, 0, &err);
-            if (hp == NULL) {
-                DEBUGMSGTL(("netsnmp_sockaddr_in",
-                            "hostname (couldn't resolve = %d)\n", err));
-                free(peername);
-                return 0;
-            }
-            DEBUGMSGTL(("netsnmp_sockaddr_in",
-                        "hostname (resolved okay)\n"));
-            memcpy(&(addr->sin_addr), hp->h_addr, hp->h_length);
-#else /* HAVE_GETIPNODEBYNAME */
-            /*
-             * There is no name resolving function available.
-             */
-            DEBUGMSGTL(("netsnmp_sockaddr_in",
-                        "no getaddrinfo()/getipnodebyname()/gethostbyname()\n"));
-            free(peername);
-            return 0;
-#endif /* HAVE_GETHOSTBYNAME */
         }
 	free(peername);
     }
@@ -1078,25 +1030,11 @@ netsnmp_udp_parse_security(const char *token, char *param)
             /*
              * Nope, wasn't a dotted quad.  Must be a hostname.  
              */
-#ifdef  HAVE_GETHOSTBYNAME
-            struct hostent *hp = gethostbyname(source);
-            if (hp == NULL) {
-                config_perror("bad source address");
+            int ret = netsnmp_gethostbyname_v4(source, &network);
+            if (ret < 0) {
+                config_perror("cannot resolve source hostname");
                 return;
-            } else {
-                if (hp->h_addrtype != AF_INET) {
-                    config_perror("no IP address for source hostname");
-                    return;
-                }
-                network = *((in_addr_t *) hp->h_addr);
             }
-#else                           /*HAVE_GETHOSTBYNAME */
-            /*
-             * Oh dear.  
-             */
-            config_perror("cannot resolve source hostname");
-            return;
-#endif                          /*HAVE_GETHOSTBYNAME */
         }
     }
 
@@ -1240,6 +1178,8 @@ netsnmp_udp_getSecName(void *opaque, int olength,
      * name.  
      */
 
+   DEBUGMSGTL(("netsnmp_udp_getSecName", "opaque = %p (len = %d), sizeof = %d, family = %d (%d)\n",
+   opaque, olength, (int)sizeof(netsnmp_udp_addr_pair), from->sin_family, AF_INET));
     if (opaque == NULL || olength != sizeof(netsnmp_udp_addr_pair) ||
         from->sin_family != AF_INET) {
         DEBUGMSGTL(("netsnmp_udp_getSecName",
@@ -1260,7 +1200,7 @@ netsnmp_udp_getSecName(void *opaque, int olength,
     }
 
     for (c = com2SecList; c != NULL; c = c->next) {
-        DEBUGMSGTL(("netsnmp_udp_getSecName","compare <\"%s\", 0x%08x/0x%08x>",
+        DEBUGMSGTL(("netsnmp_udp_getSecName","compare <\"%s\", 0x%08lx/0x%08lx>",
 		    c->community, c->network, c->mask));
         if ((community_len == strlen(c->community)) &&
 	    (memcmp(community, c->community, community_len) == 0) &&

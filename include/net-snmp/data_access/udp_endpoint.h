@@ -1,7 +1,7 @@
 /*
  * udp_endpoint data access header
  *
- * $Id: udp_endpoint.h 15250 2006-09-19 03:27:05Z hardaker $
+ * $Id: udp_endpoint.h 16319 2007-04-30 10:50:39Z dts12 $
  */
 #ifndef NETSNMP_ACCESS_UDP_ENDPOINT_H
 #define NETSNMP_ACCESS_UDP_ENDPOINT_H
@@ -41,6 +41,7 @@ extern          "C" {
         u_short   rmt_port;
 
         u_int     instance;
+        u_int     pid;
    
     } netsnmp_udp_endpoint_entry;
 

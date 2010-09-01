@@ -1,6 +1,6 @@
 /*
  * table_container.h
- * $Id: table_container.h 13071 2005-10-17 11:36:06Z dts12 $
+ * $Id: table_container.h 15786 2007-01-24 13:39:00Z dts12 $
  */
 #ifndef _TABLE_CONTAINER_HANDLER_H_
 #define _TABLE_CONTAINER_HANDLER_H_
@@ -52,6 +52,8 @@ extern          "C" {
                                      netsnmp_table_registration_info *tabreq,
                                      netsnmp_container *container,
                                      char key_type);
+    int            
+    netsnmp_container_table_unregister(netsnmp_handler_registration *reginfo);
     
     /** retrieve the container used by the table_container helper */
     netsnmp_container*

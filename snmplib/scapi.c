@@ -76,7 +76,7 @@
 #endif
 
 #ifndef NETSNMP_DISABLE_DES
-#ifdef STRUCT_DES_KS_STRUCT_HAS_WEAK_KEY
+#ifdef HAVE_STRUCT_DES_KS_STRUCT_WEAK_KEY
 /* these are older names for newer structures that exist in openssl .9.7 */
 #define DES_key_schedule    des_key_schedule 
 #define DES_cblock          des_cblock 
@@ -272,7 +272,7 @@ sc_generate_keyed_hash(const oid * authtype, size_t authtypelen,
 
     u_char          buf[SNMP_MAXBUF_SMALL];
 #if  defined(NETSNMP_USE_OPENSSL) || defined(NETSNMP_USE_PKCS11)
-    size_t             buf_len = sizeof(buf);
+    unsigned int    buf_len = sizeof(buf);
 #endif
 
     DEBUGTRACE;
@@ -318,7 +318,7 @@ sc_generate_keyed_hash(const oid * authtype, size_t authtypelen,
     else {
         QUITFUN(SNMPERR_GENERR, sc_generate_keyed_hash_quit);
     }
-    if ((int)buf_len != properlength) {
+    if (buf_len != properlength) {
         QUITFUN(rval, sc_generate_keyed_hash_quit);
     }
     if ((int)*maclen > buf_len)
@@ -404,13 +404,13 @@ sc_hash(const oid * hashtype, size_t hashtypelen, u_char * buf,
 {
 #if defined(NETSNMP_USE_OPENSSL) || defined(NETSNMP_USE_PKCS11)
     int            rval = SNMPERR_SUCCESS;
+    unsigned int   tmp_len;
 #endif
     int            ret;
 
 #ifdef NETSNMP_USE_OPENSSL
     const EVP_MD   *hashfn;
     EVP_MD_CTX     ctx, *cptr;
-    unsigned int   tmp_len;
 #endif
 
     DEBUGTRACE;
@@ -562,10 +562,11 @@ sc_check_keyed_hash(const oid * authtype, size_t authtypelen,
         QUITFUN(SNMPERR_GENERR, sc_check_keyed_hash_quit);
     }
 
+
     if (maclen != USM_MD5_AND_SHA_AUTH_LEN) {
         QUITFUN(SNMPERR_GENERR, sc_check_keyed_hash_quit);
     }
-
+    
     /*
      * Generate a full hash of the message, then compare
      * the result with the given MAC which may shorter than

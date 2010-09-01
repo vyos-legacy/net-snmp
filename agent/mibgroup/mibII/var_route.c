@@ -61,7 +61,6 @@ PERFORMANCE OF THIS SOFTWARE.
 #include "kernel.h"
 #include "interfaces.h"
 #include "struct.h"
-#include "util_funcs.h"
 
 #ifndef  MIN
 #define  MIN(a,b)                     (((a) < (b)) ? (a) : (b))
@@ -313,7 +312,7 @@ static int      rtsize = 0;
 static mib_ipRouteEnt *rt = (mib_ipRouteEnt *) 0;
 static void     Route_Scan_Reload(void);
 #elif !defined(solaris2)
-static RTENTRY **rthead = 0;
+static RTENTRY **rthead = NULL;
 static int      rtsize = 0, rtallocate = 0;
 
 static void     Route_Scan_Reload(void);
@@ -762,6 +761,10 @@ var_ipRouteEntry(struct variable * vp,
         if (getMibstat(MIB_IP_ROUTE, &entry, sizeof(mib2_ipRouteEntry_t),
                        req_type, &IP_Cmp_Route, &Nextentry) != 0)
             break;
+#ifdef HAVE_DEFINED_IRE_CACHE
+        if(entry.ipRouteInfo.re_ire_type&IRE_CACHE)
+            continue;
+#endif /* HAVE_DEFINED_IRE_CACHE */
         COPY_IPADDR(cp, (u_char *) & entry.ipRouteDest, op,
                     current + IP_ROUTEADDR_OFF);
         if (exact) {
@@ -865,7 +868,7 @@ var_ipRouteEntry(struct variable * vp,
 static int      qsort_compare(const void *, const void *);
 #endif
 
-#if defined(RTENTRY_4_4) || defined(RTENTRY_RT_NEXT) || defined(hpux11)
+#if defined(RTENTRY_4_4) || defined(RTENTRY_RT_NEXT) || defined (hpux11)
 
 #if defined(RTENTRY_4_4) && !defined(hpux11)
 void
@@ -875,7 +878,7 @@ load_rtentries(struct radix_node *pt)
     RTENTRY         rt;
     struct ifnet    ifnet;
     char            name[16], temp[16];
-#if !STRUCT_IFNET_HAS_IF_XNAME
+#if !HAVE_STRUCT_IFNET_IF_XNAME
     register char  *cp;
 #endif
 
@@ -908,7 +911,7 @@ load_rtentries(struct radix_node *pt)
                 DEBUGMSGTL(("mibII/var_route", "klookup failed\n"));
                 return;
             }
-#if STRUCT_IFNET_HAS_IF_XNAME
+#if HAVE_STRUCT_IFNET_IF_XNAME
 #if defined(netbsd1) || defined(openbsd2)
             strncpy(name, ifnet.if_xname, sizeof name);
 #else

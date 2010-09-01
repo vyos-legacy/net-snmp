@@ -10,7 +10,7 @@
 #include "struct.h"
 
 #ifndef USING_UCD_SNMP_EXTENSIBLE_MODULE
-#include "util_funcs.h"
+#include "util_funcs/header_simple_table.h"
 #include "mibdefs.h"
 #define SHELLCOMMAND 3
 #endif
@@ -48,13 +48,20 @@ WriteMethod fixExec2Error;
 FindVarMethod var_extensible_old;
 oid  old_extensible_variables_oid[] = { NETSNMP_UCDAVIS_MIB, NETSNMP_SHELLMIBNUM, 1 };
 struct variable2 old_extensible_variables[] = {
-    {MIBINDEX,     ASN_INTEGER,   RONLY, var_extensible_old, 1, {MIBINDEX}},
-    {ERRORNAME,    ASN_OCTET_STR, RONLY, var_extensible_old, 1, {ERRORNAME}},
-    {SHELLCOMMAND, ASN_OCTET_STR, RONLY, var_extensible_old, 1, {SHELLCOMMAND}},
-    {ERRORFLAG,    ASN_INTEGER,   RONLY, var_extensible_old, 1, {ERRORFLAG}},
-    {ERRORMSG,     ASN_OCTET_STR, RONLY, var_extensible_old, 1, {ERRORMSG}},
-    {ERRORFIX,     ASN_INTEGER,  RWRITE, var_extensible_old, 1, {ERRORFIX}},
-    {ERRORFIXCMD,  ASN_OCTET_STR, RONLY, var_extensible_old, 1, {ERRORFIXCMD}}
+    {MIBINDEX,     ASN_INTEGER,   NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {MIBINDEX}},
+    {ERRORNAME,    ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {ERRORNAME}},
+    {SHELLCOMMAND, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {SHELLCOMMAND}},
+    {ERRORFLAG,    ASN_INTEGER,   NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {ERRORFLAG}},
+    {ERRORMSG,     ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {ERRORMSG}},
+    {ERRORFIX,     ASN_INTEGER,  NETSNMP_OLDAPI_RWRITE,
+     var_extensible_old, 1, {ERRORFIX}},
+    {ERRORFIXCMD,  ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {ERRORFIXCMD}}
 };
 #endif
 
@@ -1104,7 +1111,7 @@ _extend_find_entry( netsnmp_request_info       *request,
      *  GET handling - find the exact entry being requested
      ***/
     if ( mode == MODE_GET ) {
-        DEBUGMSGTL(( "nsExtendTable:output2", "GET: %s / %d\n ",
+        DEBUGMSGTL(( "nsExtendTable:output2", "GET: %s / %ld\n ",
                       table_info->indexes->val.string,
                      *table_info->indexes->next_variable->val.integer));
         for ( eptr = ereg->ehead; eptr; eptr = eptr->next ) {
@@ -1127,7 +1134,6 @@ _extend_find_entry( netsnmp_request_info       *request,
             if (eptr->numlines < line_idx)
                 return NULL;
         }
-        return eptr;
     }
 
         /***
@@ -1242,11 +1248,10 @@ _extend_find_entry( netsnmp_request_info       *request,
             snmp_set_var_value( table_info->indexes,
                                 eptr->token, strlen(eptr->token));
             snmp_set_var_value( table_info->indexes->next_variable,
-                                &line_idx, sizeof(line_idx));
+                                (const u_char*)&line_idx, sizeof(line_idx));
         }
-        return eptr;  /* Finally, signal success */
     }
-    return NULL;
+    return eptr;  /* Finally, signal success */
 }
 
 /*

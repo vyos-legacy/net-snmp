@@ -40,8 +40,8 @@ RSC=rc.exe
 # PROP Output_Dir "../lib/release"
 # PROP Intermediate_Dir "Release"
 # PROP Target_Dir ""
-# ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
-# ADD CPP /nologo /MD /W3 /GX /O2 /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
+# ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /YX /FD /c
+# ADD CPP /nologo /MD /W3 /GX /O2 /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /YX /FD /c
 # ADD BASE RSC /l 0x409
 # ADD RSC /l 0x409
 BSC32=bscmake.exe
@@ -63,8 +63,8 @@ LIB32=link.exe -lib
 # PROP Output_Dir "../lib/debug"
 # PROP Intermediate_Dir "Debug"
 # PROP Target_Dir ""
-# ADD BASE CPP /nologo /W3 /Gm /GX /Zi /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
-# ADD CPP /nologo /MDd /W3 /Gm /GX /Zi /Od /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /YX /FD /c
+# ADD BASE CPP /nologo /W3 /Gm /GX /Zi /Od /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /YX /FD /c
+# ADD CPP /nologo /MDd /W3 /Gm /GX /Zi /Od /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /YX /FD /c
 # ADD BASE RSC /l 0x409
 # ADD RSC /l 0x409
 BSC32=bscmake.exe
@@ -281,6 +281,10 @@ SOURCE=..\..\snmplib\strtok_r.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\snmplib\strtoull.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\snmplib\ucd_compat.c
 # End Source File
 # Begin Source File
@@ -294,6 +298,10 @@ SOURCE=..\..\snmplib\winpipe.c
 # Begin Source File
 
 SOURCE=..\..\snmplib\fd_event_manager.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\snmplib\large_fd_set.c
 # End Source File
 # End Group
 # Begin Group "Header Files"
@@ -450,6 +458,14 @@ SOURCE="..\..\include\net-snmp\library\ucd_compat.h"
 # Begin Source File
 
 SOURCE="..\..\include\net-snmp\library\vacm.h"
+# End Source File
+# Begin Source File
+
+SOURCE="..\..\include\net-snmp\library\fd_event_manager.h"
+# End Source File
+# Begin Source File
+
+SOURCE="..\..\include\net-snmp\library\large_fd_set.h"
 # End Source File
 # End Group
 # End Target

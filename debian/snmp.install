@@ -7,4 +7,3 @@ debian/tmp/usr/share/man/man1/encode*
 debian/tmp/usr/share/man/man1/fixproc.1
 debian/tmp/usr/share/man/man1/traptoemail.1
 debian/tmp/usr/share/snmp/snmpconf-data/snmp-data
-debian/tmp/usr/share/lintian/overrides/snmp

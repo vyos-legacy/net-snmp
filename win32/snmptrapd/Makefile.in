@@ -32,6 +32,7 @@ CLEAN :
 	-@erase "$(INTDIR)\vc??.idb"
 	-@erase "$(INTDIR)\$(PROGNAME).pch"
 	-@erase "..\bin\$(OUTDIR)\$(PROGNAME).exe"
+	-@erase "..\bin\$(OUTDIR)\$(PROGNAME).exe.manifest"
 
 "..\bin\$(OUTDIR)" :
     if not exist "..\bin\$(OUTDIR)/$(NULL)" mkdir "..\bin\$(OUTDIR)"
@@ -83,7 +84,7 @@ BSC32_FLAGS=/nologo /o"$(INTDIR)\$(PROGNAME).bsc"
 BSC32_SBRS= \
 	
 LINK32=link.exe
-LINK32_FLAGS=$(OPENSSL) netsnmp.lib netsnmpagent.lib netsnmpmibs.lib netsnmphelpers.lib netsnmptrapd.lib advapi32.lib ws2_32.lib kernel32.lib user32.lib /nologo /subsystem:console /pdb:none /machine:I386 /out:"..\bin\$(OUTDIR)/$(PROGNAME).exe" /libpath:"../lib/release" 
+LINK32_FLAGS=$(OPENSSL) netsnmp.lib netsnmpagent.lib netsnmpmibs.lib netsnmphelpers.lib netsnmptrapd.lib advapi32.lib ws2_32.lib kernel32.lib user32.lib /nologo /subsystem:console /pdb:none /out:"..\bin\$(OUTDIR)/$(PROGNAME).exe" /libpath:"../lib/release" 
 LINK32_OBJS= \
 	"$(INTDIR)\$(PROGNAME).obj" \
 	"$(INTDIR)\winservice.obj" \
@@ -94,6 +95,8 @@ LINK32_OBJS= \
     $(LINK32) @<<
   $(LINK32_FLAGS) $(LINK32_OBJS)
 <<
+ if exist "..\bin\$(OUTDIR)\$(PROGNAME).exe.manifest" \
+	    mt.exe -manifest "..\bin\$(OUTDIR)\$(PROGNAME).exe.manifest" -outputresource:"..\bin\$(OUTDIR)\$(PROGNAME).exe";1
 !ELSE	# Linktype check
 	-@echo .
 	-@echo Aborting build.  Applications can not be built using --linktype=dynamic
@@ -117,6 +120,7 @@ CLEAN :
 	-@erase "$(INTDIR)\$(PROGNAME).bsc"
 	-@erase "$(INTDIR)\$(PROGNAME).pdb"
 	-@erase "..\bin\$(OUTDIR)\$(PROGNAME).exe"
+	-@erase "..\bin\$(OUTDIR)\$(PROGNAME).exe.manifest"
 
 "..\bin\$(OUTDIR)" :
     if not exist "..\bin\$(OUTDIR)/$(NULL)" mkdir "..\bin\$(OUTDIR)"
@@ -175,7 +179,7 @@ BSC32_SBRS= \
 <<
 
 LINK32=link.exe
-LINK32_FLAGS=$(OPENSSL) netsnmp.lib netsnmpagent.lib netsnmpmibs.lib netsnmphelpers.lib netsnmptrapd.lib advapi32.lib ws2_32.lib kernel32.lib user32.lib /nologo /subsystem:console /incremental:no /pdb:"$(INTDIR)\$(PROGNAME).pdb" /debug /machine:I386 /out:"..\bin\$(OUTDIR)/$(PROGNAME).exe" /pdbtype:sept /libpath:"../lib/debug" 
+LINK32_FLAGS=$(OPENSSL) netsnmp.lib netsnmpagent.lib netsnmpmibs.lib netsnmphelpers.lib netsnmptrapd.lib advapi32.lib ws2_32.lib kernel32.lib user32.lib /nologo /subsystem:console /incremental:no /pdb:"$(INTDIR)\$(PROGNAME).pdb" /debug /out:"..\bin\$(OUTDIR)/$(PROGNAME).exe" /pdbtype:sept /libpath:"../lib/debug" 
 LINK32_OBJS= \
 	"$(INTDIR)\$(PROGNAME).obj" \
 	"$(INTDIR)\winservice.obj" \
@@ -186,6 +190,8 @@ LINK32_OBJS= \
     $(LINK32) @<<
   $(LINK32_FLAGS) $(LINK32_OBJS)
 <<
+ if exist "..\bin\$(OUTDIR)\$(PROGNAME).exe.manifest" \
+	    mt.exe -manifest "..\bin\$(OUTDIR)\$(PROGNAME).exe.manifest" -outputresource:"..\bin\$(OUTDIR)\$(PROGNAME).exe";1
 !ELSE	# Linktype check
 	-@echo .
 	-@echo Aborting build.  Applications can not be built using --linktype=dynamic

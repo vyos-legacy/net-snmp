@@ -48,10 +48,10 @@
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 #include <net-snmp/agent/agent_callbacks.h>
+#include <net-snmp/agent/sysORTable.h>
 #include "vacm_vars.h"
-#include "util_funcs.h"
+#include "util_funcs/header_generic.h"
 
-#ifdef USING_MIBII_SYSORTABLE_MODULE
 #if TIME_WITH_SYS_TIME
 # ifdef WIN32
 #  include <sys/timeb.h>
@@ -66,41 +66,52 @@
 #  include <time.h>
 # endif
 #endif
-#include "sysORTable.h"
-#endif
+
 static unsigned int vacmViewSpinLock = 0;
 
 void
 init_vacm_vars(void)
 {
 
-#ifdef USING_MIBII_SYSORTABLE_MODULE
-    static oid      reg[] = { SNMP_OID_SNMPMODULES, 16, 2, 2, 1 };
-#endif
+    oid      reg[] = { SNMP_OID_SNMPMODULES, 16, 2, 2, 1 };
 
 #define PRIVRW	(NETSNMP_SNMPV2ANY | 0x5000)
 
     struct variable1 vacm_sec2group[] = {
-        {SECURITYGROUP, ASN_OCTET_STR, RWRITE, var_vacm_sec2group, 1, {3}},
-        {SECURITYSTORAGE, ASN_INTEGER, RWRITE, var_vacm_sec2group, 1, {4}},
-        {SECURITYSTATUS, ASN_INTEGER, RWRITE, var_vacm_sec2group, 1, {5}},
+        {SECURITYGROUP, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_sec2group, 1, {3}},
+        {SECURITYSTORAGE, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_sec2group, 1, {4}},
+        {SECURITYSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_sec2group, 1, {5}},
     };
 
     struct variable1 vacm_access[] = {
-        {ACCESSMATCH, ASN_INTEGER, RWRITE, var_vacm_access, 1, {4}},
-        {ACCESSREAD, ASN_OCTET_STR, RWRITE, var_vacm_access, 1, {5}},
-        {ACCESSWRITE, ASN_OCTET_STR, RWRITE, var_vacm_access, 1, {6}},
-        {ACCESSNOTIFY, ASN_OCTET_STR, RWRITE, var_vacm_access, 1, {7}},
-        {ACCESSSTORAGE, ASN_INTEGER, RWRITE, var_vacm_access, 1, {8}},
-        {ACCESSSTATUS, ASN_INTEGER, RWRITE, var_vacm_access, 1, {9}},
+        {ACCESSMATCH, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_access, 1, {4}},
+        {ACCESSREAD, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_access, 1, {5}},
+        {ACCESSWRITE, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_access, 1, {6}},
+        {ACCESSNOTIFY, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_access, 1, {7}},
+        {ACCESSSTORAGE, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_access, 1, {8}},
+        {ACCESSSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_access, 1, {9}},
     };
 
     struct variable3 vacm_view[] = {
-        {VACMVIEWSPINLOCK, ASN_INTEGER, RWRITE, var_vacm_view, 1, {1}},
-        {VIEWMASK, ASN_OCTET_STR, RWRITE, var_vacm_view, 3, {2, 1, 3}},
-        {VIEWTYPE, ASN_INTEGER, RWRITE, var_vacm_view, 3, {2, 1, 4}},
-        {VIEWSTORAGE, ASN_INTEGER, RWRITE, var_vacm_view, 3, {2, 1, 5}},
-        {VIEWSTATUS, ASN_INTEGER, RWRITE, var_vacm_view, 3, {2, 1, 6}},
+        {VACMVIEWSPINLOCK, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_view, 1, {1}},
+        {VIEWMASK, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_view, 3, {2, 1, 3}},
+        {VIEWTYPE, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_view, 3, {2, 1, 4}},
+        {VIEWSTORAGE, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_view, 3, {2, 1, 5}},
+        {VIEWSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+         var_vacm_view, 3, {2, 1, 6}},
     };
 
     /*
@@ -126,11 +137,7 @@ init_vacm_vars(void)
                  vacm_access_oid);
     REGISTER_MIB("mibII/vacm:view", vacm_view, variable3, vacm_view_oid);
 
-#ifdef USING_MIBII_SYSORTABLE_MODULE
-    register_sysORTable(reg, 10,
-                        "View-based Access Control Model for SNMP.");
-#endif
-
+    REGISTER_SYSOR_ENTRY(reg, "View-based Access Control Model for SNMP.");
 }
 
 
@@ -181,13 +188,13 @@ var_vacm_sec2group(struct variable * vp,
         groupSubtree = name + 13;
         groupSubtreeLen = *length - 13;
         if ( name[12] != groupSubtreeLen )
-            return 0;		/* Either extra subids, or an incomplete string */
+            return NULL;	/* Either extra subids, or an incomplete string */
         cp = secname;
         while (groupSubtreeLen-- > 0) {
             if (*groupSubtree > 255)
-                return 0;       /* illegal value */
+                return NULL;    /* illegal value */
             if (cp - secname > VACM_MAX_STRING)
-                return 0;
+                return NULL;
             *cp++ = (char) *groupSubtree++;
         }
         *cp = 0;
@@ -200,9 +207,9 @@ var_vacm_sec2group(struct variable * vp,
         cp = secname;
         while (groupSubtreeLen-- > 0) {
             if (*groupSubtree > 255)
-                return 0;       /* illegal value */
+                return NULL;    /* illegal value */
             if (cp - secname > VACM_MAX_STRING)
-                return 0;
+                return NULL;
             *cp++ = (char) *groupSubtree++;
         }
         *cp = 0;
@@ -315,11 +322,11 @@ var_vacm_access(struct variable * vp,
         op = name + 11;
         len = *op++;
         if (len > VACM_MAX_STRING)
-            return 0;
+            return NULL;
         cp = groupName;
         while (len-- > 0) {
             if (*op > 255)
-                return 0;       /* illegal value */
+                return NULL;    /* illegal value */
             *cp++ = (char) *op++;
         }
         *cp = 0;
@@ -329,11 +336,11 @@ var_vacm_access(struct variable * vp,
          */
         len = *op++;
         if (len > VACM_MAX_STRING)
-            return 0;
+            return NULL;
         cp = contextPrefix;
         while (len-- > 0) {
             if (*op > 255)
-                return 0;       /* illegal value */
+                return NULL;    /* illegal value */
             *cp++ = (char) *op++;
         }
         *cp = 0;
@@ -361,11 +368,11 @@ var_vacm_access(struct variable * vp,
         } else {
             len = *op;
             if (len > VACM_MAX_STRING)
-                return 0;
+                return NULL;
             cp = groupName;
             for (i = 0; i <= len; i++) {
                 if (*op > 255) {
-                    return 0;   /* illegal value */
+                    return NULL;   /* illegal value */
                 }
                 *cp++ = (char) *op++;
             }
@@ -375,11 +382,11 @@ var_vacm_access(struct variable * vp,
         } else {
             len = *op;
             if (len > VACM_MAX_STRING)
-                return 0;
+                return NULL;
             cp = contextPrefix;
             for (i = 0; i <= len; i++) {
                 if (*op > 255) {
-                    return 0;   /* illegal value */
+                    return NULL;   /* illegal value */
                 }
                 *cp++ = (char) *op++;
             }
@@ -528,11 +535,11 @@ var_vacm_view(struct variable * vp,
             op = name + 12;
             len = *op++;
             if (len > VACM_MAX_STRING)
-                return 0;
+                return NULL;
             cp = viewName;
             while (len-- > 0) {
                 if (*op > 255)
-                    return 0;
+                    return NULL;
                 *cp++ = (char) *op++;
             }
             *cp = 0;
@@ -543,7 +550,7 @@ var_vacm_view(struct variable * vp,
             subtree[0] = len = *op++;
             subtreeLen = 1;
             if (len > MAX_OID_LEN)
-                return 0;
+                return NULL;
             if ( (op+len) != (name + *length) )
                 return NULL;     /* Declared length doesn't match what we actually got */
             op1 = &(subtree[1]);
@@ -566,11 +573,11 @@ var_vacm_view(struct variable * vp,
             } else {
                 len = *op;
                 if (len > VACM_MAX_STRING)
-                    return 0;
+                    return NULL;
                 cp = viewName;
                 for (i = 0; i <= len && op < name + *length; i++) {
                     if (*op > 255) {
-                        return 0;
+                        return NULL;
                     }
                     *cp++ = (char) *op++;
                 }

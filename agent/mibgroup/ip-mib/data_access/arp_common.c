@@ -1,7 +1,7 @@
 /*
  *  Arp MIB architecture support
  *
- * $Id: arp_common.c 13920 2005-12-11 17:55:01Z rstory $
+ * $Id: arp_common.c 17431 2009-03-23 09:21:30Z jsafranek $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -139,4 +139,42 @@ void
 _access_arp_entry_release(netsnmp_arp_entry * entry, void *context)
 {
     netsnmp_access_arp_entry_free(entry);
+}
+
+/**
+ * Update given entry with new data. Calculate new arp_last_updated, if any
+ * field is changed.
+ */
+void netsnmp_access_arp_entry_update(netsnmp_arp_entry *entry,
+        netsnmp_arp_entry *new_data)
+{
+    int modified = 0;
+
+    if (entry->arp_ipaddress_len != new_data->arp_ipaddress_len
+            || memcmp(entry->arp_ipaddress, new_data->arp_ipaddress, entry->arp_ipaddress_len) != 0 ) {
+        modified = 1;
+        entry->arp_ipaddress_len = new_data->arp_ipaddress_len;
+        memcpy(entry->arp_ipaddress, new_data->arp_ipaddress, sizeof(entry->arp_ipaddress));
+    }
+    if (entry->arp_physaddress_len != new_data->arp_physaddress_len ||
+            memcmp(entry->arp_physaddress, new_data->arp_physaddress, entry->arp_physaddress_len) != 0) {
+         modified = 1;
+         entry->arp_physaddress_len = new_data->arp_physaddress_len;
+         memcpy(entry->arp_physaddress, new_data->arp_physaddress, sizeof(entry->arp_physaddress_len));
+     }
+    if (entry->arp_state != new_data->arp_state) {
+         modified = 1;
+         entry->arp_state = new_data->arp_state;
+     }
+    if (entry->arp_type != new_data->arp_type) {
+         modified = 1;
+         entry->arp_type = new_data->arp_type;
+     }
+    if (entry->flags != new_data->flags) {
+         modified = 1;
+         entry->flags = new_data->flags;
+     }
+
+    if (modified)
+        entry->arp_last_updated = netsnmp_get_agent_uptime();
 }

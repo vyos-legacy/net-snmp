@@ -138,6 +138,7 @@ typedef long    fd_mask;
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 #include <net-snmp/library/fd_event_manager.h>
+#include <net-snmp/library/large_fd_set.h>
 
 #include "m2m.h"
 #include <net-snmp/agent/mib_module_config.h>
@@ -176,7 +177,7 @@ typedef long    fd_mask;
 #define TIMETICK         500000L
 
 int             snmp_dump_packet;
-int             reconfig = 0;
+static int      reconfig = 0;
 int             Facility = LOG_DAEMON;
 
 #ifdef WIN32SERVICE
@@ -429,6 +430,12 @@ main(int argc, char *argv[])
 #if HAVE_GETPID
     int fd;
     FILE           *PID;
+#endif
+#if HAVE_GETPWNAM && HAVE_PWD_H
+    struct passwd  *info;
+#endif
+#if HAVE_UNISTD_H
+    const char     *persistent_dir;
 #endif
 
 #ifndef WIN32
@@ -754,7 +761,6 @@ main(int argc, char *argv[])
                 uid = strtoul(optarg, &ecp, 10);
                 if (*ecp) {
 #if HAVE_GETPWNAM && HAVE_PWD_H
-                    struct passwd  *info;
                     info = getpwnam(optarg);
                     if (info) {
                         uid = info->pw_uid;
@@ -901,19 +907,6 @@ main(int argc, char *argv[])
 #ifdef BUFSIZ
     setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
 #endif
-    /*
-     * Initialize the world.  Detach from the shell.  Create initial user.  
-     */
-    if(!dont_fork) {
-        int quit = ! netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
-                                            NETSNMP_DS_AGENT_QUIT_IMMEDIATELY);
-        ret = netsnmp_daemonize(quit, snmp_stderrlog_status());
-        /*
-         * xxx-rks: do we care if fork fails? I think we should...
-         */
-        if(ret != 0)
-            Exit(1);                /*  Exit logs exit val for us  */
-    }
 
     SOCK_STARTUP;
     init_agent(app_name);        /* do what we need to do first. */
@@ -929,6 +922,20 @@ main(int argc, char *argv[])
          * Some error opening one of the specified agent transports.  
          */
         Exit(1);                /*  Exit logs exit val for us  */
+    }
+
+    /*
+     * Initialize the world.  Detach from the shell.  Create initial user.  
+     */
+    if(!dont_fork) {
+        int quit = ! netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
+                                            NETSNMP_DS_AGENT_QUIT_IMMEDIATELY);
+        ret = netsnmp_daemonize(quit, snmp_stderrlog_status());
+        /*
+         * xxx-rks: do we care if fork fails? I think we should...
+         */
+        if(ret != 0)
+            Exit(1);                /*  Exit logs exit val for us  */
     }
 
 #if HAVE_GETPID
@@ -960,18 +967,16 @@ main(int argc, char *argv[])
 #endif
 
 #if HAVE_UNISTD_H
-    cptr = get_persistent_directory();
-    mkdirhier( cptr, NETSNMP_AGENT_DIRECTORY_MODE, 0 );
+    persistent_dir = get_persistent_directory();
+    mkdirhier( persistent_dir, NETSNMP_AGENT_DIRECTORY_MODE, 0 );
    
     uid = netsnmp_ds_get_int(NETSNMP_DS_APPLICATION_ID, 
 			     NETSNMP_DS_AGENT_USERID);
     gid = netsnmp_ds_get_int(NETSNMP_DS_APPLICATION_ID, 
 			     NETSNMP_DS_AGENT_GROUPID);
     
-#ifdef HAVE_CHOWN
     if ( uid != 0 || gid != 0 )
-        chown( cptr, uid, gid );
-#endif
+        chown( persistent_dir, uid, gid );
 
 #ifdef HAVE_SETGID
     if ((gid = netsnmp_ds_get_int(NETSNMP_DS_APPLICATION_ID, 
@@ -1001,6 +1006,19 @@ main(int argc, char *argv[])
                 exit(1);
             }
         }
+#if HAVE_GETPWNAM && HAVE_PWD_H && HAVE_INITGROUPS
+        info = getpwuid(uid);
+        if (info) {
+            DEBUGMSGTL(("snmpd/main", "Supplementary groups for %s.\n", info->pw_name));
+            if (initgroups(info->pw_name, (gid != 0 ? gid : info->pw_gid)) == -1) {
+                snmp_log_perror("initgroups failed");
+                if (!netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
+                                            NETSNMP_DS_AGENT_NO_ROOT_ACCESS)) {
+                    exit(1);
+                }
+            }
+        }
+#endif
     }
 #endif
 #endif
@@ -1079,12 +1097,16 @@ static int
 receive(void)
 {
     int             numfds;
-    fd_set          readfds, writefds, exceptfds;
+    netsnmp_large_fd_set readfds, writefds, exceptfds;
     struct timeval  timeout, *tvp = &timeout;
     int             count, block, i;
 #ifdef	USING_SMUX_MODULE
     int             sd;
 #endif                          /* USING_SMUX_MODULE */
+
+    netsnmp_large_fd_set_init(&readfds, FD_SETSIZE);
+    netsnmp_large_fd_set_init(&writefds, FD_SETSIZE);
+    netsnmp_large_fd_set_init(&exceptfds, FD_SETSIZE);
 
     /*
      * ignore early sighup during startup
@@ -1130,18 +1152,18 @@ receive(void)
         tvp->tv_usec = 0;
 
         numfds = 0;
-        FD_ZERO(&readfds);
-        FD_ZERO(&writefds);
-        FD_ZERO(&exceptfds);
+        NETSNMP_LARGE_FD_ZERO(&readfds);
+        NETSNMP_LARGE_FD_ZERO(&writefds);
+        NETSNMP_LARGE_FD_ZERO(&exceptfds);
         block = 0;
-        snmp_select_info(&numfds, &readfds, tvp, &block);
+        snmp_select_info2(&numfds, &readfds, tvp, &block);
         if (block == 1) {
             tvp = NULL;         /* block without timeout */
 	}
 
 #ifdef	USING_SMUX_MODULE
         if (smux_listen_sd >= 0) {
-            FD_SET(smux_listen_sd, &readfds);
+            NETSNMP_LARGE_FD_SET(smux_listen_sd, &readfds);
             numfds =
                 smux_listen_sd >= numfds ? smux_listen_sd + 1 : numfds;
 
@@ -1149,21 +1171,21 @@ receive(void)
                 sd = smux_snmp_select_list_get_SD_from_List(i);
                 if (sd != 0)
                 {
-                   FD_SET(sd, &readfds);
+                   NETSNMP_LARGE_FD_SET(sd, &readfds);
                    numfds = sd >= numfds ? sd + 1 : numfds;
                 }
             }
         }
 #endif                          /* USING_SMUX_MODULE */
 
-        netsnmp_external_event_info(&numfds, &readfds, &writefds, &exceptfds);
+        netsnmp_external_event_info2(&numfds, &readfds, &writefds, &exceptfds);
 
     reselect:
         DEBUGMSGTL(("snmpd/select", "select( numfds=%d, ..., tvp=%p)\n",
                     numfds, tvp));
         if(tvp)
-            DEBUGMSGTL(("timer", "tvp %d.%d\n", tvp->tv_sec, tvp->tv_usec));
-        count = select(numfds, &readfds, &writefds, &exceptfds, tvp);
+            DEBUGMSGTL(("timer", "tvp %ld.%ld\n", tvp->tv_sec, tvp->tv_usec));
+        count = select(numfds, readfds.lfs_setptr, writefds.lfs_setptr, exceptfds.lfs_setptr, tvp);
         DEBUGMSGTL(("snmpd/select", "returned, count = %d\n", count));
 
         if (count > 0) {
@@ -1175,7 +1197,7 @@ receive(void)
             if (smux_listen_sd >= 0) {
                 for (i = 0; i < smux_snmp_select_list_get_length(); i++) {
                     sd = smux_snmp_select_list_get_SD_from_List(i);
-                    if (FD_ISSET(sd, &readfds)) {
+                    if (NETSNMP_LARGE_FD_ISSET(sd, &readfds)) {
                         if (smux_process(sd) < 0) {
                             smux_snmp_select_list_del(sd);
                         }
@@ -1184,7 +1206,7 @@ receive(void)
                 /*
                  * new connection 
                  */
-                if (FD_ISSET(smux_listen_sd, &readfds)) {
+                if (NETSNMP_LARGE_FD_ISSET(smux_listen_sd, &readfds)) {
                     if ((sd = smux_accept(smux_listen_sd)) >= 0) {
                         smux_snmp_select_list_add(sd);
                     }
@@ -1192,11 +1214,11 @@ receive(void)
             }
 
 #endif                          /* USING_SMUX_MODULE */
-            netsnmp_dispatch_external_events(&count, &readfds,
-                                           &writefds, &exceptfds);
+            netsnmp_dispatch_external_events2(&count, &readfds,
+                                              &writefds, &exceptfds);
             /* If there are still events leftover, process them */
             if (count > 0) {
-              snmp_read(&readfds);
+              snmp_read2(&readfds);
             }
         } else
             switch (count) {
@@ -1231,6 +1253,10 @@ receive(void)
         netsnmp_check_outstanding_agent_requests();
 
     }                           /* endwhile */
+
+    netsnmp_large_fd_set_cleanup(&readfds);
+    netsnmp_large_fd_set_cleanup(&writefds);
+    netsnmp_large_fd_set_cleanup(&exceptfds);
 
     snmp_log(LOG_INFO, "Received TERM or STOP signal...  shutting down...\n");
     return 0;

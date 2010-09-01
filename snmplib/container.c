@@ -1,3 +1,13 @@
+/* Portions of this file are subject to the following copyright(s).  See
+ * the Net-SNMP's COPYING file for more details and other copyrights
+ * that may apply:
+ */
+/*
+ * Portions of this file are copyrighted by:
+ * Copyright (C) 2007 Apple, Inc. All rights reserved.
+ * Use is subject to license terms specified in the COPYING file
+ * distributed with the Net-SNMP package.
+ */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/library/container.h>
@@ -71,10 +81,14 @@ netsnmp_container_init_list(void)
                                netsnmp_container_get_factory("sorted_singly_linked_list"));
 
     netsnmp_container_register_with_compare
+        ("cstring", netsnmp_container_get_factory("binary_array"),
+         netsnmp_compare_direct_cstring);
+
+    netsnmp_container_register_with_compare
         ("string", netsnmp_container_get_factory("binary_array"),
          netsnmp_compare_cstring);
     netsnmp_container_register_with_compare
-        ("string:binary_array", netsnmp_container_get_factory("binary_array"),
+        ("string_binary_array", netsnmp_container_get_factory("binary_array"),
          netsnmp_compare_cstring);
 
 }
@@ -103,6 +117,9 @@ netsnmp_container_register_with_compare(const char* name, netsnmp_factory *f,
                                         netsnmp_container_compare  *c)
 {
     container_type *ct, tmp;
+
+    if (NULL==containers)
+        return -1;
 
     tmp.name = (char *)name;
     ct = (container_type *)CONTAINER_FIND(containers, &tmp);
@@ -139,6 +156,9 @@ netsnmp_container_get_factory(const char *type)
 {
     container_type ct, *found;
     
+    if (NULL==containers)
+        return NULL;
+
     ct.name = type;
     found = (container_type *)CONTAINER_FIND(containers, &ct);
 
@@ -174,6 +194,9 @@ static container_type *
 netsnmp_container_get_ct(const char *type)
 {
     container_type ct;
+
+    if (NULL == containers)
+        return NULL;
     
     ct.name = type;
     return (container_type *)CONTAINER_FIND(containers, &ct);
@@ -275,7 +298,7 @@ int CONTAINER_INSERT_HELPER(netsnmp_container* x, const void* k)
     if(x) {
         int rc = x->insert(x,k);
         if(rc)
-            snmp_log(LOG_ERR,"error on subcontainer '%s' insert (%d)\n",
+            snmp_log(LOG_DEBUG,"error on subcontainer '%s' insert (%d)\n",
                      x->container_name ? x->container_name : "", rc);
         else {
             rc = CONTAINER_INSERT_HELPER(x->next, k);
@@ -314,7 +337,8 @@ int CONTAINER_REMOVE(netsnmp_container *x, const void *k)
         rc2 = x->remove(x,k);
         /** ignore remove errors if there is a filter in place */
         if ((rc2) && (NULL == x->insert_filter)) {
-            snmp_log(LOG_ERR,"error on subcontainer remove (%d)\n", rc2);
+            snmp_log(LOG_ERR,"error on subcontainer '%s' remove (%d)\n",
+                     x->container_name ? x->container_name : "", rc2);
             rc = rc2;
         }
         x = x->prev;
@@ -336,12 +360,15 @@ int CONTAINER_FREE(netsnmp_container *x)
         x = x->next;
     while(x) {
         netsnmp_container *tmp;
+        const char *name;
         tmp = x->prev;
+        name = x->container_name;
         if (NULL != x->container_name)
             SNMP_FREE(x->container_name);
         rc2 = x->cfree(x);
         if (rc2) {
-            snmp_log(LOG_ERR,"error on subcontainer cfree (%d)\n", rc2);
+            snmp_log(LOG_ERR,"error on subcontainer '%s' cfree (%d)\n",
+                     name ? name : "", rc2);
             rc = rc2;
         }
         x = tmp;
@@ -484,6 +511,12 @@ netsnmp_ncompare_cstring(const void * lhs, const void * rhs)
     return strncmp(((const container_type*)lhs)->name,
                    ((const container_type*)rhs)->name,
                    strlen(((const container_type*)rhs)->name));
+}
+
+int
+netsnmp_compare_direct_cstring(const void * lhs, const void * rhs)
+{
+    return strcmp((const char*)lhs, (const char*)rhs);
 }
 
 /*

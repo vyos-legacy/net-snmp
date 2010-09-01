@@ -45,6 +45,10 @@
 #include <rpm/header.h>
 #include <fcntl.h>
 
+#ifdef HAVE_RPM_RPMFILEUTIL_H
+#include <rpm/rpmfileutil.h>
+#endif
+
 #ifdef HAVE_RPMGETPATH
 #include <rpm/rpmmacro.h>
 #endif
@@ -156,13 +160,20 @@ static void     Release_HRSW_token(void);
 #define	HRSWINST_DATE		7
 
 struct variable4 hrswinst_variables[] = {
-    {HRSWINST_CHANGE, ASN_TIMETICKS, RONLY, var_hrswinst, 1, {1}},
-    {HRSWINST_UPDATE, ASN_TIMETICKS, RONLY, var_hrswinst, 1, {2}},
-    {HRSWINST_INDEX, ASN_INTEGER, RONLY, var_hrswinst, 3, {3, 1, 1}},
-    {HRSWINST_NAME, ASN_OCTET_STR, RONLY, var_hrswinst, 3, {3, 1, 2}},
-    {HRSWINST_ID, ASN_OBJECT_ID, RONLY, var_hrswinst, 3, {3, 1, 3}},
-    {HRSWINST_TYPE, ASN_INTEGER, RONLY, var_hrswinst, 3, {3, 1, 4}},
-    {HRSWINST_DATE, ASN_OCTET_STR, RONLY, var_hrswinst, 3, {3, 1, 5}}
+    {HRSWINST_CHANGE, ASN_TIMETICKS, NETSNMP_OLDAPI_RONLY,
+     var_hrswinst, 1, {1}},
+    {HRSWINST_UPDATE, ASN_TIMETICKS, NETSNMP_OLDAPI_RONLY,
+     var_hrswinst, 1, {2}},
+    {HRSWINST_INDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrswinst, 3, {3, 1, 1}},
+    {HRSWINST_NAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrswinst, 3, {3, 1, 2}},
+    {HRSWINST_ID, ASN_OBJECT_ID, NETSNMP_OLDAPI_RONLY,
+     var_hrswinst, 3, {3, 1, 3}},
+    {HRSWINST_TYPE, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrswinst, 3, {3, 1, 4}},
+    {HRSWINST_DATE, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrswinst, 3, {3, 1, 5}}
 };
 oid             hrswinst_variables_oid[] = { 1, 3, 6, 1, 2, 1, 25, 6 };
 
@@ -272,7 +283,7 @@ header_hrswinst(struct variable *vp,
            (vp->namelen + 1) * sizeof(oid));
     *length = vp->namelen + 1;
 
-    *write_method = 0;
+    *write_method = (WriteMethod*)0;
     *var_len = sizeof(long);    /* default to 'long' results */
     return (MATCH_SUCCEEDED);
 }
@@ -332,7 +343,7 @@ header_hrswInstEntry(struct variable *vp,
     memcpy((char *) name, (char *) newname,
            (vp->namelen + 1) * sizeof(oid));
     *length = vp->namelen + 1;
-    *write_method = 0;
+    *write_method = (WriteMethod*)0;
     *var_len = sizeof(long);    /* default to 'long' results */
 
     DEBUGMSGTL(("host/hr_inst", "... get installed S/W stats "));
@@ -477,12 +488,12 @@ var_hrswinst(struct variable * vp,
     case HRSWINST_DATE:
         {
 #ifdef HAVE_LIBRPM
-            int_32         *rpm_data;
+            int32_t         *rpm_data;
             if ( headerGetEntry(swi->swi_h, RPMTAG_INSTALLTIME, NULL, (void **) &rpm_data, NULL) ) {
                 time_t          installTime = *rpm_data;
                 ret = date_n_time(&installTime, var_len);
             } else {
-                ret = date_n_time(0, var_len);
+                ret = date_n_time(NULL, var_len);
             }
 #else
             if (swi->swi_directory != NULL) {
@@ -493,11 +504,12 @@ var_hrswinst(struct variable * vp,
                 ret = date_n_time(&stat_buf.st_mtime, var_len);
             } else {
 #if NETSNMP_NO_DUMMY_VALUES
-                return NULL;
-#endif
+                ret = NULL;
+#else
                 sprintf(string, "back in the mists of time");
                 *var_len = strlen(string);
                 ret = (u_char *) string;
+#endif
             }
 #endif
         }
@@ -679,7 +691,7 @@ Save_HR_SW_info(int ix)
         swi->swi_name[ sizeof(swi->swi_name)-1 ] = 0;
     }
 #else
-    snprintf(swi->swi_name, sizeof(swi->swi_name), swi->swi_dep->d_name);
+    snprintf(swi->swi_name, sizeof(swi->swi_name), "%s", swi->swi_dep->d_name);
     swi->swi_name[ sizeof(swi->swi_name)-1 ] = 0;
 #endif
 }

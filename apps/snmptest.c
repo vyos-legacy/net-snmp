@@ -127,7 +127,7 @@ main(int argc, char *argv[])
     }
 
     varcount = 0;
-    while (1) {
+    for(;;) {
         vars = NULL;
         for (ret = 1; ret != 0;) {
             vp = (netsnmp_variable_list *)
@@ -277,8 +277,7 @@ main(int argc, char *argv[])
         varcount = 0;
         nonRepeaters = -1;
     }
-    SOCK_CLEANUP;
-    return 0;
+    /* NOTREACHED */
 }
 
 int
@@ -286,8 +285,7 @@ input_variable(netsnmp_variable_list * vp)
 {
     char            buf[256];
     size_t          val_len;
-    u_char          value[256], ch;
-    oid             name[MAX_OID_LEN];
+    u_char          ch;
 
     printf("Variable: ");
     fflush(stdout);
@@ -368,13 +366,15 @@ input_variable(netsnmp_variable_list * vp)
         }
         return -1;
     }
-    vp->name_length = MAX_OID_LEN;
-    if (!snmp_parse_oid(buf, name, &vp->name_length)) {
-        snmp_perror(buf);
-        return -1;
+    {
+	oid     name[MAX_OID_LEN];
+	vp->name_length = MAX_OID_LEN;
+	if (!snmp_parse_oid(buf, name, &vp->name_length)) {
+	    snmp_perror(buf);
+	    return -1;
+	}
+	vp->name = snmp_duplicate_objid(name, vp->name_length);
     }
-    vp->name = (oid *) malloc(vp->name_length * sizeof(oid));
-    memmove(vp->name, name, vp->name_length * sizeof(oid));
 
     if (command == SNMP_MSG_SET || command == SNMP_MSG_INFORM
         || command == SNMP_MSG_TRAP2) {
@@ -480,14 +480,16 @@ input_variable(netsnmp_variable_list * vp)
         case ASN_OBJECT_ID:
             if ('\n' == buf[strlen(buf) - 1])
                 buf[strlen(buf) - 1] = '\0';
-            vp->val_len = MAX_OID_LEN;;
-            if (0 == read_objid(buf, (oid *) value, &vp->val_len)) {
-                printf("Unrecognised OID value\n");
-                goto getValue;
-            }
-            vp->val_len *= sizeof(oid);
-            vp->val.objid = (oid *) malloc(vp->val_len);
-            memmove(vp->val.objid, value, vp->val_len);
+	    else {
+		oid value[MAX_OID_LEN];
+		vp->val_len = MAX_OID_LEN;
+		if (0 == read_objid(buf, value, &vp->val_len)) {
+		    printf("Unrecognised OID value\n");
+		    goto getValue;
+		}
+		vp->val.objid = snmp_duplicate_objid(value, vp->val_len);
+		vp->val_len *= sizeof(oid);
+	    }
             break;
         case ASN_TIMETICKS:
             vp->val.integer = (long *) malloc(sizeof(long));

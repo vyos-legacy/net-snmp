@@ -76,10 +76,10 @@
 
 #if !defined (WIN32) && !defined (cygwin)
 
-#ifndef STRUCT_RTENTRY_HAS_RT_DST
+#ifndef HAVE_STRUCT_RTENTRY_RT_DST
 #define rt_dst rt_nodes->rn_key
 #endif
-#ifndef STRUCT_RTENTRY_HAS_RT_HASH
+#ifndef HAVE_STRUCT_RTENTRY_RT_HASH
 #define rt_hash rt_pad1
 #endif
 
@@ -184,7 +184,7 @@ delRoute(u_long dstip, u_long gwip, u_long iff, u_short flags)
 }
 
 
-#ifndef STRUCT_RTENTRY_HAS_RT_DST
+#ifndef HAVE_STRUCT_RTENTRY_RT_DST
 #undef rt_dst
 #endif
 
@@ -228,7 +228,7 @@ findCacheRTE(u_long dst)
             return (&rtcache[i]);
         }
     }
-    return 0;
+    return NULL;
 }
 
 struct rtent   *
@@ -244,7 +244,7 @@ newCacheRTE(void)
             return (&rtcache[i]);
         }
     }
-    return 0;
+    return NULL;
 
 }
 
@@ -266,7 +266,7 @@ delCacheRTE(u_long dst)
 struct rtent   *
 cacheKernelRTE(u_long dst)
 {
-    return 0;                   /* for now */
+    return NULL;                /* for now */
     /*
      * ...... 
      */

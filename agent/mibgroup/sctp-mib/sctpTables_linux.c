@@ -1,9 +1,13 @@
+#include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
 #include "sctpAssocTable.h"
 #include "sctpAssocLocalAddrTable.h"
 #include "sctpAssocRemAddrTable.h"
 #include "sctpTables_common.h"
 
-#include <util_funcs.h>
+#include "mibgroup/util_funcs/get_pid_from_inode.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -126,7 +130,7 @@ parse_assoc_remote_addresses(sctpAssocTable_entry * entry)
 static int
 parse_assoc_line(char *line, sctpTables_containers * containers)
 {
-    long            inode;
+    unsigned long long inode;
     char           *token;
     int             ret;
     sctpAssocTable_entry *entry;
@@ -169,8 +173,8 @@ parse_assoc_line(char *line, sctpTables_containers * containers)
         ret = SNMP_ERR_GENERR;
         goto error;
     }
-    inode = strtol(token, NULL, 10);
-    entry->sctpAssocPrimProcess = get_pid_from_inode(inode);
+    inode = strtoull(token, NULL, 10);
+    entry->sctpAssocPrimProcess = netsnmp_get_pid_from_inode(inode);
 
     token = strtok(NULL, " ");  /* LPORT */
     if (token == NULL) {

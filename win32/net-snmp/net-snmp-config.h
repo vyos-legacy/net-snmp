@@ -4,6 +4,20 @@
 #ifndef NET_SNMP_CONFIG_H
 #define NET_SNMP_CONFIG_H
 
+/* _MSC_VER values
+   1500 = 9.0 (2008)
+   1400 = 8.0 (2005)
+   1310 = 7.1 (2003)
+   1300 = 7.0 (2002)
+   1200 = 6.0
+*/
+
+/* Automatically set by Windows perl Configure script.
+ * When compiling with the MSVC workspace, this must be set manually.
+ * See the PACKAGE_VERSION variable in Unix /configure script
+*/
+#define PACKAGE_VERSION "unknown"
+
 /* Define HAVE_WIN32_PLATFORM_SDK if you have:
  * Microsoft Visual Studio MSVC 6.0 and the Platform SDK (PSDK)
  * Microsoft Visual Studio.Net 2002
@@ -12,6 +26,16 @@
  * MinGW 
  */
 /* #undef HAVE_WIN32_PLATFORM_SDK */
+
+/* Define NETSNMP_ENABLE_IPV6 to enable IPv6.  IPv6 is only available on
+ * Windows XP and higher.  */
+/* #undef NETSNMP_ENABLE_IPV6 */
+
+/* Only use Windows API functions available on Windows 2000 SP4 or later.  
+ * We need at least SP1 for some IPv6 defines in ws2ipdef.h
+ */
+#define _WIN32_WINNT 0x500 /*_WIN32_WINNT_WIN2K*/
+#define NTDDI_VERSION 0x05000400 /* NTDDI_WIN2KSP4 */
 
 #define INSTALL_BASE "c:/usr"
 
@@ -210,10 +234,11 @@
 /* Define to 1 if you have the `cgetnext' function. */
 /* #undef HAVE_CGETNEXT */
 
-/* Define to 1 if you have the `chown' function. */
-/* #undef HAVE_CHOWN */
+/* Define to 1 if you have the <direct.h> header file. */
+#define HAVE_DIRECT_H 1
 
-/* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'.  */
+/* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'.
+   */
 /* #undef HAVE_DIRENT_H */
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
@@ -339,9 +364,6 @@
 /* Define to 1 if you have the `crypto' library (-lcrypto). */
 /* #undef HAVE_LIBCRYPTO */
 
-/* Define to 1 if you have the `dl' library (-ldl). */
-/* #undef HAVE_LIBDL */
-
 /* Define to 1 if you have the `efence' library (-lefence). */
 /* #undef HAVE_LIBEFENCE */
 
@@ -350,9 +372,6 @@
 
 /* Define to 1 if you have the `kstat' library (-lkstat). */
 /* #undef HAVE_LIBKSTAT */
-
-/* Define to 1 if you have the `kvm' library (-lkvm). */
-/* #undef HAVE_LIBKVM */
 
 /* Define to 1 if you have the `m' library (-lm). */
 /* #undef HAVE_LIBM */
@@ -378,9 +397,6 @@
 /* Define to 1 if you have the `sensors' library (-lsensors). */
 /* #undef HAVE_LIBSENSORS */
 
-/* Define to 1 if you have the `z' library (-lz). */
-/* #undef HAVE_LIBZ */
-
 /* Define to 1 if you have the <limits.h> header file. */
 #define HAVE_LIMITS_H 1
 
@@ -392,9 +408,6 @@
 
 /* Define to 1 if you have the <locale.h> header file. */
 #define HAVE_LOCALE_H 1
-
-/* Define to 1 if you have the `localtime_r' function. */
-/* #undef HAVE_LOCALTIME_R */
 
 /* Define to 1 if you have the `lrand48' function. */
 /* #undef HAVE_LRAND48 */
@@ -485,6 +498,9 @@
 
 /* Define to 1 if you have the <netinet/ip_icmp.h> header file. */
 /* #undef HAVE_NETINET_IP_ICMP_H */
+
+/* Define to 1 if you have the <netinet/icmp6.h> header file. */
+/* #undef HAVE_NETINET_ICMP6_H */
 
 /* Define to 1 if you have the <netinet/ip_var.h> header file. */
 /* #undef HAVE_NETINET_IP_VAR_H */
@@ -656,9 +672,6 @@
 
 /* Define to 1 if you have the `statvfs' function. */
 /* #undef HAVE_STATVFS */
-
-/* Define to 1 if you have the <stdarg.h> header file. */
-#define HAVE_STDARG_H 1
 
 /* Define to 1 if you have the <stdint.h> header file. */
 /* #undef HAVE_STDINT_H */
@@ -938,6 +951,9 @@
 /* The size of a `long', as computed by sizeof. */
 #define SIZEOF_LONG 4
 
+/* The size of a `intmax_t', as computed by sizeof. */
+#define SIZEOF_INTMAX_T 8
+
 /* The size of a `short', as computed by sizeof. */
 #define SIZEOF_SHORT 2
 
@@ -1002,96 +1018,96 @@
 /* #undef RTENTRY_4_4 */
 
 /* Does struct sigaction have a sa_sigaction field? */
-/* #undef STRUCT_SIGACTION_HAS_SA_SIGACTION */
+/* #undef HAVE_STRUCT_SIGACTION_SA_SIGACTION */
 
 /* Does struct sockaddr have a sa_len field? */
-/* #undef STRUCT_SOCKADDR_HAS_SA_LEN */
+/* #undef HAVE_STRUCT_SOCKADDR_SA_LEN */
 
 /* Does struct sockaddr have a sa_family2 field? */
-/* #undef STRUCT_SOCKADDR_HAS_SA_UNION_SA_GENERIC_SA_FAMILY2 */
+/* #undef HAVE_STRUCT_SOCKADDR_SA_UNION_SA_GENERIC_SA_FAMILY2 */
 
 /* Does struct in6_addr have a s6_un.sa6_ladd field? */
-/* #undef STRUCT_IN6_ADDR_HAS_S6_UN_SA6_LADDR */
+/* #undef HAVE_STRUCT_IN6_ADDR_S6_UN_SA6_LADDR */
 
 /* rtentry structure tests */
 /* #undef RTENTRY_RT_NEXT */
-/* #undef STRUCT_RTENTRY_HAS_RT_DST */
-/* #undef STRUCT_RTENTRY_HAS_RT_UNIT */
-/* #undef STRUCT_RTENTRY_HAS_RT_USE */
-/* #undef STRUCT_RTENTRY_HAS_RT_REFCNT */
-/* #undef STRUCT_RTENTRY_HAS_RT_HASH */
+/* #undef HAVE_STRUCT_RTENTRY_RT_DST */
+/* #undef HAVE_STRUCT_RTENTRY_RT_UNIT */
+/* #undef HAVE_STRUCT_RTENTRY_RT_USE */
+/* #undef HAVE_STRUCT_RTENTRY_RT_REFCNT */
+/* #undef HAVE_STRUCT_RTENTRY_RT_HASH */
 
 /* ifnet structure tests */
-/* #undef STRUCT_IFNET_HAS_IF_BAUDRATE */
-/* #undef STRUCT_IFNET_HAS_IF_BAUDRATE_IFS_VALUE */
-/* #undef STRUCT_IFNET_HAS_IF_SPEED */
-/* #undef STRUCT_IFNET_HAS_IF_TYPE */
-/* #undef STRUCT_IFNET_HAS_IF_IMCASTS */
-/* #undef STRUCT_IFNET_HAS_IF_IQDROPS */
-/* #undef STRUCT_IFNET_HAS_IF_LASTCHANGE_TV_SEC */
-/* #undef STRUCT_IFNET_HAS_IF_NOPROTO */
-/* #undef STRUCT_IFNET_HAS_IF_OMCASTS */
-/* #undef STRUCT_IFNET_HAS_IF_XNAME */
-/* #undef STRUCT_IFNET_HAS_IF_OBYTES */
-/* #undef STRUCT_IFNET_HAS_IF_IBYTES */
-/* #undef STRUCT_IFNET_HAS_IF_ADDRLIST */
+/* #undef HAVE_STRUCT_IFNET_IF_BAUDRATE */
+/* #undef HAVE_STRUCT_IFNET_IF_BAUDRATE_IFS_VALUE */
+/* #undef HAVE_STRUCT_IFNET_IF_SPEED */
+/* #undef HAVE_STRUCT_IFNET_IF_TYPE */
+/* #undef HAVE_STRUCT_IFNET_IF_IMCASTS */
+/* #undef HAVE_STRUCT_IFNET_IF_IQDROPS */
+/* #undef HAVE_STRUCT_IFNET_IF_LASTCHANGE_TV_SEC */
+/* #undef HAVE_STRUCT_IFNET_IF_NOPROTO */
+/* #undef HAVE_STRUCT_IFNET_IF_OMCASTS */
+/* #undef HAVE_STRUCT_IFNET_IF_XNAME */
+/* #undef HAVE_STRUCT_IFNET_IF_OBYTES */
+/* #undef HAVE_STRUCT_IFNET_IF_IBYTES */
+/* #undef HAVE_STRUCT_IFNET_IF_ADDRLIST */
 
 /* tcpstat.tcps_rcvmemdrop */
-/* #undef STRUCT_TCPSTAT_HAS_TCPS_RCVMEMDROP */
+/* #undef HAVE_STRUCT_TCPSTAT_TCPS_RCVMEMDROP */
 
 /* udpstat.udps_discard */
-/* #undef STRUCT_UDPSTAT_HAS_UDPS_DISCARD */
+/* #undef HAVE_STRUCT_UDPSTAT_UDPS_DISCARD */
 
 /* udpstat.udps_discard */
-/* #undef STRUCT_UDPSTAT_HAS_UDPS_NOPORT */
+/* #undef HAVE_STRUCT_UDPSTAT_UDPS_NOPORT */
 
 /* udpstat.udps_discard */
-/* #undef STRUCT_UDPSTAT_HAS_UDPS_NOPORTBCAST */
+/* #undef HAVE_STRUCT_UDPSTAT_UDPS_NOPORTBCAST */
 
 /* udpstat.udps_discard */
-/* #undef STRUCT_UDPSTAT_HAS_UDPS_FULLSOCK */
+/* #undef HAVE_STRUCT_UDPSTAT_UDPS_FULLSOCK */
 
 /* arphd.at_next */
-/* #undef STRUCT_ARPHD_HAS_AT_NEXT */
+/* #undef HAVE_STRUCT_ARPHD_AT_NEXT */
 
 /* ifaddr.ifa_next */
-/* #undef STRUCT_IFADDR_HAS_IFA_NEXT */
+/* #undef HAVE_STRUCT_IFADDR_IFA_NEXT */
 
 /* ifnet.if_mtu */
-/* #undef STRUCT_IFNET_HAS_IF_MTU */
+/* #undef HAVE_STRUCT_IFNET_IF_MTU */
 
 /* swdevt.sw_nblksenabled */
-/* #undef STRUCT_SWDEVT_HAS_SW_NBLKSENABLED */
+/* #undef HAVE_STRUCT_SWDEVT_SW_NBLKSENABLED */
 
 /* nlist.n_value */
-/* #undef STRUCT_NLIST_HAS_N_VALUE */
+/* #undef HAVE_STRUCT_NLIST_N_VALUE */
 
 /* ipstat structure tests */
-/* #undef STRUCT_IPSTAT_HAS_IPS_CANTFORWARD */
-/* #undef STRUCT_IPSTAT_HAS_IPS_CANTFRAG */
-/* #undef STRUCT_IPSTAT_HAS_IPS_DELIVERED */
-/* #undef STRUCT_IPSTAT_HAS_IPS_FRAGDROPPED */
-/* #undef STRUCT_IPSTAT_HAS_IPS_FRAGTIMEOUT */
-/* #undef STRUCT_IPSTAT_HAS_IPS_LOCALOUT */
-/* #undef STRUCT_IPSTAT_HAS_IPS_NOPROTO */
-/* #undef STRUCT_IPSTAT_HAS_IPS_NOROUTE */
-/* #undef STRUCT_IPSTAT_HAS_IPS_ODROPPED */
-/* #undef STRUCT_IPSTAT_HAS_IPS_OFRAGMENTS */
-/* #undef STRUCT_IPSTAT_HAS_IPS_REASSEMBLED */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_CANTFORWARD */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_CANTFRAG */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_DELIVERED */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_FRAGDROPPED */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_FRAGTIMEOUT */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_LOCALOUT */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_NOPROTO */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_NOROUTE */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_ODROPPED */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_OFRAGMENTS */
+/* #undef HAVE_STRUCT_IPSTAT_IPS_REASSEMBLED */
 
 /* vfsstat.f_frsize */
-/* #undef STRUCT_STATVFS_HAS_F_FRSIZE */
+/* #undef HAVE_STRUCT_STATVFS_F_FRSIZE */
 
 /* vfsstat.f_files */
-/* #undef STRUCT_STATVFS_HAS_F_FILES */
+/* #undef HAVE_STRUCT_STATVFS_F_FILES */
 
 /* statfs inode structure tests*/
-/* #undef STRUCT_STATFS_HAS_F_FILES */
-/* #undef STRUCT_STATFS_HAS_F_FFREE */
-/* #undef STRUCT_STATFS_HAS_F_FAVAIL */
+/* #undef HAVE_STRUCT_STATFS_F_FILES */
+/* #undef HAVE_STRUCT_STATFS_F_FFREE */
+/* #undef HAVE_STRUCT_STATFS_F_FAVAIL */
 
 /* des_ks_struct.weak_key */
-/* #undef STRUCT_DES_KS_STRUCT_HAS_WEAK_KEY */
+/* #undef HAVE_STRUCT_DES_KS_STRUCT_WEAK_KEY */
 
 /* ifnet needs to have _KERNEL defined */
 /* #undef IFNET_NEEDS_KERNEL */
@@ -1104,9 +1120,6 @@
 
 /* define if SIOCGIFADDR exists in sys/ioctl.h */
 /* #undef SYS_IOCTL_H_HAS_SIOCGIFADDR */
-
-/* define if your compiler (processor) defines __FUNCTION__ for you */
-/* #undef HAVE_CPP_UNDERBAR_FUNCTION_DEFINED */
 
 /* Mib-2 tree Info */
 /* These are the system information variables. */
@@ -1467,6 +1480,7 @@
 
 /* Not-to-be-compiled macros for use by configure only */
 #define config_require(x)
+#define config_version_require(x)
 #define config_warning(x)
 #define config_exclude(x)
 #define config_arch_require(x,y)
@@ -1542,7 +1556,22 @@ typedef unsigned __int32 uint32_t;
 typedef long int32_t;
 typedef unsigned __int64 uint64_t;
 typedef __int64 int64_t;
+typedef unsigned __int64 uintmax_t;
+typedef __int64 intmax_t;
 typedef unsigned short   uint16_t;
+
+
+/* (u)intptr_t should only be needed for MSVC 6 32-bit. */
+/* SDK has it for 64-bit and newer MSVC should also have it in stddef.h. */
+#ifndef _INTPTR_T_DEFINED
+typedef int            intptr_t;
+#define _INTPTR_T_DEFINED
+#endif
+
+#ifndef _UINTPTR_T_DEFINED
+typedef unsigned int   uintptr_t;
+#define _UINTPTR_T_DEFINED
+#endif
 
 /* Define if you have the closesocket function.  */
 #define HAVE_CLOSESOCKET 1
@@ -1553,7 +1582,10 @@ typedef unsigned short   uint16_t;
 /* define to 1 if you do not want to set global snmp_errno */
 #define DONT_SHARE_ERROR_WITH_OTHER_THREADS 1
 
+/* Not needed for MSVC 2008 */
+#if _MSC_VER < 1500
 #define vsnprintf _vsnprintf
+#endif
 #define snprintf  _snprintf
 
 #define EADDRINUSE	WSAEADDRINUSE
@@ -1605,7 +1637,7 @@ typedef unsigned short   uint16_t;
 #  define NETSNMP_IMPORT extern
 #endif
 
-#if defined(HAVE_NLIST) && defined(STRUCT_NLIST_HAS_N_VALUE) && !defined(DONT_USE_NLIST) && !defined(NETSNMP_NO_KMEM_USAGE)
+#if defined(HAVE_NLIST) && defined(HAVE_STRUCT_NLIST_N_VALUE) && !defined(DONT_USE_NLIST) && !defined(NETSNMP_NO_KMEM_USAGE)
 #define NETSNMP_CAN_USE_NLIST
 #endif
 
@@ -1613,7 +1645,6 @@ typedef unsigned short   uint16_t;
 #define DMALLOC_FUNC_CHECK
 #endif
 
-/* #undef NETSNMP_ENABLE_IPV6 */
 /* #undef NETSNMP_ENABLE_LOCAL_SMUX */
 
 /* define if agentx transport is to use domain sockets only */
@@ -1628,25 +1659,34 @@ typedef unsigned short   uint16_t;
 #define EXTENSIBLEMIB NETSNMP_UCDAVIS_MIB
 #endif
 
-#if defined(_MSC_VER)
-/* this bit of magic enables or disables IPv6 transports */
-  #if NETSNMP_ENABLE_IPV6
-    /* "dont have" implies "compile here" for snmplib/inet_?to?.c */
-    #undef HAVE_INET_NTOP
-    #undef HAVE_INET_PTON
-    #define NETSNMP_TRANSPORT_TCPIPV6_DOMAIN 1
-    #define NETSNMP_TRANSPORT_UDPIPV6_DOMAIN 1
-  #else
-    /* "have" implies "dont compile here" for snmplib/inet_?to?.c */
-    #define HAVE_INET_NTOP 1
-    #define HAVE_INET_PTON 1
-    #undef NETSNMP_TRANSPORT_TCPIPV6_DOMAIN
-    #undef NETSNMP_TRANSPORT_UDPIPV6_DOMAIN
+/* Windows Vista and higher have inet_ntop but older Windows does not.
+ * We'll use the Net-SNMP version instead. */
+#undef HAVE_INET_NTOP
+#undef HAVE_INET_PTON
+
+/* IPv6 transports */
+#if NETSNMP_ENABLE_IPV6
+  #ifndef IPPROTO_IPV6
+    /* Only defined in Windows XP or higher, so we need it here */
+    #define IPPROTO_IPV6 41
   #endif
+  #define NETSNMP_TRANSPORT_TCPIPV6_DOMAIN 1
+  #define NETSNMP_TRANSPORT_UDPIPV6_DOMAIN 1
+#else
+  #undef NETSNMP_TRANSPORT_TCPIPV6_DOMAIN
+  #undef NETSNMP_TRANSPORT_UDPIPV6_DOMAIN
 #endif
 
 #ifndef NI_MAXHOST
 #define NI_MAXHOST	1025
+#endif
+
+/* Define to 1 if you have the `strtoull' function. */
+#if defined(_MSC_VER) && _MSC_VER < 1300
+#undef HAVE_STRTOULL
+#else
+#define HAVE_STRTOULL 1
+#define strtoull _strtoui64
 #endif
 
 /*
@@ -1692,9 +1732,8 @@ typedef unsigned short   uint16_t;
 #define NETSNMP_TIMEOUT_WAITFORSINGLEOBJECT 5000
 
 #ifdef HAVE_WIN32_PLATFORM_SDK
-#define STRUCT_SOCKADDR_STORAGE_HAS_SS_FAMILY 1
+#define HAVE_STRUCT_SOCKADDR_STORAGE_SS_FAMILY 1
 #endif
-
 
 #endif /* NET_SNMP_CONFIG_H */
 

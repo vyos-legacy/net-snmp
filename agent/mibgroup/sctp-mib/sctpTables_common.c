@@ -1,3 +1,7 @@
+#include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
 #include "sctpTables_common.h"
 #include "sctpAssocTable.h"
 #include "sctpAssocRemAddrTable.h"
@@ -39,6 +43,7 @@ sctpAssocTable_delete_invalid(netsnmp_container *assocTable)
         sctpAssocTable_entry_free(entry);
         CONTAINER_REMOVE(to_delete, NULL);
     }
+    CONTAINER_FREE(to_delete);
 }
 
 static void
@@ -72,6 +77,7 @@ sctpAssocRemAddrTable_delete_invalid(netsnmp_container *remAddrTable)
         sctpAssocRemAddrTable_entry_free(entry);
         CONTAINER_REMOVE(to_delete, NULL);
     }
+    CONTAINER_FREE(to_delete);
 }
 
 static void
@@ -105,6 +111,7 @@ sctpAssocLocalAddrTable_delete_invalid(netsnmp_container *localAddrTable)
         sctpAssocLocalAddrTable_entry_free(entry);
         CONTAINER_REMOVE(to_delete, NULL);
     }
+    CONTAINER_FREE(to_delete);
 }
 
 

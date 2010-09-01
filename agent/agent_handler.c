@@ -162,7 +162,7 @@ netsnmp_create_handler(const char *name,
 netsnmp_handler_registration *
 netsnmp_handler_registration_create(const char *name,
                                     netsnmp_mib_handler *handler,
-                                    oid * reg_oid, size_t reg_oid_len,
+                                    const oid * reg_oid, size_t reg_oid_len,
                                     int modes)
 {
     netsnmp_handler_registration *the_reg;
@@ -179,8 +179,7 @@ netsnmp_handler_registration_create(const char *name,
     the_reg->priority = DEFAULT_MIB_PRIORITY;
     if (name)
         the_reg->handlerName = strdup(name);
-    memdup((u_char **) & the_reg->rootoid, (const u_char *) reg_oid,
-           reg_oid_len * sizeof(oid));
+    the_reg->rootoid = snmp_duplicate_objid(reg_oid, reg_oid_len);
     the_reg->rootoid_len = reg_oid_len;
     return the_reg;
 }
@@ -188,13 +187,19 @@ netsnmp_handler_registration_create(const char *name,
 netsnmp_handler_registration *
 netsnmp_create_handler_registration(const char *name,
                                     Netsnmp_Node_Handler *
-                                    handler_access_method, oid * reg_oid,
+                                    handler_access_method, const oid * reg_oid,
                                     size_t reg_oid_len, int modes)
 {
-    return
-        netsnmp_handler_registration_create(name,
-                                            netsnmp_create_handler(name, handler_access_method),
-                                            reg_oid, reg_oid_len, modes);
+    netsnmp_handler_registration *rv = NULL;
+    netsnmp_mib_handler *handler =
+        netsnmp_create_handler(name, handler_access_method);
+    if (handler) {
+        rv = netsnmp_handler_registration_create(
+            name, handler, reg_oid, reg_oid_len, modes);
+        if (!rv)
+            netsnmp_handler_free(handler);
+    }
+    return rv;
 }
 
 /** register a handler, as defined by the netsnmp_handler_registration pointer. */
@@ -579,6 +584,10 @@ netsnmp_handler_free(netsnmp_mib_handler *handler)
          *  defined. About 30 functions down the stack, starting
          *  in clear_context() -> clear_subtree()
          */
+        if ((handler->myvoid != NULL) && (handler->data_free != NULL))
+        {
+            handler->data_free(handler->myvoid);
+        }
         SNMP_FREE(handler->handler_name);
         SNMP_FREE(handler);
     }
@@ -600,6 +609,7 @@ netsnmp_handler_dup(netsnmp_mib_handler *handler)
 
     if (h != NULL) {
         h->myvoid = handler->myvoid;
+        h->data_free = handler->data_free;
 
         if (handler->next != NULL) {
             h->next = netsnmp_handler_dup(handler->next);
@@ -669,9 +679,8 @@ netsnmp_handler_registration_dup(netsnmp_handler_registration *reginfo)
         }
 
         if (reginfo->rootoid != NULL) {
-            memdup((u_char **) & (r->rootoid),
-                   (const u_char *) reginfo->rootoid,
-                   reginfo->rootoid_len * sizeof(oid));
+            r->rootoid =
+                snmp_duplicate_objid(reginfo->rootoid, reginfo->rootoid_len);
             if (r->rootoid == NULL) {
                 netsnmp_handler_registration_free(r);
                 return NULL;
@@ -806,7 +815,7 @@ netsnmp_request_remove_list_data(netsnmp_request_info *request,
  *         returned if request is NULL or request->parent_data is NULL or
  *         request->parent_data object is not found.
  */
-NETSNMP_INLINE void    *
+void    *
 netsnmp_request_get_list_data(netsnmp_request_info *request,
                               const char *name)
 {
@@ -976,7 +985,8 @@ parse_injectHandler_conf(const char *token, char *cptr)
     cptr = copy_nword(cptr, handler_to_insert, sizeof(handler_to_insert));
     handler = netsnmp_get_list_data(handler_reg, handler_to_insert);
     if (!handler) {
-        config_perror("no such \"%s\" handler registered.");
+	netsnmp_config_error("no \"%s\" handler registered.",
+			     handler_to_insert);
         return;
     }
 

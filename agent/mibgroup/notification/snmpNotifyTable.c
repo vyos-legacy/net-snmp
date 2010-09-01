@@ -69,15 +69,17 @@ struct variable2 snmpNotifyTable_variables[] = {
      * magic number        , variable type , ro/rw , callback fn  , L, oidsuffix 
      */
 #define   SNMPNOTIFYTAG         4
-    {SNMPNOTIFYTAG, ASN_OCTET_STR, RWRITE, var_snmpNotifyTable, 2, {1, 2}},
+    {SNMPNOTIFYTAG, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+     var_snmpNotifyTable, 2, {1, 2}},
 #define   SNMPNOTIFYTYPE        5
-    {SNMPNOTIFYTYPE, ASN_INTEGER, RWRITE, var_snmpNotifyTable, 2, {1, 3}},
+    {SNMPNOTIFYTYPE, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_snmpNotifyTable, 2, {1, 3}},
 #define   SNMPNOTIFYSTORAGETYPE  6
-    {SNMPNOTIFYSTORAGETYPE, ASN_INTEGER, RWRITE, var_snmpNotifyTable, 2,
-     {1, 4}},
+    {SNMPNOTIFYSTORAGETYPE, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_snmpNotifyTable, 2, {1, 4}},
 #define   SNMPNOTIFYROWSTATUS   7
-    {SNMPNOTIFYROWSTATUS, ASN_INTEGER, RWRITE, var_snmpNotifyTable, 2,
-     {1, 5}},
+    {SNMPNOTIFYROWSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_snmpNotifyTable, 2, {1, 5}},
 
 };
 /*
@@ -210,7 +212,7 @@ send_notifications(int major, int minor, void *serverarg, void *clientarg)
     netsnmp_pdu    *template_pdu = (netsnmp_pdu *) serverarg;
     int             count = 0, send = 0;
 
-    DEBUGMSGTL(("send_notifications", "starting: pdu=%x, vars=%x\n",
+    DEBUGMSGTL(("send_notifications", "starting: pdu=%p, vars=%p\n",
                 template_pdu, template_pdu->variables));
 
     for (hptr = snmpNotifyTableStorage; hptr; hptr = hptr->next) {
@@ -338,6 +340,8 @@ notifyTable_register_notifications(int major, int minor,
         pptr->secModel = ss->securityModel;
         pptr->secLevel = ss->securityLevel;
         pptr->secName = (char *) malloc(ss->securityNameLen + 1);
+        if (pptr->secName == NULL)
+            return 0;
         memcpy((void *) pptr->secName, (void *) ss->securityName,
                ss->securityNameLen);
         pptr->secName[ss->securityNameLen] = 0;
@@ -353,6 +357,8 @@ notifyTable_register_notifications(int major, int minor,
         pptr->secName = NULL;
         if (ss->community && (ss->community_len > 0)) {
             pptr->secName = (char *) malloc(ss->community_len + 1);
+            if (pptr->secName == NULL)
+                return 0;
             memcpy((void *) pptr->secName, (void *) ss->community,
                    ss->community_len);
             pptr->secName[ss->community_len] = 0;
@@ -370,6 +376,8 @@ notifyTable_register_notifications(int major, int minor,
      * notify table 
      */
     nptr = SNMP_MALLOC_STRUCT(snmpNotifyTable_data);
+    if (nptr == NULL)
+        return 0;
     nptr->snmpNotifyName = strdup(buf);
     nptr->snmpNotifyNameLen = strlen(buf);
     nptr->snmpNotifyTag = strdup(buf);

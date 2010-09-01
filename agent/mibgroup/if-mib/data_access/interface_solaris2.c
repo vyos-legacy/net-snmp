@@ -3,9 +3,9 @@
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
-#include "mibII/mibII_common.h"
 #include "if-mib/ifTable/ifTable_constants.h"
 #include "kernel_sunos5.h"
+#include "mibII/mibII_common.h"
 
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -63,7 +63,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
     req_e                   req = GET_FIRST;
     int                     error = 0;
 
-    DEBUGMSGTL(("access:interface:container:arch", "load (flags %p)\n",
+    DEBUGMSGTL(("access:interface:container:arch", "load (flags %u)\n",
                 l_flags));
 
     if (container == NULL) {
@@ -306,7 +306,7 @@ _get_v4addr(mib2_ifEntry_t *ife, mib2_ipAddrEntry_t *ipv4e)
     if ((rc = getMibstat(MIB_IP_ADDR, ipv4e, sizeof(*ipv4e), GET_EXACT, 
         &_match_ifname_v4addr, &ife->ifDescr.o_bytes)) == 0)
         return (1);
-    bzero((void *)ipv4e, sizeof(*ipv4e));
+    memset(ipv4e, '\0', sizeof(*ipv4e));
     return (0);
 }
 
@@ -340,7 +340,7 @@ _get_v6addr(mib2_ifEntry_t *ife, mib2_ipv6AddrEntry_t *ipv6e)
         &_match_ifname_v6addr, &ife->ifDescr.o_bytes)) == 0) {
         return (1);
     } 
-    bzero((void *)ipv6e, sizeof(*ipv6e));
+    memset(ipv6e, '\0', sizeof(*ipv6e));
     return (0);
 }
 #endif /* SOLARIS_HAVE_IPV6_MIB_SUPPORT */

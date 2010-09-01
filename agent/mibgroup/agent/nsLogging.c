@@ -11,9 +11,6 @@
 
 #include <net-snmp/library/snmp_logging.h>
 #include "agent/nsLogging.h"
-#include "util_funcs.h"
-
-
 
 /*
  * OID and columns for the logging table.
@@ -23,14 +20,13 @@
 #define  NSLOGGING_MAXLEVEL	4
 #define  NSLOGGING_STATUS	5
 
-oid nsLoggingTable_oid[]      = { 1, 3, 6, 1, 4, 1, 8072, 1, 7, 2, 1};
-
-
 void
 init_nsLogging(void)
 {
     netsnmp_table_registration_info *table_info;
     netsnmp_iterator_info           *iinfo;
+
+    const oid nsLoggingTable_oid[] = { 1, 3, 6, 1, 4, 1, 8072, 1, 7, 2, 1};
 
     /*
      * Register the table.
@@ -308,7 +304,6 @@ handle_nsLoggingTable(netsnmp_mib_handler *handler,
             default:
                 netsnmp_set_request_error(reqinfo, request, SNMP_NOSUCHOBJECT);
                 return SNMP_NOSUCHOBJECT;
-                continue;
 	    }
 	}
 	break;

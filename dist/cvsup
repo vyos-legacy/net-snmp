@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #
-# $Id: cvsup 15452 2006-10-18 14:45:18Z rstory $
+# $Id: cvsup 16369 2007-05-15 15:55:31Z rstory $
 #
-export CVS_RSH=ssh
+CVS_RSH=ssh; export CVS_RSH
 TAG=
 WO=0
 DEST=
@@ -18,6 +18,7 @@ if [ "x$1" = "x-u" ]; then
         TAR='/usr/bin/star -Hustar -not -pat="*/CVS/*" -c -f'
     elif [ -x /bin/tar ]; then
         TAR="/bin/tar --exclude=CVS -c -f"
+        echo "warning: star not available, using (less portable) tar..."
     else
         echo "neither /usr/bin/star nor /bin/tar found."
         exit

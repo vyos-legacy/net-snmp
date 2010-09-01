@@ -13,6 +13,14 @@
 #define sv_undef PL_sv_undef
 #endif
 
+typedef netsnmp_handler_registration *NetSNMP__agent__netsnmp_handler_registration;
+
+/* Copied from snmpUDPDomain.c */
+typedef struct netsnmp_udp_addr_pair_s {
+	struct sockaddr_in remote_addr;
+	struct in_addr local_addr;
+} netsnmp_udp_addr_pair;
+
 typedef struct handler_cb_data_s {
    SV *perl_cb;
 } handler_cb_data;
@@ -397,7 +405,7 @@ handler_wrapper(netsnmp_mib_handler          *handler,
         sv_setiv(arg, (IV) handler);
         XPUSHs(sv_2mortal(rarg));
         rarg = newSViv(0);
-        arg = newSVrv(rarg, "NetSNMP::agent::reginfo");
+        arg = newSVrv(rarg, "NetSNMP::agent::netsnmp_handler_registrationPtr");
         sv_setiv(arg, (IV) reginfo);
         XPUSHs(sv_2mortal(rarg));
         rarg = newSViv(0);
@@ -487,14 +495,14 @@ na_errlog(me,value)
     CODE:
     {
         stringptr = SvPV(value, stringlen);
-        snmp_log(LOG_ERR, stringptr );
+        snmp_log(LOG_ERR, "%s", stringptr );
     }
 
 
 
 MODULE = NetSNMP::agent  PACKAGE = NetSNMP::agent::netsnmp_handler_registration  PREFIX = nsahr_
 
-netsnmp_handler_registration *
+NetSNMP::agent::netsnmp_handler_registration
 nsahr_new(name, regoid, perlcallback)
         char *name;
 	char *regoid;
@@ -524,8 +532,6 @@ nsahr_new(name, regoid, perlcallback)
     OUTPUT:
         RETVAL
 
-MODULE = NetSNMP::agent  PACKAGE = netsnmp_handler_registrationPtr  PREFIX = nsahr_
-
 void
 nsahr_DESTROY(reginfo)
 	netsnmp_handler_registration *reginfo
@@ -548,6 +554,9 @@ nsahr_register(me)
             }
     OUTPUT:
 	RETVAL
+
+
+MODULE = NetSNMP::agent PACKAGE = NetSNMP::agent::netsnmp_handler_registrationPtr PREFIX = nsahr_
 
 void
 nsahr_getRootOID(me)
@@ -773,6 +782,8 @@ nari_setValue(me, type, value)
         netsnmp_request_info *request;
         u_long utmp;
         long ltmp;
+        uint64_t ulltmp;
+        struct counter64 c64;
 	oid myoid[MAX_OID_LEN];
 	size_t myoid_len;
         STRLEN stringlen;
@@ -828,7 +839,6 @@ nari_setValue(me, type, value)
 
           case ASN_UNSIGNED:
           case ASN_COUNTER:
-          case ASN_COUNTER64:
           case ASN_TIMETICKS:
 	      /* We want an integer here */
 	      if ((SvTYPE(value) == SVt_IV) || (SvTYPE(value) == SVt_PVMG) ||
@@ -862,8 +872,54 @@ nari_setValue(me, type, value)
 		break;
 	      }
 
+          case ASN_COUNTER64:
+	      /* We want an integer here */
+	      if ((SvTYPE(value) == SVt_IV) || (SvTYPE(value) == SVt_PVMG)) {
+		  /* Good - got a real one (or a blessed scalar which we have to hope will turn out OK) */
+		  ulltmp = SvIV(value);
+#ifndef WIN32
+		  c64.high = (ulltmp & 0xffffffff00000000ULL) >> 32;
+		  c64.low  = (ulltmp & 0xffffffffULL);
+#else
+		  c64.high = (ulltmp & 0xffffffff00000000ui64) >> 32;
+		  c64.low  = (ulltmp & 0xffffffffui64);
+#endif
+                  snmp_set_var_typed_value(request->requestvb, (u_char)type,
+                                       (u_char *) &c64, sizeof(struct counter64));
+		  RETVAL = 1;
+		  break;
+	      }
+	      else if (SvPOKp(value)) {
+	          /* Might be OK - got a string, so try to convert it, allowing base 10, octal, and hex forms */
+	          stringptr = SvPV(value, stringlen);
+		  ulltmp = strtoul( stringptr, NULL, 0 );
+		  if (errno == EINVAL) {
+		  	snmp_log(LOG_ERR, "Could not convert string to number in setValue: '%s'", stringptr);
+			RETVAL = 0;
+			break;
+		  }
+#ifndef WIN32
+		  c64.high = (ulltmp & 0xffffffff00000000ULL) >> 32;
+		  c64.low  = (ulltmp & 0xffffffffULL);
+#else
+		  c64.high = (ulltmp & 0xffffffff00000000ui64) >> 32;
+		  c64.low  = (ulltmp & 0xffffffffui64);
+#endif
+                  snmp_set_var_typed_value(request->requestvb, (u_char)type,
+                                       (u_char *) &c64, sizeof(struct counter64));
+		  RETVAL = 1;
+		  break;
+	      }
+	      else {
+		snmp_log(LOG_ERR, "Non-unsigned-integer value passed to setValue with ASN_COUNTER64: type was %d\n",
+			SvTYPE(value));
+		RETVAL = 0;
+		break;
+	      }
+
           case ASN_OCTET_STR:
           case ASN_BIT_STR:
+          case ASN_OPAQUE:
 	      /* Check that we have been passed something with a string value (or a blessed scalar) */
 	      if (!SvPOKp(value) && (SvTYPE(value) != SVt_PVMG)) {
 		snmp_log(LOG_ERR, "Non-string value passed to setValue with ASN_OCTET_STR/ASN_BIT_STR: type was %d\n",
@@ -1012,6 +1068,48 @@ nari_next(me)
         RETVAL
 
 MODULE = NetSNMP::agent  PACKAGE = NetSNMP::agent::netsnmp_agent_request_info PREFIX = narqi_
+
+
+SV *
+narqi_getSourceIp(me)
+        SV *me;
+    PREINIT:
+        netsnmp_agent_request_info *reqinfo;
+	struct netsnmp_udp_addr_pair_s *addr_pair;
+	struct sockaddr_in *from;
+        SV *rarg;
+
+    CODE:
+        reqinfo = (netsnmp_agent_request_info *) SvIV(SvRV(me));
+
+        /* XXX: transport-specific: UDP/IPv4 only! */
+	addr_pair = (struct netsnmp_udp_addr_pair_s *) (reqinfo->asp->pdu->transport_data);
+	from = (struct sockaddr_in *) &(addr_pair->remote_addr);
+        rarg = newSVpv((const char *)(&from->sin_addr.s_addr), sizeof(from->sin_addr.s_addr));
+        RETVAL = rarg;
+    OUTPUT:
+        RETVAL
+
+
+SV *
+narqi_getDestIp(me)
+        SV *me;
+    PREINIT:
+        netsnmp_agent_request_info *reqinfo;
+	struct netsnmp_udp_addr_pair_s *addr_pair;
+	struct in_addr *to;
+        SV *rarg;
+
+    CODE:
+        reqinfo = (netsnmp_agent_request_info *) SvIV(SvRV(me));
+
+        /* XXX: transport-specific: UDP/IPv4 only! */
+	addr_pair = (struct netsnmp_udp_addr_pair_s *) (reqinfo->asp->pdu->transport_data);
+	to = (struct in_addr *) &(addr_pair->local_addr);
+        rarg = newSVpv((const char *)(&to->s_addr), sizeof(to->s_addr));
+        RETVAL = rarg;
+    OUTPUT:
+        RETVAL
 
 int
 narqi_getMode(me)

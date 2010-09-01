@@ -132,7 +132,7 @@
 
 #include "struct.h"
 #include "loadave.h"
-#include "util_funcs.h"
+#include "util_funcs/header_simple_table.h"
 #include "kernel.h"
 
 double          maxload[3];
@@ -146,24 +146,24 @@ init_loadave(void)
      * information at 
      */
     struct variable2 extensible_loadave_variables[] = {
-        {MIBINDEX, ASN_INTEGER, RONLY, var_extensible_loadave, 1,
-         {MIBINDEX}},
-        {ERRORNAME, ASN_OCTET_STR, RONLY, var_extensible_loadave, 1,
-         {ERRORNAME}},
-        {LOADAVE, ASN_OCTET_STR, RONLY, var_extensible_loadave, 1,
-         {LOADAVE}},
-        {LOADMAXVAL, ASN_OCTET_STR, RONLY, var_extensible_loadave, 1,
-         {LOADMAXVAL}},
-        {LOADAVEINT, ASN_INTEGER, RONLY, var_extensible_loadave, 1,
-         {LOADAVEINT}},
+        {MIBINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_extensible_loadave, 1, {MIBINDEX}},
+        {ERRORNAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_loadave, 1, {ERRORNAME}},
+        {LOADAVE, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_loadave, 1, {LOADAVE}},
+        {LOADMAXVAL, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_loadave, 1, {LOADMAXVAL}},
+        {LOADAVEINT, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_extensible_loadave, 1, {LOADAVEINT}},
 #ifdef NETSNMP_WITH_OPAQUE_SPECIAL_TYPES
-        {LOADAVEFLOAT, ASN_OPAQUE_FLOAT, RONLY, var_extensible_loadave, 1,
-         {LOADAVEFLOAT}},
+        {LOADAVEFLOAT, ASN_OPAQUE_FLOAT, NETSNMP_OLDAPI_RONLY,
+         var_extensible_loadave, 1, {LOADAVEFLOAT}},
 #endif
-        {ERRORFLAG, ASN_INTEGER, RONLY, var_extensible_loadave, 1,
-         {ERRORFLAG}},
-        {ERRORMSG, ASN_OCTET_STR, RONLY, var_extensible_loadave, 1,
-         {ERRORMSG}}
+        {ERRORFLAG, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+         var_extensible_loadave, 1, {ERRORFLAG}},
+        {ERRORMSG, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+         var_extensible_loadave, 1, {ERRORMSG}}
     };
 
     /*
@@ -336,7 +336,7 @@ var_extensible_loadave(struct variable * vp,
     }
     if (try_getloadavg(&avenrun[0], sizeof(avenrun) / sizeof(avenrun[0]))
         == -1)
-        return (0);
+        return NULL;
     switch (vp->magic) {
     case LOADAVE:
 

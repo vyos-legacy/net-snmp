@@ -1,7 +1,7 @@
 /*
  * route data access header
  *
- * $Id: route.h 13271 2005-10-28 15:29:23Z rstory $
+ * $Id: route.h 16374 2007-05-17 13:35:57Z magfr $
  */
 /**---------------------------------------------------------------------*/
 /*
@@ -23,7 +23,7 @@ config_require(ip-forward-mib/data_access/route_common)
 config_require(ip-forward-mib/data_access/route_linux)
 config_require(ip-forward-mib/data_access/route_ioctl)
 #else
-#error "the route data access library is not available for this platform."
+config_error(the route data access library is not available in this environment.)
 #endif
 
 /** need interface for ifIndex */

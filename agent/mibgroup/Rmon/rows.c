@@ -26,8 +26,6 @@
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
-#include "util_funcs.h"
-
 #include "agutil_api.h"
 #include "rows.h"
 #include "row_api.h"
@@ -756,7 +754,7 @@ ROWDATAAPI_locate_new_data(SCROLLER_T * scrlr)
         scrlr->first_data_ptr = bptr->next;
         scrlr->last_data_ptr->next = bptr;
         scrlr->last_data_ptr = (NEXTED_PTR_T *) bptr;
-        bptr->next = 0;
+        bptr->next = NULL;
     } else {
         bptr = scrlr->current_data_ptr;
         scrlr->current_data_ptr = bptr->next;

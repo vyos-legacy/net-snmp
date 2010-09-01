@@ -1,16 +1,17 @@
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
+#include <net-snmp/agent/table_data.h>
+
 #if HAVE_STRING_H
 #include <string.h>
 #else
 #include <strings.h>
 #endif
 
-#include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
-
 #include <net-snmp/agent/table.h>
-#include <net-snmp/agent/table_data.h>
 #include <net-snmp/agent/read_only.h>
 
 /** @defgroup table_data table_data
@@ -80,16 +81,19 @@ netsnmp_table_data_clone_row(netsnmp_table_row *row)
 
     if (row->indexes) {
         newrow->indexes = snmp_clone_varbind(newrow->indexes);
-        if (!newrow->indexes)
+        if (!newrow->indexes) {
+            free(newrow);
             return NULL;
+        }
     }
 
     if (row->index_oid) {
-        memdup((u_char **) & newrow->index_oid,
-               (u_char *) row->index_oid,
-               row->index_oid_len * sizeof(oid));
-        if (!newrow->index_oid)
+        newrow->index_oid =
+            snmp_duplicate_objid(row->index_oid, row->index_oid_len);
+        if (!newrow->index_oid) {
+            free(newrow);
             return NULL;
+        }
     }
 
     return newrow;
@@ -225,7 +229,7 @@ netsnmp_table_data_add_row(netsnmp_table_data *table,
 }
 
 /** swaps out origrow with newrow.  This does *not* delete/free anything! */
-NETSNMP_INLINE void
+void
 netsnmp_table_data_replace_row(netsnmp_table_data *table,
                                netsnmp_table_row *origrow,
                                netsnmp_table_row *newrow)
@@ -337,9 +341,8 @@ netsnmp_table_data_copy_row( netsnmp_table_row  *old_row,
     if (old_row->indexes)
         new_row->indexes = snmp_clone_varbind(old_row->indexes);
     if (old_row->index_oid)
-        memdup((u_char **) & new_row->index_oid,
-               (u_char *)    old_row->index_oid,
-               old_row->index_oid_len * sizeof(oid));
+        new_row->index_oid =
+            snmp_duplicate_objid(old_row->index_oid, old_row->index_oid_len);
     /* XXX - Doesn't copy table-specific row structure */
     return 0;
 }
@@ -408,6 +411,13 @@ netsnmp_register_read_only_table_data(netsnmp_handler_registration *reginfo,
 {
     netsnmp_inject_handler(reginfo, netsnmp_get_read_only_handler());
     return netsnmp_register_table_data(reginfo, table, table_info);
+}
+
+int
+netsnmp_unregister_table_data(netsnmp_handler_registration *reginfo)
+{
+    /* free table; */
+    return netsnmp_unregister_table(reginfo);
 }
 
 /*
@@ -674,7 +684,7 @@ netsnmp_extract_table_row_data(netsnmp_request_info *request)
 }
 
 /** inserts a newly created table_data row into a request */
-NETSNMP_INLINE void
+void
 netsnmp_insert_table_row(netsnmp_request_info *request,
                          netsnmp_table_row *row)
 {

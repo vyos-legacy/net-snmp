@@ -46,9 +46,8 @@
 #include "agentx/agentx_config.h"
 #include <net-snmp/agent/agent_callbacks.h>
 #include <net-snmp/agent/agent_trap.h>
-#ifdef USING_MIBII_SYSORTABLE_MODULE
-#include "mibII/sysORTable.h"
-#endif
+#include <net-snmp/agent/sysORTable.h>
+#include <net-snmp/agent/agent_sysORTable.h>
 
 #include "subagent.h"
 
@@ -111,6 +110,7 @@ subagent_startup(int majorID, int minorID,
     return 0;
 }
 
+static int subagent_init_init = 0;
 /**
  * init subagent callback (local) session and connect to master agent
  *
@@ -119,12 +119,11 @@ subagent_startup(int majorID, int minorID,
 int
 subagent_init(void)
 {
-    static int init = 0;
     int rc = 0;
 
     DEBUGMSGTL(("agentx/subagent", "initializing....\n"));
 
-    if (++init != 1)
+    if (++subagent_init_init != 1)
         return 0;
 
     netsnmp_assert(netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
@@ -143,7 +142,7 @@ subagent_init(void)
         agentx_callback_sess = netsnmp_callback_open(callback_master_num,
                                                      handle_subagent_response,
                                                      NULL, NULL);
-        DEBUGMSGTL(("agentx/subagent", "subagent_init sess %08x\n",
+        DEBUGMSGTL(("agentx/subagent", "subagent_init sess %p\n",
                     agentx_callback_sess));
     }
     if (NULL == agentx_callback_sess)
@@ -306,7 +305,8 @@ handle_agentx_packet(int operation, netsnmp_session * session, int reqid,
      */
 
     DEBUGMSGTL(("agentx/subagent", "handling agentx request (req=0x%x,trans="
-                "0x%x,sess=0x%x)\n", pdu->reqid,pdu->transid, pdu->sessid));
+                "0x%x,sess=0x%x)\n", (unsigned)pdu->reqid,
+		(unsigned)pdu->transid, (unsigned)pdu->sessid));
     pdu->version = AGENTX_VERSION_1;
     pdu->flags |= UCD_MSG_FLAG_ALWAYS_IN_VIEW;
 
@@ -469,7 +469,7 @@ handle_agentx_packet(int operation, netsnmp_session * session, int reqid,
     result = snmp_async_send(agentx_callback_sess, internal_pdu, mycallback,
                     retmagic);
     if (result == 0) {
-        snmp_free_pdu(internal_pdu);
+        snmp_free_pdu( internal_pdu );
     }
     return 1;
 }
@@ -527,7 +527,7 @@ handle_subagent_response(int op, netsnmp_session * session, int reqid,
                      * set to `endOfMibView'".  
                      */
                     snmp_set_var_objid(v, u->name, u->name_length);
-                    snmp_set_var_typed_value(v, SNMP_ENDOFMIBVIEW, 0, 0);
+                    snmp_set_var_typed_value(v, SNMP_ENDOFMIBVIEW, NULL, 0);
                     DEBUGMSGTL(("agentx/subagent",
                                 "scope violation -- return endOfMibView\n"));
                 }
@@ -563,7 +563,7 @@ handle_subagent_set_response(int op, netsnmp_session * session, int reqid,
 {
     netsnmp_session *retsess;
     struct agent_netsnmp_set_info *asi;
-    int    result;
+    int result;
 
     if (op != NETSNMP_CALLBACK_OP_RECEIVED_MESSAGE || magic == NULL) {
         return 1;
@@ -572,7 +572,8 @@ handle_subagent_set_response(int op, netsnmp_session * session, int reqid,
     DEBUGMSGTL(("agentx/subagent",
                 "handling agentx subagent set response (mode=%d,req=0x%x,"
                 "trans=0x%x,sess=0x%x)\n",
-                pdu->command, pdu->reqid,pdu->transid, pdu->sessid));
+                (unsigned)pdu->command, (unsigned)pdu->reqid,
+		(unsigned)pdu->transid, (unsigned)pdu->sessid));
     pdu = snmp_clone_pdu(pdu);
 
     asi = (struct agent_netsnmp_set_info *) magic;
@@ -591,7 +592,7 @@ handle_subagent_set_response(int op, netsnmp_session * session, int reqid,
             result = snmp_async_send(agentx_callback_sess, pdu,
                             handle_subagent_set_response, asi);
             if (result == 0) {
-                snmp_free_pdu(pdu);
+                snmp_free_pdu( pdu );
             }
             DEBUGMSGTL(("agentx/subagent",
                         "  going from RESERVE1 -> RESERVE2\n"));
@@ -646,7 +647,6 @@ agentx_registration_callback(int majorID, int minorID, void *serverarg,
 }
 
 
-#ifdef USING_MIBII_SYSORTABLE_MODULE
 int
 agentx_sysOR_callback(int majorID, int minorID, void *serverarg,
                       void *clientarg)
@@ -664,7 +664,6 @@ agentx_sysOR_callback(int majorID, int minorID, void *serverarg,
                                        reg_parms->name,
                                        reg_parms->namelen);
 }
-#endif
 
 
 static int
@@ -679,8 +678,13 @@ subagent_shutdown(int majorID, int minorID, void *serverarg, void *clientarg)
     }
     agentx_close_session(thesession, AGENTX_CLOSE_SHUTDOWN);
     snmp_close(thesession);
-    main_session = NULL;
+    if (main_session != NULL) {
+        remove_trap_session(main_session);
+        main_session = NULL;
+    }
     DEBUGMSGTL(("agentx/subagent", "shut down finished.\n"));
+
+    subagent_init_init = 0;
     return 1;
 }
 
@@ -703,14 +707,12 @@ agentx_register_callbacks(netsnmp_session * s)
     snmp_register_callback(SNMP_CALLBACK_APPLICATION,
                            SNMPD_CALLBACK_UNREGISTER_OID,
                            agentx_registration_callback, s);
-#ifdef USING_MIBII_SYSORTABLE_MODULE
     snmp_register_callback(SNMP_CALLBACK_APPLICATION,
                            SNMPD_CALLBACK_REG_SYSOR,
                            agentx_sysOR_callback, s);
     snmp_register_callback(SNMP_CALLBACK_APPLICATION,
                            SNMPD_CALLBACK_UNREG_SYSOR,
                            agentx_sysOR_callback, s);
-#endif
 }
 
 /*
@@ -730,15 +732,12 @@ agentx_unregister_callbacks(netsnmp_session * ss)
     snmp_unregister_callback(SNMP_CALLBACK_APPLICATION,
                              SNMPD_CALLBACK_UNREGISTER_OID,
                              agentx_registration_callback, ss, 1);
-#ifdef USING_MIBII_SYSORTABLE_MODULE
     snmp_unregister_callback(SNMP_CALLBACK_APPLICATION,
                              SNMPD_CALLBACK_REG_SYSOR,
                              agentx_sysOR_callback, ss, 1);
     snmp_unregister_callback(SNMP_CALLBACK_APPLICATION,
                              SNMPD_CALLBACK_UNREG_SYSOR,
                              agentx_sysOR_callback, ss, 1);
-#endif
-
 }
 
 /*
@@ -855,6 +854,11 @@ subagent_open_master_session(void)
     return 0;
 }
 
+static void
+agentx_reopen_sysORTable(const struct sysORTable* data, void* v)
+{
+  agentx_sysOR_callback(0, SNMPD_CALLBACK_REG_SYSOR, data, v);
+}
 
 /*
  * Alarm callback function to open a session to the master agent.  If a
@@ -883,15 +887,20 @@ agentx_reopen_session(unsigned int clientreg, void *clientarg)
         register_mib_reattach();
 
         /*
+         * Reregister all our sysOREntries
+         */
+        netsnmp_sysORTable_foreach(&agentx_reopen_sysORTable, main_session);
+
+        /*
          * Register a ping alarm (if need be).  
          */
-        subagent_register_ping_alarm(0, 0, 0, main_session);
+        subagent_register_ping_alarm(0, 0, NULL, main_session);
     } else {
         if (clientreg == 0) {
             /*
              * Register a reattach alarm for later 
              */
-            subagent_register_ping_alarm(0, 0, 0, main_session);
+            subagent_register_ping_alarm(0, 0, NULL, main_session);
         }
     }
 }

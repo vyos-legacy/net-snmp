@@ -216,16 +216,13 @@ parse_secLevel_conf(const char *word, char *cptr) {
 void
 snmpv3_secLevel_conf(const char *word, char *cptr)
 {
-    char            buf[1024];
     int             secLevel;
 
     if ((secLevel = parse_secLevel_conf( word, cptr )) >= 0 ) {
         netsnmp_ds_set_int(NETSNMP_DS_LIBRARY_ID, 
 			   NETSNMP_DS_LIB_SECLEVEL, secLevel);
     } else {
-        snprintf(buf, sizeof(buf), "Unknown security level: %s", cptr);
-        buf[ sizeof(buf)-1 ] = 0;
-        config_perror(buf);
+	netsnmp_config_error("Unknown security level: %s", cptr);
     }
     DEBUGMSGTL(("snmpv3", "default secLevel set to: %s = %d\n", cptr,
                 netsnmp_ds_get_int(NETSNMP_DS_LIBRARY_ID, 
@@ -747,6 +744,7 @@ free_engineID(int majorid, int minorid, void *serverarg,
     SNMP_FREE(engineID);
     SNMP_FREE(engineIDNic);
     SNMP_FREE(oldEngineID);
+    engineIDIsSet = 0;
     return 0;
 }
 
@@ -882,6 +880,7 @@ usm_parse_create_usmUser(const char *token, char *line)
                                newuser->authProtocolLen);
     if (ret2 <= 0) {
         config_perror("Could not get proper authentication protocol key length");
+	usm_free_user(newuser);
         return;
     }
     newuser->authKey = (u_char *) malloc(ret2);
@@ -1053,7 +1052,7 @@ void
 engineBoots_conf(const char *word, char *cptr)
 {
     engineBoots = atoi(cptr) + 1;
-    DEBUGMSGTL(("snmpv3", "engineBoots: %d\n", engineBoots));
+    DEBUGMSGTL(("snmpv3", "engineBoots: %lu\n", engineBoots));
 }
 
 /*******************************************************************-o-******
@@ -1195,7 +1194,7 @@ version_conf(const char *word, char *cptr)
 }
 
 /*
- * engineID_old_conf(const char *, char *):
+ * oldengineID_conf(const char *, char *):
  * 
  * Reads a octet string encoded engineID into the oldEngineID and
  * oldEngineIDLen pointers.
@@ -1205,6 +1204,28 @@ oldengineID_conf(const char *word, char *cptr)
 {
     read_config_read_octet_string(cptr, &oldEngineID, &oldEngineIDLength);
 }
+
+/*
+ * exactEngineID_conf(const char *, char *):
+ * 
+ * Reads a octet string encoded engineID into the engineID and
+ * engineIDLen pointers.
+ */
+void
+exactEngineID_conf(const char *word, char *cptr)
+{
+    read_config_read_octet_string(cptr, &engineID, &engineIDLength);
+    if (engineIDLength > MAX_ENGINEID_LENGTH) {
+	netsnmp_config_error(
+	    "exactEngineID '%s' too long; truncating to %d bytes",
+	    cptr, MAX_ENGINEID_LENGTH);
+        engineID[MAX_ENGINEID_LENGTH - 1] = '\0';
+        engineIDLength = MAX_ENGINEID_LENGTH;
+    }
+    engineIDIsSet = 1;
+    engineIDType = ENGINEID_TYPE_EXACT;
+}
+
 
 /*
  * merely call 
@@ -1289,6 +1310,8 @@ init_snmpv3(const char *type)
     register_prenetsnmp_mib_handler(type, "engineID", engineID_conf, NULL,
                                     "string");
     register_prenetsnmp_mib_handler(type, "oldEngineID", oldengineID_conf,
+                                    NULL, NULL);
+    register_prenetsnmp_mib_handler(type, "exactEngineID", exactEngineID_conf,
                                     NULL, NULL);
     register_prenetsnmp_mib_handler(type, "engineIDType",
                                     engineIDType_conf, NULL, "num");

@@ -10,21 +10,27 @@
 
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
+#include <net-snmp/agent/sysORTable.h>
 
-#include "util_funcs.h"
-#include "mibII/sysORTable.h"
+#include "util_funcs/header_generic.h"
 #include "snmpEngine.h"
 
 struct variable2 snmpEngine_variables[] = {
-    {SNMPENGINEID, ASN_OCTET_STR, RONLY, var_snmpEngine, 1, {1}},
+    {SNMPENGINEID, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_snmpEngine, 1, {1}},
 #ifdef NETSNMP_ENABLE_TESTING_CODE
-    {SNMPENGINEBOOTS, ASN_INTEGER, RWRITE, var_snmpEngine, 1, {2}},
-    {SNMPENGINETIME, ASN_INTEGER, RWRITE, var_snmpEngine, 1, {3}},
+    {SNMPENGINEBOOTS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_snmpEngine, 1, {2}},
+    {SNMPENGINETIME, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_snmpEngine, 1, {3}},
 #else                           /* !NETSNMP_ENABLE_TESTING_CODE */
-    {SNMPENGINEBOOTS, ASN_INTEGER, RONLY, var_snmpEngine, 1, {2}},
-    {SNMPENGINETIME, ASN_INTEGER, RONLY, var_snmpEngine, 1, {3}},
+    {SNMPENGINEBOOTS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_snmpEngine, 1, {2}},
+    {SNMPENGINETIME, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_snmpEngine, 1, {3}},
 #endif                          /* NETSNMP_ENABLE_TESTING_CODE */
-    {SNMPENGINEMAXMESSAGESIZE, ASN_INTEGER, RONLY, var_snmpEngine, 1, {4}},
+    {SNMPENGINEMAXMESSAGESIZE, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_snmpEngine, 1, {4}},
 };
 
 /*
@@ -56,10 +62,8 @@ register_snmpEngine_scalars_context(const char *contextName)
 void
 init_snmpEngine(void)
 {
-#ifdef USING_MIBII_SYSORTABLE_MODULE
-    static oid      reg[] = { 1, 3, 6, 1, 6, 3, 10, 3, 1, 1 };
-    register_sysORTable(reg, 10, "The SNMP Management Architecture MIB.");
-#endif
+    oid      reg[] = { 1, 3, 6, 1, 6, 3, 10, 3, 1, 1 };
+    REGISTER_SYSOR_ENTRY(reg, "The SNMP Management Architecture MIB.");
     register_snmpEngine_scalars();
 }
 
@@ -85,11 +89,11 @@ var_snmpEngine(struct variable *vp,
     static long     long_ret;
     static unsigned char engineID[SNMP_MAXBUF];
 
-    *write_method = 0;          /* assume it isnt writable for the time being */
+    *write_method = (WriteMethod*)0;    /* assume it isnt writable for the time being */
     *var_len = sizeof(long_ret);        /* assume an integer and change later if not */
 
     if (header_generic(vp, name, length, exact, var_len, write_method))
-        return 0;
+        return NULL;
 
     /*
      * this is where we do the value assignments for the mib results. 
@@ -125,7 +129,7 @@ var_snmpEngine(struct variable *vp,
         DEBUGMSGTL(("snmpd", "unknown sub-id %d in var_snmpEngine\n",
                     vp->magic));
     }
-    return 0;
+    return NULL;
 }
 
 #ifdef NETSNMP_ENABLE_TESTING_CODE

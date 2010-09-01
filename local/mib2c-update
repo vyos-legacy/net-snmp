@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # $Id: mib2c-update 16702 2007-09-16 09:51:41Z magfr $
 #
@@ -39,7 +39,7 @@ debug()
 
 error()
 {
-    echo "ERROR: $@" > /dev/stderr
+    echo "ERROR: $@" >2
 }
 
 die()

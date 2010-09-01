@@ -46,6 +46,13 @@ This can be overridden using the \fB-v\fR option.
 defines the default community to use for SNMPv1 and SNMPv2c requests.
 This can be overridden using the \fB-c\fR option.
 .\".IP "dumpPacket (1|yes|true|0|no|false)"
+.IP "alias NAME DEFINITION"
+Creates an aliased tied to NAME for a given transport definition.  The
+alias can the be referred to using an alias: prefix.  Eg, a line of
+"alias here udp:127.0.0.1:6161" would allow you to use a destination
+host of "alias:here" instead of "udp:127.0.0.1:6161".  This becomes
+more useful with complex transport addresses involving IPv6 addresses,
+etc.
 .IP "dumpPacket yes"
 defines whether to display a hexadecimal dump of the raw SNMP requests
 sent and received by the application.
@@ -193,6 +200,17 @@ needs to be appropriate for the authentication or encryption type
 being used (auth keys: MD5=16 bytes, SHA1=20 bytes;
 priv keys: DES=16 bytes (8
 bytes of which is used as an IV and not a key), and AES=16 bytes).
+.IP "sshtosnmpsocketperms PATH"
+Sets the path of the sshtosnmp socket created by an application
+(e.g. snmpd) listening for incoming ssh connections through the
+sshtosnmp unix socket.
+.IP "sshtosnmpsocketperms MODE [OWNER [GROUP]]"
+Sets the mode, owner and group of the sshtosnmp socket created by
+an application (e.g. snmpd) listening for incoming ssh connections
+through the sshtosnmp unix socket.  The socket needs to be read/write
+privileged for SSH users that are allowed to connect to the SNMP
+service (VACM access still needs to be granted as well, most likely
+through the TSM security model).
 .\"
 .\" XXX - are these lengths still correct ?
 .\"
@@ -216,7 +234,7 @@ defines a filename template for creating temporary files,
 for handling input to and output from external shell commands.
 Used by the \fImkstemp()\fR and \fImktemp()\fR functions.
 .IP
-If not specified, the default pattern is \fC/tmp/snmpdXXXXXX\fR.
+If not specified, the default pattern is \fCNETSNMP_TEMP_FILE_PATTERN\fR.
 .IP "serverRecvBuf INTEGER"
 specifies the desired size of the buffer to be used when receiving
 incoming SNMP requests.
@@ -253,14 +271,15 @@ Note that this value can be overridden by the
 environment variable.
 .IP "showMibErrors (1|yes|true|0|no|false)"
 whether to display MIB parsing errors.
-.IP "strictCommentTerm (1|yes|true|0|no|false)"
+.IP "commentToEOL (1|yes|true|0|no|false)"
 whether MIB parsing should be strict about comment termination.
 Many MIB writers assume that ASN.1 comments extend to the end of
 the text line, rather than being terminated by the next "--" token.
 This token can be used to accept such (strictly incorrect) MIBs.
 .br
-Note that this directive is poorly named, since a value of "true"
-will turn \fIoff\fP the strict interpretation of MIB comments.
+Note that this directive was previous (mis-)named \fIstrictCommentTerm\fR,
+but with the reverse behaviour from that implied by the name.
+This earlier token is still accepted for backwards compatibility.
 .IP "mibAllowUnderline (1|yes|true|0|no|false)"
 whether to allow underline characters in MIB object names and
 enumeration values.

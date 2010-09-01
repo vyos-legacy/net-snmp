@@ -1,7 +1,7 @@
 /*
  * systemstats data access header
  *
- * $Id: systemstats.h 13271 2005-10-28 15:29:23Z rstory $
+ * $Id: systemstats.h 16436 2007-05-27 06:27:58Z tanders $
  */
 /**---------------------------------------------------------------------*/
 /*
@@ -20,11 +20,8 @@
 config_require(ip-mib/data_access/systemstats_common)
 #if defined( linux )
 config_require(ip-mib/data_access/systemstats_linux)
+#elif defined( solaris2 )
+config_require(ip-mib/data_access/systemstats_solaris2)
 #else
-/*
- * couldn't determine the correct file!
- * require a bogus file to generate an error.
- */
-config_require(ip-mib/data_access/systemstats-unknown-arch);
+config_error(the systemstats data access library is not available in this environment.)
 #endif
-

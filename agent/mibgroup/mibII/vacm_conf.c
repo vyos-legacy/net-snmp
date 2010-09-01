@@ -49,25 +49,6 @@
 
 #include <net-snmp/agent/agent_callbacks.h>
 #include "vacm_conf.h"
-#include "util_funcs.h"
-
-#ifdef USING_MIBII_SYSORTABLE_MODULE
-#if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
-# include <time.h>
-#else
-# if HAVE_SYS_TIME_H
-#  include <sys/time.h>
-# else
-#  include <time.h>
-# endif
-#endif
-#include "sysORTable.h"
-#endif
 
 #include "snmpd.h"
 
@@ -119,7 +100,7 @@ init_vacm_config_tokens(void) {
      * Define standard views "_all_" and "_none_"
      */
     snmp_register_callback(SNMP_CALLBACK_LIBRARY,
-                           SNMP_CALLBACK_POST_PREMIB_READ_CONFIG,
+                           SNMP_CALLBACK_PRE_READ_CONFIG,
                            vacm_standard_views, NULL);
     snmp_register_callback(SNMP_CALLBACK_LIBRARY,
                            SNMP_CALLBACK_POST_READ_CONFIG,
@@ -174,24 +155,24 @@ init_vacm_conf(void)
 void
 vacm_parse_group(const char *token, char *param)
 {
-    char           *group, *model, *security;
+    char            group[VACMSTRINGLEN], model[VACMSTRINGLEN], security[VACMSTRINGLEN];
     int             imodel;
     struct vacm_groupEntry *gp = NULL;
     char           *st;
 
-    group = strtok_r(param, " \t\n", &st);
-    model = strtok_r(NULL, " \t\n", &st);
-    security = strtok_r(NULL, " \t\n", &st);
+    st = copy_nword(param, group, sizeof(group)-1);
+    st = copy_nword(st, model, sizeof(model)-1);
+    st = copy_nword(st, security, sizeof(security)-1);
 
-    if (group == NULL || *group == 0) {
+    if (group[0] == 0) {
         config_perror("missing GROUP parameter");
         return;
     }
-    if (model == NULL || *model == 0) {
+    if (model[0] == 0) {
         config_perror("missing MODEL parameter");
         return;
     }
-    if (security == NULL || *security == 0) {
+    if (security[0] == 0) {
         config_perror("missing SECURITY parameter");
         return;
     }
@@ -376,7 +357,8 @@ vacm_parse_authcommunity(const char *token, char *confline)
 void
 vacm_parse_authaccess(const char *token, char *confline)
 {
-    char *group, *view, *context, *tmp;
+    char *group, *view, *tmp;
+    const char *context;
     int  model = SNMP_SEC_MODEL_ANY;
     int  level, prefix;
     int  i;
@@ -466,9 +448,9 @@ vacm_parse_authaccess(const char *token, char *confline)
     }
     
 
-    context = strtok_r(NULL, " \t\n", &st);
-    if (context) {
-        tmp = (context + strlen(context)-1);
+    context = tmp = strtok_r(NULL, " \t\n", &st);
+    if (tmp) {
+        tmp = (tmp + strlen(tmp)-1);
         if (tmp && *tmp == '*') {
             *tmp = '\0';
             prefix = 2;
@@ -724,8 +706,8 @@ vacm_free_view(void)
 }
 
 void
-vacm_gen_com2sec(int commcount, char *community, char *addressname,
-                 char *publishtoken,
+vacm_gen_com2sec(int commcount, const char *community, const char *addressname,
+                 const char *publishtoken,
                  void (*parser)(const char *, char *),
                  char *secname, size_t secname_len,
                  char *viewname, size_t viewname_len, int version)
@@ -1014,7 +996,7 @@ vacm_create_simple(const char *token, char *confline,
                 if (!isalnum(*tmp))
                     *tmp = '_';
             snprintf(line, sizeof(line),
-                     "%s %s %s", grpname, model, secname);
+                     "%s %s \"%s\"", grpname, model, secname);
             line[ sizeof(line)-1 ] = 0;
             DEBUGMSGTL((token, "passing: %s %s\n", "group", line));
             vacm_parse_group("group", line);
@@ -1255,6 +1237,14 @@ int
 vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
                 int check_subtree, int viewtype)
 {
+    return vacm_check_view_contents(pdu, name, namelen, check_subtree, viewtype,
+                                    VACM_CHECK_VIEW_CONTENTS_NO_FLAGS);
+}
+
+int
+vacm_check_view_contents(netsnmp_pdu *pdu, oid * name, size_t namelen,
+                         int check_subtree, int viewtype, int flags)
+{
     struct vacm_accessEntry *ap;
     struct vacm_groupEntry *gp;
     struct vacm_viewEntry *vp;
@@ -1262,7 +1252,7 @@ vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
     char           *contextName = vacm_default_context;
     char           *sn = NULL;
     char           *vn;
-    char           *pdu_community;
+    const char     *pdu_community;
 
     /*
      * len defined by the vacmContextName object 
@@ -1296,7 +1286,7 @@ vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
             }
 
             DEBUGMSGTL(("mibII/vacm_vars",
-                        "vacm_in_view: ver=%d, community=%s\n",
+                        "vacm_in_view: ver=%ld, community=%s\n",
                         pdu->version, buf));
             free(buf);
         }
@@ -1314,7 +1304,7 @@ vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
             ) {
             if (!netsnmp_udp_getSecName(pdu->transport_data,
                                         pdu->transport_data_length,
-                                        (char *) pdu_community,
+                                        pdu_community,
                                         pdu->community_len, &sn,
                                         &contextName)) {
                 /*
@@ -1334,7 +1324,7 @@ vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
             ) {
             if (!netsnmp_udp6_getSecName(pdu->transport_data,
                                          pdu->transport_data_length,
-                                         (char *) pdu_community,
+                                         pdu_community,
                                          pdu->community_len, &sn,
                                          &contextName)) {
                 /*
@@ -1351,7 +1341,7 @@ vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
         } else if (pdu->tDomain == netsnmp_UnixDomain){
             if (!netsnmp_unix_getSecName(pdu->transport_data,
                                          pdu->transport_data_length,
-                                         (char *) pdu_community,
+                                         pdu_community,
                                          pdu->community_len, &sn,
                                          &contextName)) {
 					sn = NULL;
@@ -1382,7 +1372,7 @@ vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
          * any legal defined v3 security model 
          */
         DEBUGMSG(("mibII/vacm_vars",
-                  "vacm_in_view: ver=%d, model=%d, secName=%s\n",
+                  "vacm_in_view: ver=%ld, model=%d, secName=%s\n",
                   pdu->version, pdu->securityModel, pdu->securityName));
         sn = pdu->securityName;
         contextName = pdu->contextName;
@@ -1402,7 +1392,7 @@ vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
     if (pdu->contextNameLen > CONTEXTNAMEINDEXLEN) {
         DEBUGMSGTL(("mibII/vacm_vars",
                     "vacm_in_view: bad ctxt length %d\n",
-                    pdu->contextNameLen));
+                    (int)pdu->contextNameLen));
         return VACM_NOSUCHCONTEXT;
     }
     /*
@@ -1414,7 +1404,8 @@ vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
         contextNameIndex[0] = '\0';
 
     contextNameIndex[pdu->contextNameLen] = '\0';
-    if (!netsnmp_subtree_find_first(contextNameIndex)) {
+    if (!(flags & VACM_CHECK_VIEW_CONTENTS_DNE_CONTEXT_OK) &&
+        !netsnmp_subtree_find_first(contextNameIndex)) {
         /*
          * rfc 3415 section 3.2, step 1
          * no such context here; return no such context error 
@@ -1440,7 +1431,7 @@ vacm_check_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
         return VACM_NOACCESS;
     }
 
-    if (name == 0) {            /* only check the setup of the vacm for the request */
+    if (name == NULL) { /* only check the setup of the vacm for the request */
         DEBUGMSG(("mibII/vacm_vars", ", Done checking setup\n"));
         return VACM_SUCCESS;
     }

@@ -1,6 +1,6 @@
 /*
  * container_null.c
- * $Id: container_null.c 16758 2007-12-19 22:39:31Z magfr $
+ * $Id: container_null.c 16924 2008-05-09 21:35:32Z magfr $
  *
  * see comments in header file.
  *
@@ -156,7 +156,7 @@ netsnmp_container_get_null(void)
     c->find = _null_find;
     c->find_next = _null_find_next;
     c->get_subset = _null_get_subset;
-    c->get_iterator = 0; /* _null_iterator; */
+    c->get_iterator = NULL; /* _null_iterator; */
     c->for_each = _null_for_each;
     c->clear = _null_clear;
        

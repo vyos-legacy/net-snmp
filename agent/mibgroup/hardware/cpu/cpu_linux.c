@@ -57,7 +57,7 @@ void init_cpu_linux( void ) {
 #endif
         }
 #if defined(__s390__) || defined(__s390x__)
-	/* s390 may different format of CPU_FILE */
+	/* s390 may have different format of CPU_FILE */
         else {
             if (sscanf( buf, "processor %d:", &i ) == 1)  {
                 n++;
@@ -100,7 +100,7 @@ int netsnmp_cpu_arch_load( netsnmp_cache *cache, void *magic ) {
     static int   bsize = 0;
     static int   first = 1;
     static int   has_cpu_26 = 1;
-    int          cc, statfd, i;
+    int          bytes_read, statfd, i;
     char        *b1, *b2;
     unsigned long long cusell = 0, cicell = 0, csysll = 0, cidell = 0,
                        ciowll = 0, cirqll = 0, csoftll = 0;
@@ -114,20 +114,20 @@ int netsnmp_cpu_arch_load( netsnmp_cache *cache, void *magic ) {
         bsize = getpagesize()-1;
         buff = malloc(bsize+1);
     }
-
-    while ((cc = read(statfd, buff, bsize)) == bsize) {
+    while ((bytes_read = read(statfd, buff, bsize)) == bsize) {
         bsize += BUFSIZ;
         buff = realloc(buff, bsize+1);
         DEBUGMSGTL(("cpu", "/proc/stat buffer increased to %d\n", bsize));
-	lseek(statfd, 0ul, SEEK_SET);
+        close(statfd);
+        statfd = open(STAT_FILE, O_RDONLY, 0);
     }
     close(statfd);
 
-    if (cc < 0) {
-	    snmp_log_perror(STAT_FILE "read error");
-	    return -1;
+    if ( bytes_read < 0 ) {
+        snmp_log_perror(STAT_FILE "read error");
+        return -1;
     }
-    buff[cc] = '\0';
+    buff[bytes_read] = '\0';
 
         /*
          * CPU statistics (overall and per-CPU)
@@ -200,7 +200,7 @@ void _cpu_load_swap_etc( char *buff, netsnmp_cpu_info *cpu ) {
     static char *vmbuff  = NULL;
     static int   vmbsize = 0;
     static int   first   = 1;
-    int          cc, vmstatfd;
+    int          bytes_read, vmstatfd;
     char        *b;
     unsigned long long pin, pout, swpin, swpout;
     unsigned long long itot, iticks, ctx;
@@ -209,19 +209,19 @@ void _cpu_load_swap_etc( char *buff, netsnmp_cpu_info *cpu ) {
         if (vmbsize == 0) {
 	    vmbsize = getpagesize()-1;
 	    vmbuff = malloc(vmbsize+1);
-	}
-        while ((cc = read(vmstatfd, vmbuff, vmbsize+1)) == vmbsize) {
-	    vmbsize += BUFSIZ;
-	    vmbuff = realloc(vmbuff, vmbsize);
-	    lseek(vmstatfd, 0ul, SEEK_SET);
         }
-	if (cc < 0) {
-		snmp_log_perror(VMSTAT_FILE "read error");
-		return -1;
-	}
-	vmbuff[cc] = '\0';
-
+        while ((bytes_read = read(vmstatfd, vmbuff, vmbsize)) == vmbsize) {
+	    vmbsize += BUFSIZ;
+	    vmbuff = realloc(vmbuff, vmbsize+1);
+	    close(vmstatfd);
+	    vmstatfd = open(VMSTAT_FILE, O_RDONLY, 0);
+        }
         close(vmstatfd);
+        if ( bytes_read < 0 ) {
+            snmp_log_perror(STAT_FILE "read error");
+            return;
+        }
+        vmbuff[bytes_read] = '\0';
     }
     else
         has_vmstat = 0;
@@ -287,8 +287,6 @@ void _cpu_load_swap_etc( char *buff, netsnmp_cpu_info *cpu ) {
 	}
     }
 
-
-
     b = strstr(buff, "intr ");
     if (b) {
 	sscanf(b, "intr %llu %llu", &itot, &iticks);
@@ -306,7 +304,5 @@ void _cpu_load_swap_etc( char *buff, netsnmp_cpu_info *cpu ) {
 	if (first)
 	    snmp_log(LOG_ERR, "No ctxt line in %s\n", STAT_FILE);
     }
-
-
 }
 

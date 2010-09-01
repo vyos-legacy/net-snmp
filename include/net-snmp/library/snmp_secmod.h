@@ -11,7 +11,7 @@ extern          "C" {
  * (Net-SNMP enterprise number = 8072)*256 + local_num
  */
 #define NETSNMP_KSM_SECURITY_MODEL     2066432
-#define NETSNMP_LOCALSM_SECURITY_MODEL 2066433
+#define NETSNMP_TSM_SECURITY_MODEL     2066434
 
 struct snmp_secmod_def;
 
@@ -90,6 +90,8 @@ typedef void    (SecmodHandleReport) (void *sessp,
                                       netsnmp_session *,
                                       int result,
                                       netsnmp_pdu *origpdu);
+typedef int     (SecmodDiscoveryMethod) (void *slp,
+                                         netsnmp_session *session);
 
 /*
  * definition of a security module
@@ -125,6 +127,11 @@ struct snmp_secmod_def {
     * error and report handling
     */
    SecmodHandleReport *handle_report;
+
+   /*
+    * default engineID discovery mechanism
+    */
+   SecmodDiscoveryMethod *probe_engineid;
 };
 
 

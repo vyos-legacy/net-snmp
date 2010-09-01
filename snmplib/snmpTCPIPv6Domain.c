@@ -43,7 +43,9 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
+#ifndef HAVE_INET_NTOP
 extern const char *inet_ntop(int, const void*, char*, size_t);
+#endif
 
 #endif
 
@@ -99,7 +101,7 @@ netsnmp_tcp6_fmtaddr(netsnmp_transport *t, void *data, int len)
         char addr[INET6_ADDRSTRLEN];
         char tmp[INET6_ADDRSTRLEN + 18];
 
-        sprintf(tmp, "TCP/IPv6: [%s]:%hd",
+        sprintf(tmp, "TCP/IPv6: [%s]:%hu",
                 inet_ntop(AF_INET6, (void *) &(to->sin6_addr), addr,
                           INET6_ADDRSTRLEN), ntohs(to->sin6_port));
         return strdup(tmp);
@@ -120,7 +122,7 @@ netsnmp_tcp6_recv(netsnmp_transport *t, void *buf, int size,
 
     if (t != NULL && t->sock >= 0) {
 	while (rc < 0) {
-	    rc = recvfrom(t->sock, buf, size, 0, NULL, 0);
+	    rc = recvfrom(t->sock, buf, size, 0, NULL, NULL);
 	    if (rc < 0 && errno != EINTR) {
 		DEBUGMSGTL(("netsnmp_tcp6", "recv fd %d err %d (\"%s\")\n",
 			    t->sock, errno, strerror(errno)));

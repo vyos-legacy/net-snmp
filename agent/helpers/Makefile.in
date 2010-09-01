@@ -31,13 +31,13 @@ HEADERS=all_helpers.h \
         serialize.h \
 	stash_cache.h \
 	stash_to_next.h \
-        table.h \
 	table_array.h \
 	table_container.h \
+        table.h \
         table_data.h \
         table_dataset.h \
-        table_iterator.h \
         table_tdata.h \
+        table_iterator.h \
 	watcher.h
 
 # No header 'table_row.h'

@@ -48,8 +48,10 @@ FILE           *run_lpstat(int *);
 #define	HRPRINT_ERROR		2
 
 struct variable4 hrprint_variables[] = {
-    {HRPRINT_STATUS, ASN_INTEGER, RONLY, var_hrprint, 2, {1, 1}},
-    {HRPRINT_ERROR, ASN_OCTET_STR, RONLY, var_hrprint, 2, {1, 2}}
+    {HRPRINT_STATUS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrprint, 2, {1, 1}},
+    {HRPRINT_ERROR, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrprint, 2, {1, 2}}
 };
 oid             hrprint_variables_oid[] = { 1, 3, 6, 1, 2, 1, 25, 3, 5 };
 
@@ -139,7 +141,7 @@ header_hrprint(struct variable *vp,
     memcpy((char *) name, (char *) newname,
            (vp->namelen + 1) * sizeof(oid));
     *length = vp->namelen + 1;
-    *write_method = 0;
+    *write_method = (WriteMethod*)0;
     *var_len = sizeof(long);    /* default to 'long' results */
 
     DEBUGMSGTL(("host/hr_print", "... get print stats "));
@@ -177,9 +179,10 @@ var_hrprint(struct variable * vp,
     case HRPRINT_ERROR:
 #if NETSNMP_NO_DUMMY_VALUES
         return NULL;
-#endif
+#else
         long_return = 0;        /* Null string */
         return (u_char *) & long_return;
+#endif
     default:
         DEBUGMSGTL(("host/hr_print", "unknown sub-id %d in var_hrprint\n",
                     vp->magic));

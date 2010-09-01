@@ -11,8 +11,6 @@
 
 #include <net-snmp/agent/cache_handler.h>
 #include "agent/nsCache.h"
-#include "util_funcs.h"
-
 
 /*
  * use unadvertised function to get cache head. You really should not
@@ -21,6 +19,8 @@
 extern netsnmp_cache *netsnmp_cache_get_head(void);
 
 
+#define nsCache 1, 3, 6, 1, 4, 1, 8072, 1, 5
+
 /*
  * OIDs for the cacheging control scalar objects
  *
@@ -28,8 +28,6 @@ extern netsnmp_cache *netsnmp_cache_get_head(void);
  *  than the (sole) valid instance in each case, in order
  *  to handle requests for invalid instances properly.
  */
-oid nsCacheTimeout_oid[]    = { 1, 3, 6, 1, 4, 1, 8072, 1, 5, 1};
-oid nsCacheEnabled_oid[]    = { 1, 3, 6, 1, 4, 1, 8072, 1, 5, 2};
 
 /*
  * ... and for the cache table.
@@ -44,8 +42,6 @@ oid nsCacheEnabled_oid[]    = { 1, 3, 6, 1, 4, 1, 8072, 1, 5, 2};
 #define NSCACHE_STATUS_ACTIVE   4
 #define NSCACHE_STATUS_EXPIRED  5
 
-oid nsCacheTable_oid[]      = { 1, 3, 6, 1, 4, 1, 8072, 1, 5, 3};
-
 extern struct snmp_alarm *
 sa_find_specific(unsigned int clientreg);
 
@@ -53,6 +49,10 @@ sa_find_specific(unsigned int clientreg);
 void
 init_nsCache(void)
 {
+    const oid nsCacheTimeout_oid[]    = { nsCache, 1 };
+    const oid nsCacheEnabled_oid[]    = { nsCache, 2 };
+    const oid nsCacheTable_oid[]      = { nsCache, 3 };
+
     netsnmp_table_registration_info *table_info;
     netsnmp_iterator_info           *iinfo;
 
@@ -361,7 +361,6 @@ handle_nsCacheTable(netsnmp_mib_handler *handler,
             default:
                 netsnmp_set_request_error(reqinfo, request, SNMP_ERR_NOCREATION);
                 return SNMP_ERR_NOCREATION;	/* XXX - is this right ? */
-                continue;
 	    }
 	}
 	break;

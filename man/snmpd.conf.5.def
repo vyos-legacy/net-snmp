@@ -98,7 +98,7 @@ SNMPv3 requires an SNMP agent to define a unique "engine ID"
 in order to respond to SNMPv3 requests.
 This ID will normally be determined automatically, using two reasonably
 non-predictable values - a (pseudo-)random number and the current
-uptime in seconds. This is the recommended approach. However the
+time in seconds. This is the recommended approach. However the
 capacity exists to define the engineID in other ways:
 .IP "engineID STRING"
 specifies that the engineID should be built from the given text STRING.
@@ -115,13 +115,21 @@ The default is to use eth0.
 .\"
 .\" What if this doesn't exist ?
 .\"
-.SH ACCESS CONTROL
-.B snmpd
-supports the View-Based Access Control Model (VACM) as defined in RFC
-2575, to control who can retrieve or update information.  To this end,
-it recognizes various directives relating to access control.
-These fall into four basic groups.
-.SS SNMPv3 Users
+.SH SNMPv3 AUTHENTICATION
+SNMPv3 was originally defined using the User-Based Security Model
+(USM), which contains a private list of users and keys specific to the
+SNMPv3 protocol.  The operational community, however, declared it a
+pain to manipulate yet another database and would prefer to use
+existing infrastructure.  To that end the IETF created the ISMS
+working group to battle that problem, and the ISMS working group
+decided to tunnel SNMP over SSH and DTLS to make use existing user and
+authentication infrastructures.
+.SS SNMPv3 USM Users
+To use the USM based SNMPv3-specific users, you'll need to create
+them.  It is recommended you
+.B "use the net-snmp-config command"
+to do this, but you can also do it by directly specifying createUser
+directives yourself instead:
 .IP "createUser [-e ENGINEID] username (MD5|SHA) authpassphrase [DES|AES] [privpassphrase]"
 .IP
 MD5 and SHA are the authentication types to use.  DES and AES are the
@@ -178,12 +186,43 @@ expected to be the length needed by the algorithm (128 bits for all
 supported algorithms).  Master encryption keys, though, need to be the
 length required by the authentication algorithm not the length
 required by the encrypting algorithm (MD5: 16 bytes, SHA: 20 bytes).
+.SS SSH Support
+To use SSH, you'll need to configure sshd to invoke sshtosnmp as well
+as configure the access control settings to allow access through the
+tsm security model using the user name provided to snmpd by the ssh
+transport.
+.SS DTLS Support
+For DTLS,
+.B snmpd
+will need to be configured with it's own X.509 certificate as well as
+the certificates of the client users to be allowed to connect to the
+agent.  The access control will need to be set up as well to allow
+access through the
+.I tsm
+security model.  The CommonName of the Subject from the X.509
+certificate will be passed to snmpd as the SNMPv3 username to use.
+See the http://www.net-snmp.org/wiki/index.php/Using_DTLS web page for
+more detailed instructions for setting up DTLS.
+.IP "defX509ServerPub FILE"
+.IP "defX509ServerPriv FILE"
+These two directives specify the public and private key files for the
+certificate that
+.B snmpd
+should present to incoming connections.
+.IP "defX509ClientCerts FILE"
+This directive specifies a file containing all of the public keys (or
+CAs of public keys) for clients to connect the server with.
+.SH ACCESS CONTROL
+.B snmpd
+supports the View-Based Access Control Model (VACM) as defined in RFC
+2575, to control who can retrieve or update information.  To this end,
+it recognizes various directives relating to access control.
 .SS Traditional Access Control
 Most simple access control requirements can be specified using the
 directives \fIrouser\fR/\fIrwuser\fR (for SNMPv3) or
 \fIrocommunity\fR/\fIrwcommunity\fR (for SNMPv1 or SNMPv2c).
-.IP "rouser USER [noauth|auth|priv [OID | -V VIEW [CONTEXT]]]"
-.IP "rwuser USER [noauth|auth|priv [OID | -V VIEW [CONTEXT]]]"
+.IP "rouser [-s SECMODEL] USER [noauth|auth|priv [OID | -V VIEW [CONTEXT]]]"
+.IP "rwuser [-s SECMODEL]  USER [noauth|auth|priv [OID | -V VIEW [CONTEXT]]]"
 specify an SNMPv3 user that will be allowed read-only (GET and GETNEXT)
 or read-write (GET, GETNEXT and SET) access respectively.
 By default, this will provide access to the full OID tree for authenticated
@@ -195,6 +234,13 @@ user to the subtree rooted at the given OID, or the named view.
 An optional context can also be specified, or "context*" to denote a context
 prefix.  If no context field is specified (or the token "*" is used), the
 directive will match all possible contexts.
+.IP
+If SECMODEL is specified then it will be the security model required
+for that user (note that identical user names may come in over
+different security models and will be appropriately separated via the
+access control settings).  The default security model is "usm" and the
+other common security models are likely "tsm" when using SSH or DTLS
+support and "ksm" if the Kerberos support has been compiled in.
 .IP "rocommunity COMMUNITY [SOURCE [OID | -V VIEW [CONTEXT]]]"
 .IP "rwcommunity COMMUNITY [SOURCE [OID | -V VIEW [CONTEXT]]]"
 specify an SNMPv1 or SNMPv2c community that will be allowed read-only
@@ -249,7 +295,7 @@ mapped to a security name in the named SNMPv3 context. Otherwise the
 default context ("") will be used.
 .IP "com2secunix [-Cn CONTEXT] SECNAME SOCKPATH COMMUNITY"
 is the Unix domain sockets version of \fIcom2sec\fR.
-.IP "group GROUP {v1|v2c|usm} SECNAME"
+.IP "group GROUP {v1|v2c|usm|tsm|ksm} SECNAME"
 maps a security name (in the specified security model) into
 a named group.  Several \fIgroup\fR directives can specify the
 same group name, allowing a single access setting to apply to several 
@@ -294,7 +340,7 @@ value, but skipping the column subidentifier:
 .IP
 Note that a mask longer than 8 bits must use ':' to separate the individual
 octets.
-.IP "access GROUP CONTEXT {any|v1|v2c|usm} LEVEL PREFX READ WRITE NOTIFY"
+.IP "access GROUP CONTEXT {any|v1|v2c|usm|tsm|ksm} LEVEL PREFX READ WRITE NOTIFY"
 maps from a group of users/communities (with a particular security model
 and minimum security level, and in a specific context) to one of three views,
 depending on the request being processed.
@@ -419,7 +465,7 @@ as 'Network Disks' (1) or 'Fixed Disks' (2)
 Historically, the Net-SNMP agent has reported such file systems
 as 'Fixed Disks', and this is still the default behaviour.
 Setting this directive to '1' reports such file systems as
-'Network Disks', as required by the Host Resources MIB.
+\'Network Disks', as required by the Host Resources MIB.
 .SS Process Monitoring 
 The \fChrSWRun\fR group of the Host Resources MIB provides
 information about individual processes running on the local system.
@@ -467,9 +513,9 @@ default build configuration).
 .IP "disk PATH [ MINSPACE | MINPERCENT% ]"
 monitors the disk mounted at PATH for available disk space.
 .IP
-The minimum threshold can either be specified in Kb (MINSPACE) or
+The minimum threshold can either be specified in kB (MINSPACE) or
 as a percentage of the total disk (MINPERCENT% with a '%' character),
-defaulting to 100Kb if neither are specified.
+defaulting to 100kB if neither are specified.
 If the free disk space falls below this threshold, 
 then the corresponding \fCdskErrorFlag\fR instance will be
 set to 1, and a suitable description message reported via the
@@ -539,7 +585,7 @@ walking the \fClaTable\fR will succeed (assuming the
 even if the \fIload\fR directive is not present.
 .IP "swap MIN "
 monitors the amount of swap space available on the local system.
-If this falls below the specified threshold (MIN Kb),
+If this falls below the specified threshold (MIN kB),
 then the \fImemErrorSwap\fR object will be set to 1,
 and a suitable description message reported via \fImemSwapErrorMsg\fR.
 .RS
@@ -547,14 +593,14 @@ and a suitable description message reported via \fImemSwapErrorMsg\fR.
 This situation will \fBnot\fR automatically trigger a trap to report
 the problem - see the DisMan Event MIB section later.
 .RE
-If this directive is not specified, the default threshold is 16 Mb.
+If this directive is not specified, the default threshold is 16 MB.
 .SS Log File Monitoring
 This requires that the agent was built with support for either the
 \fIucd-snmp/file\fR or \fIucd-snmp/logmatch\fR modules respectively
 (both of which are included as part of the
 default build configuration).
 .IP "file FILE [MAXSIZE]"
-monitors the size of the specified file (in Kb).
+monitors the size of the specified file (in kB).
 If MAXSIZE is specified, and the size of the file exceeds
 this threshold, then the corresponding \fCfileErrorFlag\fR
 instance will be set to 1, and a suitable description message reported
@@ -565,20 +611,48 @@ This situation will \fBnot\fR automatically trigger a trap to report
 the problem - see the DisMan Event MIB section later.
 .RE
 .IP
-A maximum of 20 files can be monitored.
-.PP
-If no \fIfile\fR directives are defined, then walking the
-\fCfileTable\fR will fail (\fInoSuchObject\fR).
-.IP "logmatch NAME PATH CYCLETIME REGEX"
-monitors the specified file for occurances of the specified
-pattern REGEX.
-.\"
-.\"  XXX - Need more details here!
-.\"
+Note: A maximum of 20 files can be monitored.
 .IP
-A maximum of 50 files can be monitored.
-.PP
-If no \fIlogmatch\fR directives are defined, then walking the
+Note: If no \fIfile\fR directives are defined, then walking the
+\fCfileTable\fR will fail (\fInoSuchObject\fR).
+.IP "logmatch NAME FILE CYCLETIME REGEX"
+monitors the specified file for occurances of the specified
+pattern REGEX. The file position is stored internally so the entire file
+is only read initially, every subsequent pass will only read the new lines
+added to the file since the last read.
+.RS
+.IP NAME
+name of the logmatch instance (will appear as logMatchName under
+logMatch/logMatchTable/logMatchEntry/logMatchName in the ucd-snmp MIB tree)
+.IP FILE
+absolute path to the logfile to be monitored. Note that this path
+can contain date/time directives (like in the UNIX 'date' command). See the
+manual page for 'strftime' for the various directives accepted.
+.IP CYCLETIME
+time interval for each logfile read and internal variable update in seconds.
+Note: an SNMPGET* operation will also trigger an immediate logfile read and
+variable update.
+.IP REGEX
+the regular expression to be used. Note: DO NOT enclose the regular expression
+in quotes even if there are spaces in the expression as the quotes will also
+become part of the pattern to be matched!
+.RE
+.IP
+Example:
+.RS
+.IP
+logmatch apache-GETs /usr/local/apache/logs/access.log-%Y-%m-%d 60 GET.*HTTP.*
+.IP
+This logmatch instance is named 'apache-GETs', uses 'GET.*HTTP.*' as its
+regular expression and it will monitor the file named
+(assuming today is May 6th 2009): '/usr/local/apache/logs/access.log-2009-05-06',
+tomorrow it will look for 'access.log-2009-05-07'. The logfile is read every 60
+seconds.
+.RE
+.IP
+Note: A maximum of 250 logmatch directives can be specified.
+.IP
+Note: If no \fIlogmatch\fR directives are defined, then walking the
 \fClogMatchTable\fR will fail (\fInoSuchObject\fI).
 .SH "ACTIVE MONITORING"
 The usual behaviour of an SNMP agent is to wait for incoming SNMP requests
@@ -641,6 +715,12 @@ Ordinarily the corresponding MIB
 object (\fCsnmpEnableAuthenTraps.0\fR) is read-write, but specifying
 this directive makes this object read-only, and attempts to set the
 value via SET requests will result in a \fInotWritable\fR error response.
+.RE
+.IP "v1trapaddress HOST"
+defines the agent address, which is inserted into SNMPv1 TRAPs. Arbitrary local 
+IPv4 address is chosen if this option is ommited. This option is useful mainly 
+when the agent is visible from outside world by specific address only (e.g. 
+because of network address translation or firewall).
 .SS "DisMan Event MIB"
 The previous directives can be used to configure where traps should
 be sent, but are not concerned with \fIwhen\fR to send such traps
@@ -782,14 +862,14 @@ instead of the default \fIiquerySecName\fR.
 Once again, this user must be explicitly created and given
 suitable access rights.
 .RE
-.IP "notificationEvent ENAME NOTIFICATION [-n] [-i OID | -o OID ]*"
+.IP "notificationEvent ENAME NOTIFICATION [-m] [-i OID | -o OID ]*"
 defines a notification event named ENAME.
 This can be triggered from a given \fImonitor\fR entry by specifying
 the option \fI-e ENAME\fR (see above).
 NOTIFICATION should be the OID of the NOTIFICATION-TYPE definition
 for the notification to be generated.
 .IP
-If the \fI-n\fR option is given, the notification payload will
+If the \fI-m\fR option is given, the notification payload will
 include the standard varbinds as specified in the OBJECTS clause
 of the notification MIB definition.
 This option must come \fBafter\fR the NOTIFICATION OID

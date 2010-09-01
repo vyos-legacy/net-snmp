@@ -1,6 +1,6 @@
 /*
  * container_binary_array.c
- * $Id: container_binary_array.c 16772 2008-01-09 21:58:49Z magfr $
+ * $Id: container_binary_array.c 17543 2009-04-23 15:58:53Z hardaker $
  *
  * see comments in header file.
  *
@@ -232,7 +232,7 @@ netsnmp_binary_array_get(netsnmp_container *c, const void *key, int exact)
      * if there is no data, return NULL;
      */
     if (!t->count)
-        return 0;
+        return NULL;
 
     /*
      * if the table is dirty, sort it.
@@ -245,7 +245,7 @@ netsnmp_binary_array_get(netsnmp_container *c, const void *key, int exact)
      */
     if (key) {
         if ((index = binary_search(key, c, exact)) == -1)
-            return 0;
+            return NULL;
     }
 
     return t->data[index];
@@ -357,15 +357,19 @@ netsnmp_binary_array_insert(netsnmp_container *c, const void *entry)
         /*
          * Table is full, so extend it to double the size
          */
-        new_max = t->max_size + t->max_size / 2;
+        new_max = 2 * t->max_size;
         if (new_max == 0)
             new_max = 10;       /* Start with 10 entries */
 
-        new_data = realloc(t->data, new_max * t->data_size);
+        new_data = (void *) calloc(new_max, t->data_size);
         if (new_data == NULL)
             return -1;
 
-        t->data = new_data;
+        if (t->data) {
+            memcpy(new_data, t->data, t->max_size * t->data_size);
+            SNMP_FREE(t->data);
+        }
+        t->data = (void**)new_data;
         t->max_size = new_max;
     }
 
@@ -429,7 +433,7 @@ netsnmp_binary_array_get_subset(netsnmp_container *c, void *key, int *len)
      * if there is no data, return NULL;
      */
     if (!t->count || !key)
-        return 0;
+        return NULL;
 
     /*
      * if the table is dirty, sort it.
@@ -442,7 +446,7 @@ netsnmp_binary_array_get_subset(netsnmp_container *c, void *key, int *len)
      */
     start = end = binary_search_for_start((netsnmp_index *)key, c);
     if (start == -1)
-        return 0;
+        return NULL;
 
     for (i = start + 1; i < t->count; ++i) {
         if (0 != c->ncompare(t->data[i], key))
@@ -527,8 +531,11 @@ _ba_get_subset(netsnmp_container *container, void *data)
     
     va = SNMP_MALLOC_TYPEDEF(netsnmp_void_array);
     if (NULL==va)
+    {
+        free (rtn);
         return NULL;
-
+    }
+    
     va->size = len;
     va->array = rtn;
 

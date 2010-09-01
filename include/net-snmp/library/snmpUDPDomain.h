@@ -52,6 +52,17 @@ int             netsnmp_sock_buffer_set(int s, int optname, int local,
 
 void            netsnmp_udp_ctor(void);
 
+/*
+ * protected-ish functions used by other core-code
+ */
+char *netsnmp_udp_fmtaddr(netsnmp_transport *t, void *data, int len);
+#if defined(linux) && defined(IP_PKTINFO)
+int netsnmp_udp_recvfrom(int s, void *buf, int len, struct sockaddr *from,
+                         socklen_t *fromlen, struct in_addr *dstip);
+int netsnmp_udp_sendto(int fd, struct in_addr *srcip, struct sockaddr *remote,
+                       void *data, int len);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

@@ -197,8 +197,19 @@ struct snmp_alarm *
 sa_find_next(void)
 {
     struct snmp_alarm *a, *lowest = NULL;
+    struct timeval  t_now;
+
+    gettimeofday(&t_now, NULL);
 
     for (a = thealarms; a != NULL; a = a->next) {
+        /* check for time delta skew */
+        if ((a->t_next.tv_sec - t_now.tv_sec) > a->t.tv_sec)
+        {
+            DEBUGMSGTL(("time_skew", "Time delta too big (%ld seconds), should be %ld seconds - fixing\n",
+		(long)(a->t_next.tv_sec - t_now.tv_sec), (long)a->t.tv_sec));
+            a->t_next.tv_sec = t_now.tv_sec + a->t.tv_sec;
+            a->t_next.tv_usec = t_now.tv_usec + a->t.tv_usec;
+        }
         if (lowest == NULL) {
             lowest = a;
         } else if (a->t_next.tv_sec == lowest->t_next.tv_sec) {
@@ -288,7 +299,7 @@ get_next_alarm_delay_time(struct timeval *delta)
     sa_ptr = sa_find_next();
 
     if (sa_ptr) {
-        gettimeofday(&t_now, 0);
+        gettimeofday(&t_now, NULL);
 
         if ((t_now.tv_sec > sa_ptr->t_next.tv_sec) ||
             ((t_now.tv_sec == sa_ptr->t_next.tv_sec) &&
@@ -350,14 +361,14 @@ set_an_alarm(void)
 
         signal(SIGALRM, alarm_handler);
         setitimer(ITIMER_REAL, &it, NULL);
-        DEBUGMSGTL(("snmp_alarm", "schedule alarm %d in %d.%03d seconds\n",
+        DEBUGMSGTL(("snmp_alarm", "schedule alarm %d in %ld.%03ld seconds\n",
                     nextalarm, delta.tv_sec, (delta.tv_usec / 1000)));
 # else  /* HAVE_SETITIMER */
 #  ifdef SIGALRM
         signal(SIGALRM, alarm_handler);
         alarm(delta.tv_sec);
         DEBUGMSGTL(("snmp_alarm",
-                    "schedule alarm %d in roughly %d seconds\n", nextalarm,
+                    "schedule alarm %d in roughly %ld seconds\n", nextalarm,
                     delta.tv_sec));
 #  endif  /* SIGALRM */
 # endif  /* HAVE_SETITIMER */
@@ -370,7 +381,7 @@ set_an_alarm(void)
 
 
 /**
- * This function registers function callbacks to occur at a speciifc time
+ * This function registers function callbacks to occur at a specific time
  * in the future.
  *
  * @param when is an unsigned integer specifying when the callback function
@@ -431,7 +442,7 @@ snmp_alarm_register(unsigned int when, unsigned int flags,
     sa_update_entry(*sa_pptr);
 
     DEBUGMSGTL(("snmp_alarm",
-		"registered alarm %d, t = %d.%03d, flags=0x%02x\n",
+		"registered alarm %d, t = %ld.%03ld, flags=0x%02x\n",
                 (*sa_pptr)->clientreg, (*sa_pptr)->t.tv_sec,
                 ((*sa_pptr)->t.tv_usec / 1000), (*sa_pptr)->flags));
 
@@ -501,7 +512,7 @@ snmp_alarm_register_hr(struct timeval t, unsigned int flags,
     sa_update_entry(*s);
 
     DEBUGMSGTL(("snmp_alarm",
-                "registered alarm %d, t = %d.%03d, flags=0x%02x\n",
+                "registered alarm %d, t = %ld.%03ld, flags=0x%02x\n",
                 (*s)->clientreg, (*s)->t.tv_sec, ((*s)->t.tv_usec / 1000),
                 (*s)->flags));
 

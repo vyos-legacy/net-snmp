@@ -2,6 +2,16 @@
  *  Host Resources MIB - File System device group implementation - hr_filesys.c
  *
  */
+/* Portions of this file are subject to the following copyright(s).  See
+ * the Net-SNMP's COPYING file for more details and other copyrights
+ * that may apply:
+ */
+/*
+ * Portions of this file are copyrighted by:
+ * Copyright (C) 2007 Apple, Inc. All rights reserved.
+ * Use is subject to license terms specified in the COPYING file
+ * distributed with the Net-SNMP package.
+ */
 
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -10,6 +20,7 @@
 #include "host_res.h"
 #include "hr_filesys.h"
 #include "hr_storage.h"
+#include "hr_disk.h"
 #include <net-snmp/utilities.h>
 
 #if HAVE_MNTENT_H
@@ -189,15 +200,24 @@ int             header_hrfilesys(struct variable *, oid *, size_t *, int,
 #define HRFSYS_PARTDUMP		9
 
 struct variable4 hrfsys_variables[] = {
-    {HRFSYS_INDEX, ASN_INTEGER, RONLY, var_hrfilesys, 2, {1, 1}},
-    {HRFSYS_MOUNT, ASN_OCTET_STR, RONLY, var_hrfilesys, 2, {1, 2}},
-    {HRFSYS_RMOUNT, ASN_OCTET_STR, RONLY, var_hrfilesys, 2, {1, 3}},
-    {HRFSYS_TYPE, ASN_OBJECT_ID, RONLY, var_hrfilesys, 2, {1, 4}},
-    {HRFSYS_ACCESS, ASN_INTEGER, RONLY, var_hrfilesys, 2, {1, 5}},
-    {HRFSYS_BOOT, ASN_INTEGER, RONLY, var_hrfilesys, 2, {1, 6}},
-    {HRFSYS_STOREIDX, ASN_INTEGER, RONLY, var_hrfilesys, 2, {1, 7}},
-    {HRFSYS_FULLDUMP, ASN_OCTET_STR, RONLY, var_hrfilesys, 2, {1, 8}},
-    {HRFSYS_PARTDUMP, ASN_OCTET_STR, RONLY, var_hrfilesys, 2, {1, 9}},
+    {HRFSYS_INDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrfilesys, 2, {1, 1}},
+    {HRFSYS_MOUNT, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrfilesys, 2, {1, 2}},
+    {HRFSYS_RMOUNT, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrfilesys, 2, {1, 3}},
+    {HRFSYS_TYPE, ASN_OBJECT_ID, NETSNMP_OLDAPI_RONLY,
+     var_hrfilesys, 2, {1, 4}},
+    {HRFSYS_ACCESS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrfilesys, 2, {1, 5}},
+    {HRFSYS_BOOT, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrfilesys, 2, {1, 6}},
+    {HRFSYS_STOREIDX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_hrfilesys, 2, {1, 7}},
+    {HRFSYS_FULLDUMP, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrfilesys, 2, {1, 8}},
+    {HRFSYS_PARTDUMP, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_hrfilesys, 2, {1, 9}},
 };
 oid             hrfsys_variables_oid[] = { 1, 3, 6, 1, 2, 1, 25, 3, 8 };
 
@@ -273,7 +293,7 @@ header_hrfilesys(struct variable *vp,
     memcpy((char *) name, (char *) newname,
            (vp->namelen + 1) * sizeof(oid));
     *length = vp->namelen + 1;
-    *write_method = 0;
+    *write_method = (WriteMethod*)0;
     *var_len = sizeof(long);    /* default to 'long' results */
 
     DEBUGMSGTL(("host/hr_filesys", "... get filesys stats "));
@@ -316,13 +336,13 @@ var_hrfilesys(struct variable *vp,
         long_return = fsys_idx;
         return (u_char *) & long_return;
     case HRFSYS_MOUNT:
-        snprintf(string, sizeof(string), HRFS_entry->HRFS_mount);
+        snprintf(string, sizeof(string), "%s", HRFS_entry->HRFS_mount);
         string[ sizeof(string)-1 ] = 0;
         *var_len = strlen(string);
         return (u_char *) string;
     case HRFSYS_RMOUNT:
         if (Check_HR_FileSys_NFS()) {
-            snprintf(string, sizeof(string), HRFS_entry->HRFS_name);
+            snprintf(string, sizeof(string), "%s", HRFS_entry->HRFS_name);
             string[ sizeof(string)-1 ] = 0;
         } else
             string[0] = '\0';
@@ -617,9 +637,7 @@ Init_HR_FileSys(void)
         fclose(fp);
     fp = fopen(ETC_MNTTAB, "r");
     if (!fp) {
-      char tmpbuf[STRINGMAX];
-      snprintf( tmpbuf, sizeof(tmpbuf), "Can't open %s\n", ETC_MNTTAB );
-      config_perror(tmpbuf);
+      netsnmp_config_error("Can't open mnttab %s\n", ETC_MNTTAB);
     }
 #endif
 }
@@ -674,7 +692,7 @@ const char     *HRFS_ignores[] = {
     "proc",
     "fd",
 #endif
-    0
+    NULL
 };
 
 int
@@ -725,13 +743,9 @@ Get_Next_HR_FileSys(void)
         return -1;
 #endif                          /* solaris2 */
 
-    DEBUGMSGTL(("host/hr_filesys", "Get_Next_HRFS %s\n", HRFS_entry->HRFS_name));
-
     for (cpp = HRFS_ignores; *cpp != NULL; ++cpp)
-        if (!strcmp(HRFS_entry->HRFS_type, *cpp)) {
-            DEBUGMSGTL(("host/hr_filesys", "Get_Next_HRFS: skipping %s (%s)\n", HRFS_entry->HRFS_type, cpp));
+        if (!strcmp(HRFS_entry->HRFS_type, *cpp))
             return Get_Next_HR_FileSys();
-        }
 
     /*
      * Try and ensure that index values are persistent
@@ -954,7 +968,7 @@ Get_FSSize(char *dev)
   		 * in case of 512 (f_blocks/2) is returned
   		 * otherwise (f_blocks*(f_bsize/1024)) is returned
   		 */
-#if defined(solaris2) && defined(STRUCT_STATVFS_HAS_F_FRSIZE)
+#if defined(solaris2) && defined(HAVE_STRUCT_STATVFS_F_FRSIZE)
                 return (statfs_buf.f_blocks*(statfs_buf.f_frsize/1024));
 #else
   		if (statfs_buf.f_bsize == 512)

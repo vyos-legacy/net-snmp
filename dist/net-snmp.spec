@@ -3,6 +3,7 @@
 #
 %define netsnmp_embedded_perl 1
 %define netsnmp_perl_modules 1
+%define netsnmp_cflags ""
 
 # ugly RHEL detector
 # SuSE build service defines rhel_version, RHEL itself defines nothing
@@ -36,7 +37,7 @@
 %endif
 Summary: Tools and servers for the SNMP protocol
 Name: net-snmp
-Version: 5.4.2.1
+Version: 5.5
 # update release for vendor release. (eg 1.fc6, 1.rh72, 1.ydl3, 1.ydl23)
 Release: 1
 URL: http://www.net-snmp.org/
@@ -64,6 +65,8 @@ Epoch: 2
 %if 0%{?fedora} >= 9
 Provides: net-snmp-gui
 Obsoletes: net-snmp-gui
+# newer fedoras need following macro to compile with new rpm
+%define netsnmp_cflags "-D_RPM_4_4_COMPAT"
 %else
 BuildRequires: beecrypt-devel
 %endif
@@ -124,9 +127,9 @@ exit 1
 	--enable-shared \
 	%{?netsnmp_perl_modules: --with-perl-modules="INSTALLDIRS=vendor"} \
 	%{!?netsnmp_perl_modules: --without-perl-modules} \
-	%{?netsnmp_embedded_perl: --enable-as-needed --enable-embedded-perl} \
+	%{?netsnmp_embedded_perl: --enable-embedded-perl} \
 	%{!?netsnmp_embedded_perl: --disable-embedded-perl} \
-	--with-cflags="$RPM_OPT_FLAGS"
+	--with-cflags="$RPM_OPT_FLAGS %{netsnmp_cflags}"
 
 make
 
@@ -230,12 +233,12 @@ echo "No additional verification is done for net-snmp"
 %changelog
 * Tue May  6 2008 Jan Safranek <jsafranek@users.sf.net>
 - remove %{libcurrent}
-- don't use Provides: unless necessary, let rpmbuild compute the provided
+- add openssl-devel to build requirements
+- don't use Provides: unless necessary, let rpmbuild compute the provided 
   libraries
 
-* Tue Jun 30 2007 Thomas Anders <tanders@users.sf.net>
+* Tue Jun 19 2007 Thomas Anders <tanders@users.sf.net>
 - add "BuildRequires: perl-ExtUtils-Embed", e.g. for Fedora 7
-- add --enable-as-needed if building with embedded Perl support
 
 * Wed Nov 23 2006 Thomas Anders <tanders@users.sf.net>
 - fixes for 5.4 and 64-bit platforms

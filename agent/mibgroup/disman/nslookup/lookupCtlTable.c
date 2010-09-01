@@ -55,12 +55,18 @@ struct variable2 lookupCtlTable_variables[] = {
     /*
      * magic number        , variable type , ro/rw , callback fn  , L, oidsuffix 
      */
-    {COLUMN_LOOKUPCTLTARGETADDRESSTYPE, ASN_INTEGER, RWRITE, var_lookupCtlTable, 2, {1, 3}},
-    {COLUMN_LOOKUPCTLTARGETADDRESS,   ASN_OCTET_STR, RWRITE, var_lookupCtlTable, 2, {1, 4}},
-    {COLUMN_LOOKUPCTLOPERSTATUS, ASN_INTEGER, RONLY, var_lookupCtlTable, 2, {1, 5}},
-    {COLUMN_LOOKUPCTLTIME,      ASN_UNSIGNED, RONLY, var_lookupCtlTable, 2, {1, 6}},
-    {COLUMN_LOOKUPCTLRC,         ASN_INTEGER, RONLY, var_lookupCtlTable, 2, {1, 7}},
-    {COLUMN_LOOKUPCTLROWSTATUS, ASN_INTEGER, RWRITE, var_lookupCtlTable, 2, {1, 8}}
+    {COLUMN_LOOKUPCTLTARGETADDRESSTYPE, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_lookupCtlTable, 2, {1, 3}},
+    {COLUMN_LOOKUPCTLTARGETADDRESS,   ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+     var_lookupCtlTable, 2, {1, 4}},
+    {COLUMN_LOOKUPCTLOPERSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_lookupCtlTable, 2, {1, 5}},
+    {COLUMN_LOOKUPCTLTIME,      ASN_UNSIGNED, NETSNMP_OLDAPI_RONLY,
+     var_lookupCtlTable, 2, {1, 6}},
+    {COLUMN_LOOKUPCTLRC,         ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_lookupCtlTable, 2, {1, 7}},
+    {COLUMN_LOOKUPCTLROWSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_lookupCtlTable, 2, {1, 8}}
 };
 
 
@@ -617,7 +623,7 @@ run_lookup(struct lookupTable_data *item)
                         address));
         } else {
             while (*lookup->h_addr_list) {
-                bcopy(*lookup->h_addr_list++, (char *) &a, sizeof(a));
+                memcpy(&a, *lookup->h_addr_list++, sizeof(a));
 
                 temp = SNMP_MALLOC_STRUCT(lookupResultsTable_data);
                 if (temp == NULL) {
@@ -1006,7 +1012,7 @@ lookupResultsTable_del(struct lookupTable_data *thedata)
 
     snmp_varlist_add_variable(&vars, NULL, 0, ASN_OCTET_STR, (char *) thedata->lookupCtlOwnerIndex, thedata->lookupCtlOwnerIndexLen);   /* lookupCtlOwnerIndex */
     snmp_varlist_add_variable(&vars, NULL, 0, ASN_OCTET_STR, (char *) thedata->lookupCtlOperationName, thedata->lookupCtlOperationNameLen);     /* lookupCtlOperationName */
-    bzero(newoid, MAX_OID_LEN * sizeof(oid));
+    memset(newoid, '\0', MAX_OID_LEN * sizeof(oid));
     header_complex_generate_oid(newoid, &newoid_len, NULL, 0, vars);
 
 

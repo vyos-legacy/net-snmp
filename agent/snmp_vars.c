@@ -139,6 +139,7 @@ PERFORMANCE OF THIS SOFTWARE.
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/mib_modules.h>
+#include <net-snmp/agent/agent_sysORTable.h>
 #include "kernel.h"
 
 #include "mibgroup/struct.h"
@@ -149,6 +150,8 @@ PERFORMANCE OF THIS SOFTWARE.
 #include "agent_module_includes.h"
 #include "mib_module_includes.h"
 #include "net-snmp/library/container.h"
+
+#include "snmp_perl.h"
 
 #ifndef  MIN
 #define  MIN(a,b)                     (((a) < (b)) ? (a) : (b))
@@ -307,6 +310,7 @@ init_agent(const char *app)
     netsnmp_init_helpers();
     init_traps();
     netsnmp_container_init_list();
+    init_agent_sysORTable();
 
 #if defined(USING_AGENTX_SUBAGENT_MODULE) || defined(USING_AGENTX_MASTER_MODULE)
     /*
@@ -361,11 +365,13 @@ shutdown_agent(void) {
     netsnmp_clear_callback_list();
     netsnmp_clear_tdomain_list();
     netsnmp_clear_handler_list();
+    shutdown_agent_sysORTable();
     netsnmp_container_free_list();
     clear_sec_mod();
     clear_snmp_enum();
     clear_callback();
     clear_user_list();
+    netsnmp_addrcache_destroy();
 
     done_init_agent = 0;
 }

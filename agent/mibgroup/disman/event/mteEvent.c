@@ -23,7 +23,7 @@ init_event_table_data(void)
     DEBUGMSGTL(("disman:event:init", "init event container\n"));
     if (!event_table_data) {
         event_table_data = netsnmp_tdata_create_table("mteEventTable", 0);
-        DEBUGMSGTL(("disman:event:init", "create event container (%x)\n",
+        DEBUGMSGTL(("disman:event:init", "create event container (%p)\n",
                                       event_table_data));
     }
 }
@@ -43,12 +43,12 @@ init_mteEvent(void)
 
     /*
      * Insert fixed events for the default trigger notifications
-     *
+     * 
      * NB: internal events (with an owner of "_snmpd") will not in
      * fact refer to the mteObjectsTable for the payload varbinds.
-     * The routine mteObjects_internal_vblist() hardcodes the
+     * The routine mteObjects_internal_vblist() hardcodes the 
      * appropriate varbinds for these internal events.
-     *   This routine will need to be updated whenever a new
+     *   This routine will need to be updated whenever a new 
      * internal event is added.
      */
     if ( _defaults_init)
@@ -135,7 +135,7 @@ _mteEvent_dump(void)
         DEBUGMSG(("disman:event:dump", "(%s, %s)",
                                          row->indexes->val.string,
                                          row->indexes->next_variable->val.string));
-        DEBUGMSG(("disman:event:dump", ": %x, %x\n", row, entry));
+        DEBUGMSG(("disman:event:dump", ": %p, %p\n", row, entry));
         i++;
     }
     DEBUGMSGTL(("disman:event:dump", "EventTable %d entries\n", i));
@@ -330,7 +330,7 @@ _insert_internal_objects( netsnmp_variable_list *vblist, char *oname,
     vp->next_variable     = vblist->next_variable;
     vblist->next_variable = var;
 }
-#endif
+#endif /* __NOT_NEEDED */
 
 int
 _mteEvent_fire_notify( struct mteEvent   *entry,     /* The event to fire  */
@@ -421,7 +421,7 @@ _mteEvent_fire_notify( struct mteEvent   *entry,     /* The event to fire  */
         } else {
             for (v2 = var; v2 && v2->next_variable; v2=v2->next_variable)
                 ;
-            mteObjects_internal_vblist(v2,  entry->mteNotifyObjects, trigger, s);
+            mteObjects_internal_vblist(v2, entry->mteNotifyObjects, trigger, s);
         }
     }
 

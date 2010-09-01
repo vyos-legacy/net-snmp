@@ -80,6 +80,8 @@ SOFTWARE.
 oid             objid_mib[] = { 1, 3, 6, 1, 2, 1 };
 int             numprinted = 0;
 
+char           *end_name = NULL;
+
 void
 usage(void)
 {
@@ -96,6 +98,7 @@ usage(void)
             "\t\t\t  c:  do not check returned OIDs are increasing\n");
     fprintf(stderr,
             "\t\t\t  t:  Display wall-clock time to complete the request\n");
+    fprintf(stderr, "\t\t\t  E {OID}:  End the walk at the specified OID\n");
 }
 
 void
@@ -151,6 +154,10 @@ optProc(int argc, char *const *argv, int opt)
                 netsnmp_ds_toggle_boolean(NETSNMP_DS_APPLICATION_ID,
                                           NETSNMP_DS_WALK_TIME_RESULTS);
                 break;
+
+            case 'E':
+                end_name = argv[optind++];
+                break;
                 
             default:
                 fprintf(stderr, "Unknown flag passed to -C: %c\n",
@@ -173,6 +180,8 @@ main(int argc, char *argv[])
     size_t          name_length;
     oid             root[MAX_OID_LEN];
     size_t          rootlen;
+    oid             end_oid[MAX_OID_LEN];
+    size_t          end_len = 0;
     int             count;
     int             running;
     int             status;
@@ -233,6 +242,23 @@ main(int argc, char *argv[])
         rootlen = sizeof(objid_mib) / sizeof(oid);
     }
 
+    /*
+     * If we've been given an explicit end point,
+     *  then convert this to an OID, otherwise
+     *  move to the next sibling of the start.
+     */
+    if ( end_name ) {
+        end_len = MAX_OID_LEN;
+        if (snmp_parse_oid(end_name, end_oid, &end_len) == NULL) {
+            snmp_perror(end_name);
+            exit(1);
+        }
+    } else {
+        memmove(end_oid, root, rootlen*sizeof(oid));
+        end_len = rootlen;
+        end_oid[end_len-1]++;
+    }
+
     SOCK_STARTUP;
 
     /*
@@ -284,9 +310,9 @@ main(int argc, char *argv[])
                  */
                 for (vars = response->variables; vars;
                      vars = vars->next_variable) {
-                    if ((vars->name_length < rootlen)
-                        || (memcmp(root, vars->name, rootlen * sizeof(oid))
-                            != 0)) {
+                    if ((vars->name_length < end_len)
+                        || (memcmp(end_oid, vars->name, end_len * sizeof(oid))
+                            <= 0)) {
                         /*
                          * not part of this subtree 
                          */
