@@ -1,5 +1,5 @@
---- a/local/Makefile.in	2010-09-01 10:26:47.120456121 -0700
-+++ b/local/Makefile.in	2010-09-01 10:28:05.349060712 -0700
+--- a/local/Makefile.in	2010-09-01 14:36:49.000000000 -0700
++++ b/local/Makefile.in	2010-09-01 14:37:38.263429724 -0700
 @@ -101,7 +101,7 @@ tkmib.made: $(srcdir)/tkmib
  
  mib2c.made: $(srcdir)/mib2c
@@ -9,8 +9,8 @@
  	else \
  	  touch mib2c.made; \
          fi
---- a/Makefile.top	2010-09-01 10:26:47.120456121 -0700
-+++ b/Makefile.top	2010-09-01 10:28:05.353060945 -0700
+--- a/Makefile.top	2010-09-01 14:36:49.000000000 -0700
++++ b/Makefile.top	2010-09-01 14:37:38.263429724 -0700
 @@ -25,8 +25,9 @@ man3dir		= $(mandir)/man3
  man5dir		= $(mandir)/man5
  man8dir		= $(mandir)/man8
@@ -22,76 +22,35 @@
  DESTDIR         = @INSTALL_PREFIX@
  INSTALL_PREFIX  = $(DESTDIR)
  
---- a/mibs/Makefile.in	2010-09-01 10:26:47.124456359 -0700
-+++ b/mibs/Makefile.in	2010-09-01 10:28:05.353060945 -0700
-@@ -13,53 +13,24 @@ OTHERINSTALL=mibsinstall
- OTHERUNINSTALL=mibsuninstall
+--- a/mibs/Makefile.in	2010-09-01 14:37:05.000000000 -0700
++++ b/mibs/Makefile.in	2010-09-01 14:37:48.575632005 -0700
+@@ -43,16 +43,22 @@ RFCMIBS	= IF-MIB.txt IF-INVERTED-STACK-M
+ 	SCTP-MIB.txt
  
- 
--V1MIBS	= RFC1155-SMI.txt RFC1213-MIB.txt RFC-1215.txt
-+NETSNMPMIBS = NET-SNMP-TC NET-SNMP-MIB NET-SNMP-AGENT-MIB \
-+	NET-SNMP-EXAMPLES-MIB NET-SNMP-EXTEND-MIB NET-SNMP-PASS-MIB \
-+	NET-SNMP-MONITOR-MIB NET-SNMP-SYSTEM-MIB \
-+	NET-SNMP-VACM-MIB
- 
--V2MIBS = SNMPv2-CONF.txt SNMPv2-SMI.txt SNMPv2-TC.txt SNMPv2-TM.txt \
--	SNMPv2-MIB.txt
-+UCDMIBS = UCD-SNMP-MIB UCD-DEMO-MIB UCD-IPFWACC-MIB \
-+	UCD-DLMOD-MIB UCD-DISKIO-MIB
- 
--V3MIBS	= SNMP-FRAMEWORK-MIB.txt SNMP-MPD-MIB.txt SNMP-TARGET-MIB.txt \
--	SNMP-NOTIFICATION-MIB.txt SNMP-PROXY-MIB.txt \
--	SNMP-USER-BASED-SM-MIB.txt SNMP-VIEW-BASED-ACM-MIB.txt \
--	SNMP-COMMUNITY-MIB.txt TRANSPORT-ADDRESS-MIB.txt
--
--AGENTMIBS = AGENTX-MIB.txt SMUX-MIB.txt
--
--IANAMIBS = IANAifType-MIB.txt IANA-LANGUAGE-MIB.txt \
--	IANA-ADDRESS-FAMILY-NUMBERS-MIB.txt
--
--RFCMIBS	= IF-MIB.txt IF-INVERTED-STACK-MIB.txt \
--	EtherLike-MIB.txt \
--	IP-MIB.txt IP-FORWARD-MIB.txt IANA-RTPROTO-MIB.txt \
--	TCP-MIB.txt UDP-MIB.txt \
--	INET-ADDRESS-MIB.txt HCNUM-TC.txt \
--	HOST-RESOURCES-MIB.txt HOST-RESOURCES-TYPES.txt \
--	RMON-MIB.txt \
--	IPV6-TC.txt IPV6-MIB.txt IPV6-ICMP-MIB.txt IPV6-TCP-MIB.txt \
--	IPV6-UDP-MIB.txt \
--	DISMAN-EVENT-MIB.txt DISMAN-SCRIPT-MIB.txt DISMAN-SCHEDULE-MIB.txt \
--	NOTIFICATION-LOG-MIB.txt SNMP-USM-AES-MIB.txt \
--	SNMP-USM-DH-OBJECTS-MIB.txt \
--	SCTP-MIB.txt
--
--NETSNMPMIBS = NET-SNMP-TC.txt NET-SNMP-MIB.txt NET-SNMP-AGENT-MIB.txt \
+ NETSNMPMIBS = NET-SNMP-TC.txt NET-SNMP-MIB.txt NET-SNMP-AGENT-MIB.txt \
 -	NET-SNMP-EXAMPLES-MIB.txt NET-SNMP-EXTEND-MIB.txt NET-SNMP-PASS-MIB.txt
--
--UCDMIBS = UCD-SNMP-MIB.txt UCD-DEMO-MIB.txt UCD-IPFWACC-MIB.txt \
--	UCD-DLMOD-MIB.txt UCD-DISKIO-MIB.txt
--
--DEFAULTMIBS = @default_mibs_install@
--
--MIBS	= $(V1MIBS) $(V2MIBS) $(V3MIBS) $(RFCMIBS) \
--	$(AGENTMIBS) $(IANAMIBS) \
--	$(NETSNMPMIBS) $(UCDMIBS) $(DEFAULTMIBS)
-+EXTRAMIBS = GNOME-SMI LM-SENSORS-MIB
++	NET-SNMP-EXAMPLES-MIB.txt NET-SNMP-EXTEND-MIB.txt NET-SNMP-PASS-MIB.txt \
++	NET-SNMP-MONITOR-MIB.txt NET-SNMP-SYSTEM-MIB.txt \
++	NET-SNMP-VACM-MIB.txt
+ 
+ UCDMIBS = UCD-SNMP-MIB.txt UCD-DEMO-MIB.txt UCD-IPFWACC-MIB.txt \
+ 	UCD-DLMOD-MIB.txt UCD-DISKIO-MIB.txt
+ 
++EXTRAMIBS = BGP4-MIB.txt BRIDGE-MIB.txt OSPF-MIB.txt \
++	OSPF-TRAP-MIB.txt RIPv2-MIB.txt SOURCE-ROUTING-MIB.txt \
++	LM-SENSORS-MIB.txt
 +
-+MIBS	= $(NETSNMPMIBS) $(UCDMIBS) $(EXTRAMIBS)
+ DEFAULTMIBS = @default_mibs_install@
+ 
+ MIBS	= $(V1MIBS) $(V2MIBS) $(V3MIBS) $(RFCMIBS) \
+ 	$(AGENTMIBS) $(IANAMIBS) \
+-	$(NETSNMPMIBS) $(UCDMIBS) $(DEFAULTMIBS)
++	$(NETSNMPMIBS) $(UCDMIBS) $(DEFAULTMIBS) $(EXTRAMIBS)
  
  all: standardall
  
- mibsinstall: installdirs
--	@for i in $(MIBS) ; do \
--		$(INSTALL_DATA) $(srcdir)/$$i $(INSTALL_PREFIX)$(mibdir) ; \
--		echo "install: installed $$i in $(INSTALL_PREFIX)$(mibdir)" ; \
-+	@for i in $(MIBS); do \
-+		$(INSTALL_DATA) $(srcdir)/$$i.txt $(INSTALL_PREFIX)$(mibdir)/$$i ; \
-+		echo "install: installed $$i.txt in $(INSTALL_PREFIX)$(mibdir)/$$i" ; \
- 	done
- 
- mibsuninstall: installdirs
---- a/Makefile.in	2010-09-01 10:26:47.120456121 -0700
-+++ b/Makefile.in	2010-09-01 10:28:05.353060945 -0700
+--- a/Makefile.in	2010-09-01 14:36:49.000000000 -0700
++++ b/Makefile.in	2010-09-01 14:37:38.263429724 -0700
 @@ -162,7 +162,7 @@ OTHERCLEANTODOS=perlclean @PYTHONCLEANTA
  #
  # override LD_RUN_PATH to avoid dependencies on the build directory
