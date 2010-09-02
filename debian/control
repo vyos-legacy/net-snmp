@@ -3,7 +3,8 @@ Section: net
 Priority: optional
 Maintainer: Vyatta Package Maintainers <maintainers@vyatta.com>
 Build-Depends: debhelper (>= 7.0.50~), libtool, libwrap0-dev, libssl-dev (>> 0.9.8), perl (>=5.8), libperl-dev, python-all-dev (>= 2.5.4-1~), python-central (>=0.5.6), python (>=2.3.5-7), python-setuptools (>=0.6b3), autoconf,
- automake, autotools-dev, debianutils (>=1.13.1), bash (>=2.05), findutils (>=4.1.20), procps, libkvm-dev [kfreebsd-i386 kfreebsd-amd64], libsensors4-dev [!hurd-i386 !kfreebsd-i386 !kfreebsd-amd64]
+ automake, autotools-dev, debianutils (>=1.13.1), bash (>=2.05), findutils (>=4.1.20), procps, libkvm-dev [kfreebsd-i386 kfreebsd-amd64], libsensors4-dev [!hurd-i386 !kfreebsd-i386 !kfreebsd-amd64],
+ libpci-dev
 Standards-Version: 3.8.4
 Vcs-Svn: svn://svn.debian.org/pkg-net-snmp/
 Vcs-Browser: http://svn.debian.org/wsvn/pkg-net-snmp/
