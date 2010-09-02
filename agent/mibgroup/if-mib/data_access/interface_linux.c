@@ -87,6 +87,9 @@ pthread_t thread1;
  
 void *netsnmp_prefix_listen(void *formal);
 #endif
+
+#define SYSFS_CLASS_NET_IFALIAS	"/sys/class/net/%s/ifalias"
+
 void
 netsnmp_arch_interface_init(void)
 {
@@ -231,6 +234,27 @@ _arch_interface_has_ipv6(oid if_index, u_int *flags,
 /**
  * @internal
  */
+static void
+_arch_interface_ifalias_get(netsnmp_interface_entry *entry)
+{
+    FILE           *fin;
+    char            line[256];
+
+    snprintf(line,sizeof(line), SYSFS_CLASS_NET_IFALIAS, entry->name);
+    if (!(fin = fopen(line, "r"))) {
+        DEBUGMSGTL(("access:interface",
+                    "Failed to open %s\n", line));
+	return;
+    }
+    if (fgets(line, sizeof(line), fin)) {
+        if (line[strlen(line) - 1] == '\n')
+            line[strlen(line) - 1] = '\0';
+
+	entry->alias = strdup(line);
+    }
+    fclose(fin);
+}
+
 static void
 _arch_interface_flags_v4_get(netsnmp_interface_entry *entry)
 {
@@ -616,6 +640,10 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
          * xxx-rks: get descr by linking mem from /proc/pci and /proc/iomem
          */
 
+	/*
+	 * get interface alias
+	 */
+	_arch_interface_ifalias_get(entry);
 
         /*
          * use ioctls for some stuff

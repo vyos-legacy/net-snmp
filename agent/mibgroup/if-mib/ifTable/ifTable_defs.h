@@ -1,4 +1,5 @@
 #define ifDescr ifentry->descr
+#define ifAlias ifentry->alias
 #define ifType ifentry->type
 #define ifMtu ifentry->mtu
 #define ifSpeed ifentry->speed
