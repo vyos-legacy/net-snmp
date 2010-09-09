@@ -1,3 +1,19 @@
+net-snmp (5.5-vyatta5) unstable; urgency=low
+
+  * Put mibs in /usr/share/snmp
+  * Remove manual pages that are built
+  * Fix location of SNMP mibs
+  * Debian patch 02_statistics.patch
+  * Debian patch 03_makefiles
+  * Debian patch 05_searchdirs
+  * Debian patch 07_docfiles
+  * Debian patch 25_duplicate_iftable
+  * Debian 56 manpage patch
+  * Integrate patch for lmsensors API
+  * Debian patches now in repository
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Thu, 09 Sep 2010 08:58:08 -0700
+
 net-snmp (5.5-vyatta4) unstable; urgency=low
 
   * Put mibs in /usr/share/snmp
