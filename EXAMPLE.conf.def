@@ -23,7 +23,7 @@ agentAddress  udp:127.0.0.1:161
 #  SNMPv3 AUTHENTICATION
 #
 #  Note that these particular settings don't actually belong here.
-#  They should be copied to the file /var/net-snmp/snmpd.conf
+#  They should be copied to the file /var/lib/snmp/snmpd.conf
 #     and the passwords changed, before being uncommented in that file *only*.
 #  Then restart the agent
 
