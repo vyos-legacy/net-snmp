@@ -31,7 +31,7 @@ endif
 export DEB_BUILD_HARDENING=1
 
 %:
-	dh --with python-central --with quilt $@
+	dh --with python-central $@
 
 .PHONY: override_dh_auto_configure
 override_dh_auto_configure:
