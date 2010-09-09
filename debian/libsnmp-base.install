@@ -1,4 +1,4 @@
-debian/tmp/usr/share/mibs
+debian/tmp/usr/share/snmp/mibs
 debian/tmp/usr/share/snmp/mib2c-data
 debian/tmp/usr/share/man/man5/mib2c.conf.5snmp
 debian/tmp/usr/share/man/man5/snmp.conf.5snmp

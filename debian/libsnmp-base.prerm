@@ -2,7 +2,7 @@
 
 set -e
 
-rm -f /usr/share/mibs/netsnmp/.index
+rm -f /usr/share/snmp/mibs/.index
 
 #DEBHELPER#
 
