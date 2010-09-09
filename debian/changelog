@@ -1,3 +1,9 @@
+net-snmp (5.5-vyatta4) unstable; urgency=low
+
+  * Put mibs in /usr/share/snmp
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Wed, 08 Sep 2010 21:27:12 -0700
+
 net-snmp (5.5-vyatta3) unstable; urgency=low
 
   * Add support for more ethtool speeds
