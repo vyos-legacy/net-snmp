@@ -103,7 +103,7 @@ tkmib.made: $(srcdir)/tkmib
 
 mib2c.made: $(srcdir)/mib2c
 	if test "x$(PERL)" != "x" ; then \
-	  $(PERL) -p -e 's%^#!.*/perl.*%#!$(PERL)%;s#/usr/local/share/snmp#$(snmplibdir)#;' ${srcdir}/mib2c > mib2c.made; \
+	  $(PERL) -p -e 's%^#!.*/perl.*%#!$(PERL)%;s#/usr/local/share/snmp#$(snmplibdir)#;s#/usr/local/etc/snmp#$(SNMPCONFPATH)#;' ${srcdir}/mib2c > mib2c.made; \
 	else \
 	  touch mib2c.made; \
         fi
