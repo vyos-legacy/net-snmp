@@ -9,19 +9,6 @@
  	else \
  	  touch mib2c.made; \
          fi
---- a/Makefile.top	2010-09-01 15:03:23.000000000 -0700
-+++ b/Makefile.top	2010-09-01 15:04:10.976111119 -0700
-@@ -25,8 +25,9 @@ man3dir		= $(mandir)/man3
- man5dir		= $(mandir)/man5
- man8dir		= $(mandir)/man8
- snmplibdir	= $(datadir)/snmp
--mibdir		= $(snmplibdir)/mibs
-+mibdir		= $(datadir)/mibs/netsnmp
- persistentdir	= @PERSISTENT_DIRECTORY@
-+sysconfdir	= @sysconfdir@
- DESTDIR         = @INSTALL_PREFIX@
- INSTALL_PREFIX  = $(DESTDIR)
- 
 --- a/mibs/Makefile.in	2010-09-01 15:03:23.000000000 -0700
 +++ b/mibs/Makefile.in	2010-09-01 15:04:10.976111119 -0700
 @@ -43,16 +43,22 @@ RFCMIBS	= IF-MIB.txt IF-INVERTED-STACK-M
