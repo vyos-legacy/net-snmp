@@ -1011,9 +1011,9 @@ main(int argc, char *argv[])
         if (info) {
             DEBUGMSGTL(("snmpd/main", "Supplementary groups for %s.\n", info->pw_name));
             if (initgroups(info->pw_name, (gid != 0 ? gid : info->pw_gid)) == -1) {
-                snmp_log_perror("initgroups failed");
                 if (!netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
                                             NETSNMP_DS_AGENT_NO_ROOT_ACCESS)) {
+                    snmp_log_perror("initgroups failed");
                     exit(1);
                 }
             }
