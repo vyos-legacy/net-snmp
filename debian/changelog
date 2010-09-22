@@ -1,3 +1,10 @@
+net-snmp (5.5-vyatta6) unstable; urgency=low
+
+  * Change configuration to indicate snmpd runs as non-root
+  * initgroups will fail for non-root user
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Wed, 22 Sep 2010 14:47:46 -0700
+
 net-snmp (5.5-vyatta5) unstable; urgency=low
 
   * Put mibs in /usr/share/snmp
