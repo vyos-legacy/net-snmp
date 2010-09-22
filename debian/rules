@@ -51,6 +51,7 @@ override_dh_auto_configure:
 	  --without-dmalloc --without-efence --without-rsaref \
 	  --with-sys-contact="root" --with-sys-location="Unknown" \
 	  --with-mib-modules="$(MIB_MODULES)" \
+	  --without-root-access \
 	  --enable-mfd-rewrites \
 	  --with-mnttab=/etc/mtab \
 	  --with-defaults
