@@ -1468,6 +1468,9 @@ int
 ifAlias_get(ifXTable_rowreq_ctx * rowreq_ctx, char **ifAlias_val_ptr_ptr,
             size_t * ifAlias_val_ptr_len_ptr)
 {
+    char           *tmp_alias = NULL;
+    u_char          tmp_len = 0;
+
    /** we should have a non-NULL pointer and enough storage */
     netsnmp_assert((NULL != ifAlias_val_ptr_ptr)
                    && (NULL != *ifAlias_val_ptr_ptr));
@@ -1479,6 +1482,16 @@ ifAlias_get(ifXTable_rowreq_ctx * rowreq_ctx, char **ifAlias_val_ptr_ptr,
     netsnmp_assert(NULL != rowreq_ctx);
 
     /*
+     * if ifAlias is NULL, use the ifName
+     */
+    tmp_alias = rowreq_ctx->data.ifAlias;
+
+    if (NULL != tmp_alias)
+	    tmp_len = strlen(tmp_alias);
+    else
+	    tmp_len = 0;
+
+    /*
      * TODO:231:o: |-> Extract the current value of the ifAlias data.
      * copy (* ifAlias_val_ptr_ptr ) data and (* ifAlias_val_ptr_len_ptr ) from rowreq_ctx->data
      */
@@ -1486,25 +1499,20 @@ ifAlias_get(ifXTable_rowreq_ctx * rowreq_ctx, char **ifAlias_val_ptr_ptr,
      * make sure there is enough space for ifAlias data
      */
     if ((NULL == (*ifAlias_val_ptr_ptr)) ||
-        ((*ifAlias_val_ptr_len_ptr) <
-         (rowreq_ctx->data.ifAlias_len *
-          sizeof(rowreq_ctx->data.ifAlias[0])))) {
+        ((*ifAlias_val_ptr_len_ptr) < tmp_len)) {
         /*
          * allocate space for ifAlias data
          */
         (*ifAlias_val_ptr_ptr) =
-            malloc(rowreq_ctx->data.ifAlias_len *
-                   sizeof(rowreq_ctx->data.ifAlias[0]));
+            malloc(tmp_len * sizeof(rowreq_ctx->data.ifAlias[0]));
         if (NULL == (*ifAlias_val_ptr_ptr)) {
             snmp_log(LOG_ERR, "could not allocate memory\n");
             return MFD_ERROR;
         }
     }
     (*ifAlias_val_ptr_len_ptr) =
-        rowreq_ctx->data.ifAlias_len * sizeof(rowreq_ctx->data.ifAlias[0]);
-    memcpy((*ifAlias_val_ptr_ptr), rowreq_ctx->data.ifAlias,
-           rowreq_ctx->data.ifAlias_len *
-           sizeof(rowreq_ctx->data.ifAlias[0]));
+	    tmp_len * sizeof(rowreq_ctx->data.ifAlias[0]);
+    memcpy((*ifAlias_val_ptr_ptr), tmp_alias, (*ifAlias_val_ptr_len_ptr));
 
     return MFD_SUCCESS;
 }                               /* ifAlias_get */
@@ -2285,215 +2293,6 @@ ifPromiscuousMode_undo(ifXTable_rowreq_ctx * rowreq_ctx)
 
     return MFD_SUCCESS;
 }                               /* ifPromiscuousMode_undo */
-
-/*---------------------------------------------------------------------
- * IF-MIB::ifXEntry.ifAlias
- * ifAlias is subid 18 of ifXEntry.
- * Its status is Current, and its access level is ReadWrite.
- * OID: .1.3.6.1.2.1.31.1.1.1.18
- * Description:
-This object is an 'alias' name for the interface as
-            specified by a network manager, and provides a non-volatile
-            'handle' for the interface.
-
-            On the first instantiation of an interface, the value of
-            ifAlias associated with that interface is the zero-length
-            string.  As and when a value is written into an instance of
-            ifAlias through a network management set operation, then the
-            agent must retain the supplied value in the ifAlias instance
-            associated with the same interface for as long as that
-            interface remains instantiated, including across all re-
-            initializations/reboots of the network management system,
-            including those which result in a change of the interface's
-            ifIndex value.
-
-            An example of the value which a network manager might store
-            in this object for a WAN interface is the (Telco's) circuit
-            number/identifier of the interface.
-
-            Some agents may support write-access only for interfaces
-            having particular values of ifType.  An agent which supports
-            write access to this object is required to keep the value in
-            non-volatile storage, but it may limit the length of new
-            values depending on how much storage is already occupied by
-            the current values for other interfaces.
- *
- * Attributes:
- *   accessible 1     isscalar 0     enums  0      hasdefval 0
- *   readable   1     iscolumn 1     ranges 1      hashint   1
- *   settable   1
- *   hint: 255a
- *
- * Ranges:  0 - 64;
- *
- * Its syntax is DisplayString (based on perltype OCTETSTR)
- * The net-snmp type is ASN_OCTET_STR. The C type decl is char (char)
- * This data type requires a length.  (Max 64)
- */
-/**
- * Check that the proposed new value is potentially valid.
- *
- * @param rowreq_ctx
- *        Pointer to the row request context.
- * @param ifAlias_val_ptr
- *        A char containing the new value.
- * @param ifAlias_val_ptr_len
- *        The size (in bytes) of the data pointed to by ifAlias_val_ptr
- *
- * @retval MFD_SUCCESS        : incoming value is legal
- * @retval MFD_NOT_VALID_NOW  : incoming value is not valid now
- * @retval MFD_NOT_VALID_EVER : incoming value is never valid
- *
- * This is the place to check for requirements that are not
- * expressed in the mib syntax (for example, a requirement that
- * is detailed in the description for an object).
- *
- * You should check that the requested change between the undo value and the
- * new value is legal (ie, the transistion from one value to another
- * is legal).
- *      
- *@note
- * This check is only to determine if the new value
- * is \b potentially valid. This is the first check of many, and
- * is one of the simplest ones.
- * 
- *@note
- * this is not the place to do any checks for values
- * which depend on some other value in the mib. Those
- * types of checks should be done in the
- * ifXTable_check_dependencies() function.
- *
- * The following checks have already been done for you:
- *    The syntax is ASN_OCTET_STR
- *    The length is < sizeof(rowreq_ctx->data.ifAlias).
- *    The length is in (one of) the range set(s):  0 - 64
- *
- * If there a no other checks you need to do, simply return MFD_SUCCESS.
- *
- */
-int
-ifAlias_check_value(ifXTable_rowreq_ctx * rowreq_ctx,
-                    char *ifAlias_val_ptr, size_t ifAlias_val_ptr_len)
-{
-    DEBUGMSGTL(("verbose:ifXTable:ifAlias_check_value", "called\n"));
-
-    /** should never get a NULL pointer */
-    netsnmp_assert(NULL != rowreq_ctx);
-    netsnmp_assert(NULL != ifAlias_val_ptr);
-
-    /*
-     * TODO:441:o: |-> Check for valid ifAlias value.
-     */
-
-    return MFD_SUCCESS;         /* ifAlias value not illegal */
-}                               /* ifAlias_check_value */
-
-/**
- * Save old value information
- *
- * @param rowreq_ctx
- *        Pointer to the table context (ifXTable_rowreq_ctx)
- *
- * @retval MFD_SUCCESS : success
- * @retval MFD_ERROR   : error. set will fail.
- *
- * This function will be called after the table level undo setup function
- * ifXTable_undo_setup has been called.
- *
- *@note
- * this function will only be called if a new value is set for this column.
- *
- * If there is any setup specific to a particular column (e.g. allocating
- * memory for a string), you should do that setup in this function, so it
- * won't be done unless it is necessary.
- */
-int
-ifAlias_undo_setup(ifXTable_rowreq_ctx * rowreq_ctx)
-{
-    DEBUGMSGTL(("verbose:ifXTable:ifAlias_undo_setup", "called\n"));
-
-    /** should never get a NULL pointer */
-    netsnmp_assert(NULL != rowreq_ctx);
-
-    /*
-     * TODO:455:o: |-> Setup ifAlias undo.
-     */
-    /*
-     * copy ifAlias and ifAlias_len data
-     * set rowreq_ctx->undo->ifAlias from rowreq_ctx->data.ifAlias
-     */
-    memcpy(rowreq_ctx->undo->ifAlias, rowreq_ctx->data.ifAlias,
-           (rowreq_ctx->data.ifAlias_len *
-            sizeof(rowreq_ctx->undo->ifAlias[0])));
-    rowreq_ctx->undo->ifAlias_len = rowreq_ctx->data.ifAlias_len;
-
-
-    return MFD_SUCCESS;
-}                               /* ifAlias_undo_setup */
-
-/**
- * Set the new value.
- *
- * @param rowreq_ctx
- *        Pointer to the users context. You should know how to
- *        manipulate the value from this object.
- * @param ifAlias_val_ptr
- *        A char containing the new value.
- * @param ifAlias_val_ptr_len
- *        The size (in bytes) of the data pointed to by ifAlias_val_ptr
- */
-int
-ifAlias_set(ifXTable_rowreq_ctx * rowreq_ctx, char *ifAlias_val_ptr,
-            size_t ifAlias_val_ptr_len)
-{
-
-    DEBUGMSGTL(("verbose:ifXTable:ifAlias_set", "called\n"));
-
-    /** should never get a NULL pointer */
-    netsnmp_assert(NULL != rowreq_ctx);
-    netsnmp_assert(NULL != ifAlias_val_ptr);
-
-    /*
-     * TODO:461:M: |-> Set ifAlias value.
-     * set ifAlias value in rowreq_ctx->data
-     */
-    memcpy(rowreq_ctx->data.ifAlias, ifAlias_val_ptr, ifAlias_val_ptr_len);
-    /** convert bytes to number of char */
-    rowreq_ctx->data.ifAlias_len =
-        ifAlias_val_ptr_len / sizeof(ifAlias_val_ptr[0]);
-
-    return MFD_SUCCESS;
-}                               /* ifAlias_set */
-
-/**
- * undo the previous set.
- *
- * @param rowreq_ctx
- *        Pointer to the users context.
- */
-int
-ifAlias_undo(ifXTable_rowreq_ctx * rowreq_ctx)
-{
-
-    DEBUGMSGTL(("verbose:ifXTable:ifAlias_undo", "called\n"));
-
-    netsnmp_assert(NULL != rowreq_ctx);
-
-    /*
-     * TODO:456:o: |-> Clean up ifAlias undo.
-     */
-    /*
-     * copy ifAlias and ifAlias_len data
-     * set rowreq_ctx->data.ifAlias from rowreq_ctx->undo->ifAlias
-     */
-    memcpy(rowreq_ctx->data.ifAlias, rowreq_ctx->undo->ifAlias,
-           (rowreq_ctx->undo->ifAlias_len *
-            sizeof(rowreq_ctx->data.ifAlias[0])));
-    rowreq_ctx->data.ifAlias_len = rowreq_ctx->undo->ifAlias_len;
-
-
-    return MFD_SUCCESS;
-}                               /* ifAlias_undo */
 
 /**
  * check dependencies

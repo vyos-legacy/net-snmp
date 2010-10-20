@@ -412,15 +412,6 @@ config_require(if-mib/ifXTable/ifXTable_data_access)
     int             ifConnectorPresent_undo(ifXTable_rowreq_ctx *
                                             rowreq_ctx);
 
-    int             ifAlias_check_value(ifXTable_rowreq_ctx * rowreq_ctx,
-                                        char *ifAlias_val_ptr,
-                                        size_t ifAlias_val_ptr_len);
-    int             ifAlias_undo_setup(ifXTable_rowreq_ctx * rowreq_ctx);
-    int             ifAlias_set(ifXTable_rowreq_ctx * rowreq_ctx,
-                                char *ifAlias_val_ptr,
-                                size_t ifAlias_val_ptr_len);
-    int             ifAlias_undo(ifXTable_rowreq_ctx * rowreq_ctx);
-
     int
         ifCounterDiscontinuityTime_check_value(ifXTable_rowreq_ctx *
                                                rowreq_ctx,
