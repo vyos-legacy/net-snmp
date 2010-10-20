@@ -1,3 +1,10 @@
+net-snmp (5.5-vyatta7) unstable; urgency=low
+
+  * Fix ifAlias support
+  * Fix ifXTable save/restore now that ifAlias column not used
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Wed, 20 Oct 2010 10:45:02 -0700
+
 net-snmp (5.5-vyatta6) unstable; urgency=low
 
   * Change configuration to indicate snmpd runs as non-root
