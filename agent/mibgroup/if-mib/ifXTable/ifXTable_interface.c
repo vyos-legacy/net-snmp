@@ -1823,7 +1823,6 @@ _ifXTable_container_row_save(ifXTable_rowreq_ctx * rowreq_ctx, void *type)
 #define MAX_ROW_SIZE (sizeof(row_token) + 1 +  \
         ( 12 ) + /* ASN_INTEGER ifLinkUpDownTrapEnable */ \
         ( 12 ) + /* ASN_INTEGER ifPromiscuousMode */ \
-        ( ( 2 * sizeof(rowreq_ctx->data.ifAlias) ) + 3 ) + /* ASN_OCTET_STR */ \
         ( IFXTABLE_MAX_COL * 12 ) + /* column num prefix + : */ \
     2 /* LINE_TERM_CHAR + \n */ )
 
@@ -2024,6 +2023,9 @@ _ifXTable_container_col_save(ifXTable_rowreq_ctx * rowreq_ctx,
             sprintf(buf, "%ld", rowreq_ctx->data.ifLinkUpDownTrapEnable);
         break;
 
+    case COLUMN_IFALIAS:
+        break;
+
     default:
             /** We shouldn't get here */
         snmp_log(LOG_ERR, "unknown column %d in "
@@ -2061,6 +2063,9 @@ _ifXTable_container_col_restore(ifXTable_rowreq_ctx * rowreq_ctx,
         buf = read_config_read_memory(ASN_INTEGER, buf,
                                       (char *) &rowreq_ctx->data.
                                       ifLinkUpDownTrapEnable, &len);
+        break;
+
+    case COLUMN_IFALIAS:   /** DisplayString = ASN_OCTET_STR */
         break;
 
     default:
