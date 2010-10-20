@@ -43,11 +43,7 @@
 # define WIFEXITED(stat_val) (((stat_val) & 255) == 0)
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -70,9 +66,6 @@
 #include <strings.h>
 #endif
 #include <ctype.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
@@ -91,6 +84,7 @@
 #endif
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
+#include <net-snmp/library/snmp_logging.h>
 
 #include "struct.h"
 #include "util_funcs.h"
@@ -112,13 +106,6 @@ static long     cachetime;
 
 extern int      numprocs, numextens;
 
-void
-Exit(int var)
-{
-    snmp_log(LOG_ERR, "Server Exiting with code %d\n", var);
-    exit(var);
-}
-
 /** deprecated, use netsnmp_mktemp instead */
 const char *
 make_tempfile(void)
@@ -132,12 +119,12 @@ make_tempfile(void)
 #else
     if (mktemp(name)) {
 # ifndef WIN32        
-        fd = open(name, O_CREAT | O_EXCL | O_WRONLY);
+        fd = open(name, O_CREAT | O_EXCL | O_WRONLY, S_IRUSR | S_IWUSR);
 # else
         /*
           Win32 needs _S_IREAD | _S_IWRITE to set permissions on file after closing
-         */
-        fd = _open(name, _O_CREAT, _S_IREAD | _S_IWRITE | _O_EXCL | _O_WRONLY);
+        */
+        fd = _open(name, _O_CREAT | _O_EXCL | _O_WRONLY, _S_IREAD | _S_IWRITE);
 # endif
     }
 #endif
@@ -253,10 +240,14 @@ wait_on_exec(struct extensible *ex)
 int
 get_exec_output(struct extensible *ex)
 {
+#ifndef USING_UTILITIES_EXECUTE_MODULE
+    ex->result = -1;
+    NETSNMP_LOGONCE((LOG_WARNING, "support for run_exec_command not available\n"));
+#else
 #if HAVE_EXECV
     char            cachefile[STRMAX];
     char            cache[NETSNMP_MAXCACHESIZE];
-    ssize_t         cachebytes;
+    int             cachebytes;
     int             cfd;
 #ifdef NETSNMP_EXCACHETIME
     long            curtime;
@@ -325,7 +316,7 @@ get_exec_output(struct extensible *ex)
     
     /* Child temporary output pipe with Inheritance on (sa.bInheritHandle is true) */    
     if (!CreatePipe(&hOutputReadTmp,&hOutputWrite,&sa,0)) {
-      DEBUGMSGTL(("util_funcs", "get_exec_pipes CreatePipe ChildOut: %d\n",
+      DEBUGMSGTL(("util_funcs", "get_exec_pipes CreatePipe ChildOut: %lu\n",
             GetLastError()));
       return -1;
     }
@@ -334,7 +325,7 @@ get_exec_output(struct extensible *ex)
      * its stdout handles. */
     if (!DuplicateHandle(GetCurrentProcess(),hOutputWrite, GetCurrentProcess(),
           &hErrorWrite,0, TRUE,DUPLICATE_SAME_ACCESS)) {
-      DEBUGMSGTL(("util_funcs", "get_exec_output DuplicateHandle: %d\n", GetLastError()));
+      DEBUGMSGTL(("util_funcs", "get_exec_output DuplicateHandle: %lu\n", GetLastError()));
       return -1;
     }
 
@@ -343,14 +334,14 @@ get_exec_output(struct extensible *ex)
      * be closed.  */
     if (!DuplicateHandle(GetCurrentProcess(), hOutputReadTmp, GetCurrentProcess(),
           &hOutputRead, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
-      DEBUGMSGTL(("util_funcs", "get_exec_output DupliateHandle ChildOut: %d\n", GetLastError()));
+      DEBUGMSGTL(("util_funcs", "get_exec_output DupliateHandle ChildOut: %lu\n", GetLastError()));
       CloseHandle(hErrorWrite);
       return -1;
     }   
 
     /* Close the temporary output and input handles */
     if (!CloseHandle(hOutputReadTmp)) {
-      DEBUGMSGTL(("util_funcs", "get_exec_output CloseHandle (hOutputReadTmp): %d\n", GetLastError()));
+      DEBUGMSGTL(("util_funcs", "get_exec_output CloseHandle (hOutputReadTmp): %lu\n", GetLastError()));
       CloseHandle(hErrorWrite);
       CloseHandle(hOutputRead);
       return -1;
@@ -372,7 +363,7 @@ get_exec_output(struct extensible *ex)
      * pass_persist    .1.3.6.1.4.1.2021.255  c:/perl/bin/perl c:/temp/pass_persisttest
     */
     if (!CreateProcess(NULL, ex->command, NULL, NULL, TRUE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi)) {
-      DEBUGMSGTL(("util_funcs","get_exec_output CreateProcess:'%s' %d\n",ex->command, GetLastError()));
+      DEBUGMSGTL(("util_funcs","get_exec_output CreateProcess:'%s' %lu\n",ex->command, GetLastError()));
       CloseHandle(hErrorWrite);
       CloseHandle(hOutputRead);
       return -1;
@@ -389,17 +380,20 @@ get_exec_output(struct extensible *ex)
      */
 
     if (!CloseHandle(hOutputWrite)){
-      DEBUGMSGTL(("util_funcs","get_exec_output CloseHandle hOutputWrite: %d\n",ex->command, GetLastError()));
+      DEBUGMSGTL(("util_funcs","get_exec_output CloseHandle hOutputWrite: %lu\n",
+                  GetLastError()));
       return -1;
     }
     if (!CloseHandle(hErrorWrite)) {
-      DEBUGMSGTL(("util_funcs","get_exec_output CloseHandle hErrorWrite: %d\n",ex->command, GetLastError()));
+      DEBUGMSGTL(("util_funcs","get_exec_output CloseHandle hErrorWrite: %lu\n",
+                  GetLastError()));
       return -1;
     }
     return fd;
 #endif                          /* WIN32 */
-    return -1;
 #endif
+#endif /* !defined(USING_UTILITIES_EXECUTE_MODULE) */
+    return -1;
 }
 int
 get_exec_pipes(char *cmd, int *fdIn, int *fdOut, int *pid)
@@ -687,59 +681,6 @@ clear_cache(int action,
     return SNMP_ERR_NOERROR;
 }
 
-char          **argvrestartp, *argvrestartname, *argvrestart;
-
-RETSIGTYPE
-restart_doit(int a)
-{
-    char * name = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
-                                        NETSNMP_DS_LIB_APPTYPE);
-    snmp_shutdown(name);
-
-    /*  This signal handler may run with SIGALARM blocked.
-     *  Since the signal mask is preserved accross execv(), we must 
-     *  make sure that SIGALARM is unblocked prior of execv'ing.
-     *  Otherwise SIGALARM will be ignored in the next incarnation
-     *  of snmpd, because the signal is blocked. And thus, the 
-     *  restart doesn't work anymore. 
-     */ 
-#if HAVE_SIGBLOCK 
-    sigsetmask(0);
-#endif 
-
-    /*
-     * do the exec 
-     */
-#if HAVE_EXECV
-    execv(argvrestartname, argvrestartp);
-    setPerrorstatus(argvrestartname);
-#endif
-}
-
-int
-restart_hook(int action,
-             u_char * var_val,
-             u_char var_val_type,
-             size_t var_val_len,
-             u_char * statP, oid * name, size_t name_len)
-{
-
-    long            tmp = 0;
-
-    if (var_val_type != ASN_INTEGER) {
-        snmp_log(LOG_NOTICE, "Wrong type != int\n");
-        return SNMP_ERR_WRONGTYPE;
-    }
-    tmp = *((long *) var_val);
-    if (tmp == 1 && action == COMMIT) {
-#ifdef SIGALRM
-        signal(SIGALRM, restart_doit);
-#endif
-        alarm(NETSNMP_RESTARTSLEEP);
-    }
-    return SNMP_ERR_NOERROR;
-}
-
 void
 print_mib_oid(oid name[], size_t len)
 {
@@ -796,15 +737,15 @@ find_field(char *ptr, int field)
         /*
          * rewind a field length 
          */
-        while (*ptr != 0 && isspace(*ptr) && init <= ptr)
+        while (*ptr != 0 && isspace((unsigned char)(*ptr)) && init <= ptr)
             ptr--;
-        while (*ptr != 0 && !isspace(*ptr) && init <= ptr)
+        while (*ptr != 0 && !isspace((unsigned char)(*ptr)) && init <= ptr)
             ptr--;
-        if (isspace(*ptr))
+        if (isspace((unsigned char)(*ptr)))
             ptr++;              /* past space */
         if (ptr < init)
             ptr = init;
-        if (!isspace(*ptr) && *ptr != 0)
+        if (!isspace((unsigned char)(*ptr)) && *ptr != 0)
             return (ptr);
     } else {
         if ((ptr = skip_white(ptr)) == NULL)
@@ -831,9 +772,9 @@ parse_miboid(const char *buf, oid * oidout)
         return 0;
     if (*buf == '.')
         buf++;
-    for (i = 0; isdigit(*buf); i++) {
+    for (i = 0; isdigit((unsigned char)(*buf)); i++) {
         oidout[i] = atoi(buf);
-        while (isdigit(*buf++));
+        while (isdigit((unsigned char)(*buf++)));
         if (*buf == '.')
             buf++;
     }

@@ -1,7 +1,7 @@
 /*
  *  TcpConn MIB architecture support
  *
- * $Id: tcpConn_common.c 16724 2007-10-14 22:10:09Z magfr $
+ * $Id: tcpConn_common.c 17940 2010-01-03 16:28:36Z magfr $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -189,7 +189,7 @@ netsnmp_access_tcpconn_entry_set(netsnmp_tcpconn_entry * entry)
     if (! (entry->flags & NETSNMP_ACCESS_TCPCONN_DELETE))
         return -1;
     
-    rc = netsnmp_arch_tcpconn_delete(entry);
+    rc = netsnmp_arch_tcpconn_entry_delete(entry);
     
     return rc;
 }

@@ -53,7 +53,7 @@ struct netsnmp_udpEntry_s {
 #define	UDPTABLE_IS_LINKED_LIST
 #else
 
-#if defined (WIN32) || defined (cygwin)
+#ifdef HAVE_IPHLPAPI_H
 #include <iphlpapi.h>
 #define	UDPTABLE_ENTRY_TYPE	MIB_UDPROW		/* ??? */
 #define	UDPTABLE_LOCALADDRESS	dwLocalAddr
@@ -361,7 +361,7 @@ udpTable_next_entry( void **loop_context,
 {
     UDPTABLE_ENTRY_TYPE	 *entry = (UDPTABLE_ENTRY_TYPE *)*loop_context;
     long port;
-    in_addr_t addr;
+    long addr;
 
     if (!entry)
         return NULL;
@@ -376,7 +376,7 @@ udpTable_next_entry( void **loop_context,
 #else
     addr = UDP_ADDRESS_TO_NETWORK_ORDER((in_addr_t)entry->UDPTABLE_LOCALADDRESS);
     snmp_set_var_value(index, (u_char *)&addr,
-                                 sizeof(entry->UDPTABLE_LOCALADDRESS));
+                                 sizeof(addr));
 #endif
     port = UDP_PORT_TO_HOST_ORDER(entry->UDPTABLE_LOCALPORT);
     snmp_set_var_value(index->next_variable,
@@ -471,7 +471,7 @@ udpTable_load(netsnmp_cache *cache, void *vmagic)
 
     if (!(in = fopen("/proc/net/udp", "r"))) {
         DEBUGMSGTL(("mibII/udpTable", "Failed to load UDP Table (linux)\n"));
-        snmp_log(LOG_ERR, "snmpd: cannot open /proc/net/udp ...\n");
+        NETSNMP_LOGONCE((LOG_ERR, "snmpd: cannot open /proc/net/udp ...\n"));
         return -1;
     }
 

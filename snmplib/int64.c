@@ -15,9 +15,6 @@
 #else
 #include <strings.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 
 #include <net-snmp/types.h>
 #include <net-snmp/library/int64.h>
@@ -511,7 +508,7 @@ read64(U64 * i64, const char *str)
         str++;
     }
 
-    while (*str && isdigit(*str)) {
+    while (*str && isdigit((unsigned char)(*str))) {
         ok = 1;
         u = *str - '0';
         multBy10(*i64, &i64p);

@@ -28,10 +28,10 @@
 #endif
 #include <ctype.h>
 #include <sys/types.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#else
+#if HAVE_NETINET_IN_H
 #include <netinet/in.h>
+#endif
+#if HAVE_NETDB_H
 #include <netdb.h>
 #endif
 
@@ -1106,4 +1106,6 @@ _sql_process_queue(u_int dontcare, void *meeither)
                     NULL);
 }
 
+#else
+int unused;	/* Suppress "empty translation unit" warning */
 #endif /* NETSNMP_USE_MYSQL */

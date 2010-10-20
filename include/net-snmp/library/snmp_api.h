@@ -26,6 +26,7 @@
 
 #include <net-snmp/types.h>
 #include <net-snmp/varbind_api.h>
+#include <net-snmp/output_api.h>
 #include <net-snmp/pdu_api.h>
 #include <net-snmp/session_api.h>
 
@@ -114,8 +115,10 @@ typedef struct request_list {
 #endif
 #define SNMP_DEFAULT_PRIV_PROTOLEN  USM_LENGTH_OID_TRANSFORM
 
+/* Moved to output_api.h
     NETSNMP_IMPORT const char *snmp_api_errstring(int);
     NETSNMP_IMPORT void     snmp_perror(const char *);
+ */
     NETSNMP_IMPORT void     snmp_set_detail(const char *);
 
 #define SNMP_MAX_MSG_SIZE          1472 /* ethernet MTU minus IP/UDP header */
@@ -250,9 +253,28 @@ typedef struct request_list {
 #define SNMPERR_PROTOCOL		(-64)
 #define SNMPERR_OID_NONINCREASING       (-65)
 #define SNMPERR_JUST_A_CONTEXT_PROBE    (-66)
+#define SNMPERR_TRANSPORT_NO_CONFIG     (-67)
+#define SNMPERR_TRANSPORT_CONFIG_ERROR  (-68)
+#define SNMPERR_TLS_NO_CERTIFICATE      (-69)
 
-#define SNMPERR_MAX			(-66)
+#define SNMPERR_MAX			(-69)
 
+
+    /*
+     * General purpose memory allocation functions. Use these functions to
+     * allocate memory that may be reallocated or freed by the Net-SNMP
+     * library or to reallocate or free memory that has been allocated by the
+     * Net-SNMP library, and when working in a context where there is more than
+     * one heap. Examples are:
+     * - Perl XSUB's.
+     * - MSVC or MinGW with the Net-SNMP library compiled as a DLL instead of
+     *   a static library.
+     */
+    NETSNMP_IMPORT void *netsnmp_malloc(size_t size);
+    NETSNMP_IMPORT void *netsnmp_calloc(size_t nelem, size_t elsize);
+    NETSNMP_IMPORT void *netsnmp_realloc(void *ptr, size_t size);
+    NETSNMP_IMPORT void netsnmp_free(void *ptr);
+    NETSNMP_IMPORT char *netsnmp_strdup(const char *s1);
 
     /*
      * void
@@ -262,7 +284,7 @@ typedef struct request_list {
      * Frees the pdu and any malloc'd data associated with it.
      */
 
-    void            snmp_free_var_internals(netsnmp_variable_list *);     /* frees contents only */
+    NETSNMP_IMPORT void snmp_free_var_internals(netsnmp_variable_list *);     /* frees contents only */
 
 
     /*
@@ -304,28 +326,38 @@ typedef struct request_list {
 
     long            snmp_get_next_msgid(void);
     long            snmp_get_next_reqid(void);
+    NETSNMP_IMPORT
     long            snmp_get_next_sessid(void);
+    NETSNMP_IMPORT
     long            snmp_get_next_transid(void);
 
+    NETSNMP_IMPORT
     int             snmp_oid_compare(const oid *, size_t, const oid *,
                                      size_t);
     int             snmp_oid_ncompare(const oid *, size_t, const oid *,
                                       size_t, size_t);
+    NETSNMP_IMPORT
     int             snmp_oidtree_compare(const oid *, size_t, const oid *,
                                          size_t);
+    NETSNMP_IMPORT
     int             snmp_oidsubtree_compare(const oid *, size_t, const oid *,
                                          size_t);
+    NETSNMP_IMPORT
     int             netsnmp_oid_compare_ll(const oid * in_name1,
                                            size_t len1, const oid * in_name2,
                                            size_t len2, size_t *offpt);
+    NETSNMP_IMPORT
     int             netsnmp_oid_equals(const oid *, size_t, const oid *,
                                        size_t);
     int             netsnmp_oid_tree_equals(const oid *, size_t, const oid *,
                                             size_t);
+    NETSNMP_IMPORT
     int             netsnmp_oid_is_subtree(const oid *, size_t, const oid *,
                                            size_t);
+    NETSNMP_IMPORT
     int             netsnmp_oid_find_prefix(const oid * in_name1, size_t len1,
                                             const oid * in_name2, size_t len2);
+    NETSNMP_IMPORT
     void            init_snmp(const char *);
     u_char         *snmp_pdu_build(netsnmp_pdu *, u_char *, size_t *);
 #ifdef NETSNMP_USE_REVERSE_ASNENCODING
@@ -349,13 +381,24 @@ typedef struct request_list {
                                    size_t * length);
     u_char         *snmpv3_scopedPDU_parse(netsnmp_pdu *pdu, u_char * cp,
                                            size_t * length);
+    NETSNMP_IMPORT
+    void            snmp_store_needed(const char *type);
+    NETSNMP_IMPORT
+    void            snmp_store_if_needed(void);
+    NETSNMP_IMPORT
     void            snmp_store(const char *type);
+    NETSNMP_IMPORT
     void            snmp_shutdown(const char *type);
+    NETSNMP_IMPORT
     int             snmp_add_var(netsnmp_pdu *, const oid *, size_t, char,
                                  const char *);
+    NETSNMP_IMPORT
     oid            *snmp_duplicate_objid(const oid * objToCopy, size_t);
+    NETSNMP_IMPORT
     u_int           snmp_increment_statistic(int which);
+    NETSNMP_IMPORT
     u_int           snmp_increment_statistic_by(int which, int count);
+    NETSNMP_IMPORT
     u_int           snmp_get_statistic(int which);
     void            snmp_init_statistics(void);
     int             create_user_from_session(netsnmp_session * session);
@@ -386,6 +429,7 @@ struct netsnmp_transport_s;
      * Extended open; fpre_parse has changed.  
      */
 
+    NETSNMP_IMPORT
     netsnmp_session *snmp_open_ex(netsnmp_session *,
                                   int (*fpre_parse) (netsnmp_session *,
                                                      struct
@@ -409,17 +453,25 @@ struct netsnmp_transport_s;
      * See snmp_debug.h and snmp_debug.c instead.
      */
 
+    NETSNMP_IMPORT
     void            snmp_set_do_debugging(int);
+    NETSNMP_IMPORT
     int             snmp_get_do_debugging(void);
 
 
-
+/* Moved to output_api.h
+    NETSNMP_IMPORT
     void            snmp_sess_error(void *, int *, int *, char **);
+ */
+    NETSNMP_IMPORT
     void            netsnmp_sess_log_error(int priority,
                                            const char *prog_string,
                                            netsnmp_session * ss);
+/* Moved to output_api.h
+    NETSNMP_IMPORT
     void            snmp_sess_perror(const char *prog_string,
                                      netsnmp_session * ss);
+ */
     const char *    snmp_pdu_type(int type);
 
     /*
@@ -427,9 +479,18 @@ struct netsnmp_transport_s;
      * pointer.  
      */
 
+    NETSNMP_IMPORT
     struct netsnmp_transport_s *snmp_sess_transport(void *);
     void            snmp_sess_transport_set(void *,
 					    struct netsnmp_transport_s *);
+
+    NETSNMP_IMPORT int
+    netsnmp_sess_config_transport(struct netsnmp_container_s *transport_configuration,
+                                  struct netsnmp_transport_s *transport);
+
+    NETSNMP_IMPORT int
+    netsnmp_sess_config_and_open_transport(netsnmp_session *in_session,
+                                           netsnmp_transport *transport);
 
     /*
      * EXPERIMENTAL API EXTENSIONS ------------------------------------------ 
@@ -479,6 +540,7 @@ struct netsnmp_transport_s;
                                   int (*fpost_parse) (netsnmp_session *,
                                                       netsnmp_pdu *, int));
 
+    NETSNMP_IMPORT
     netsnmp_session *snmp_add(netsnmp_session *,
                               struct netsnmp_transport_s *,
                               int (*fpre_parse) (netsnmp_session *,
@@ -486,6 +548,7 @@ struct netsnmp_transport_s;
                                                  *, void *, int),
                               int (*fpost_parse) (netsnmp_session *,
                                                   netsnmp_pdu *, int));
+    NETSNMP_IMPORT
     netsnmp_session *snmp_add_full(netsnmp_session * in_session,
                                    struct netsnmp_transport_s *transport,
                                    int (*fpre_parse) (netsnmp_session *,
@@ -595,7 +658,38 @@ struct netsnmp_transport_s;
 #define  STAT_TARGET_STATS_START             STAT_SNMPUNAVAILABLECONTEXTS
 #define  STAT_TARGET_STATS_END               STAT_SNMPUNKNOWNCONTEXTS
 
-#define  MAX_STATS                           43
+    /*
+     * TSM counters
+     */
+#define  STAT_TSM_SNMPTSMINVALIDCACHES             43
+#define  STAT_TSM_SNMPTSMINADEQUATESECURITYLEVELS  44
+#define  STAT_TSM_SNMPTSMUNKNOWNPREFIXES           45
+#define  STAT_TSM_SNMPTSMINVALIDPREFIXES           46
+#define  STAT_TSM_STATS_START                 STAT_TSM_SNMPTSMINVALIDCACHES
+#define  STAT_TSM_STATS_END                   STAT_TSM_SNMPTSMINVALIDPREFIXES
+
+    /*
+     * TLSTM counters
+     */
+#define  STAT_TLSTM_SNMPTLSTMSESSIONOPENS                      47
+#define  STAT_TLSTM_SNMPTLSTMSESSIONCLIENTCLOSES               48
+#define  STAT_TLSTM_SNMPTLSTMSESSIONOPENERRORS                 49
+#define  STAT_TLSTM_SNMPTLSTMSESSIONACCEPTS                    50
+#define  STAT_TLSTM_SNMPTLSTMSESSIONSERVERCLOSES               51
+#define  STAT_TLSTM_SNMPTLSTMSESSIONNOSESSIONS                 52
+#define  STAT_TLSTM_SNMPTLSTMSESSIONINVALIDCLIENTCERTIFICATES  53
+#define  STAT_TLSTM_SNMPTLSTMSESSIONUNKNOWNSERVERCERTIFICATE   54
+#define  STAT_TLSTM_SNMPTLSTMSESSIONINVALIDSERVERCERTIFICATES  55
+#define  STAT_TLSTM_SNMPTLSTMSESSIONINVALIDCACHES              56
+
+#define  STAT_TLSTM_STATS_START                 STAT_TLSTM_SNMPTLSTMSESSIONOPENS
+#define  STAT_TLSTM_STATS_END          STAT_TLSTM_SNMPTLSTMSESSIONINVALIDCACHES
+
+    /* this previously was end+1; don't know why the +1 is needed;
+       XXX: check the code */
+#define  NETSNMP_STAT_MAX_STATS              (STAT_TLSTM_STATS_END+1)
+/** backwards compatability */
+#define MAX_STATS NETSNMP_STAT_MAX_STATS
 
 #ifdef __cplusplus
 }

@@ -57,6 +57,10 @@ static char *rcsid = "$OpenBSD: main.c,v 1.52 2005/02/10 14:25:08 itojun Exp $";
 #include "main.h"
 #include "netstat.h"
 
+#if HAVE_WINSOCK_H
+#include "winstub.h"
+#endif
+
 int	Aflag;		/* show addresses of protocol control block */
 int	aflag;		/* show all sockets (including servers) */
 int	bflag;		/* show bytes instead of packets */
@@ -316,11 +320,13 @@ main(int argc, char *argv[])
             progname = argv[0];
 
 	switch (snmp_parse_args( argc, argv, &session, "C:iRs", optProc)) {
-	case -2:
+	case NETSNMP_PARSE_ARGS_ERROR:
+	    exit(1);
+	case NETSNMP_PARSE_ARGS_SUCCESS_EXIT:
 	    exit(0);
-	case -1:
+	case NETSNMP_PARSE_ARGS_ERROR_USAGE:
 	    usage();
-	    exit(0);
+	    exit(1);
 	default:
 	    break;
 	}
@@ -511,7 +517,7 @@ name2protox(const char *name)
 
 	setprotoent(1);			/* make protocol lookup cheaper */
 	while ((p = getprotoent())) {
-		/* assert: name not same as p->name */
+		/* netsnmp_assert: name not same as p->name */
 		for (alias = p->p_aliases; *alias; alias++)
 			if (strcmp(name, *alias) == 0) {
 				endprotoent();

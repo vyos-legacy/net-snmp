@@ -10,9 +10,6 @@
 #include <net-snmp/net-snmp-config.h>
 
 #include <sys/types.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -401,7 +398,7 @@ write_snmpNotifyFilterProfileName(int action,
          */
         tmpvar = StorageTmp->snmpNotifyFilterProfileName;
         tmplen = StorageTmp->snmpNotifyFilterProfileNameLen;
-        StorageTmp->snmpNotifyFilterProfileName = calloc(1, var_val_len + 1);
+        StorageTmp->snmpNotifyFilterProfileName = (char*)calloc(1, var_val_len + 1);
         if (NULL == StorageTmp->snmpNotifyFilterProfileName)
             return SNMP_ERR_RESOURCEUNAVAILABLE;
         break;
@@ -441,6 +438,7 @@ write_snmpNotifyFilterProfileName(int action,
          * permanently.  Make sure that anything done here can't fail! 
          */
         SNMP_FREE(tmpvar);
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -533,7 +531,7 @@ write_snmpNotifyFilterProfileStorType(int action,
          * Things are working well, so it's now safe to make the change
          * permanently.  Make sure that anything done here can't fail! 
          */
-
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -786,6 +784,7 @@ write_snmpNotifyFilterProfileRowStatus(int action,
                 StorageTmp->snmpNotifyFilterProfileRowStatus = RS_NOTINSERVICE;
             StorageNew = NULL;
         }
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;

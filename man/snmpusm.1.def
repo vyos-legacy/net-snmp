@@ -1,10 +1,9 @@
-.TH SNMPUSM 1 "22 Oct 2005" VVERSIONINFO "Net-SNMP"
-.UC 4
+.TH SNMPUSM 1 "11 Dec 2009" VVERSIONINFO "Net-SNMP"
 .SH NAME
 snmpusm - creates and maintains SNMPv3 users on a network entity
 .SH SYNOPSIS
 .B snmpusm
-[COMMON OPTIONS]
+[COMMON OPTIONS] [-Cw]
 .B create
 USER [CLONEFROM-USER]
 .br
@@ -83,7 +82,10 @@ This constructs an (inactive) entry in the usmUserTable,
 with no authentication or privacy settings.
 In principle, this user should be useable for 'noAuthNoPriv' requests,
 but in practise the Net-SNMP agent will not allow such an entry
-to be made active.
+to be made active.  The user can be created via the createAndWait
+operation instead by using the -Ca flag.  This will prevent the user
+from being marked as active in any agent until explicitly activated
+later via the activate command.
 
 .PP
 In order to activate this entry, it is necessary to "clone" an existing

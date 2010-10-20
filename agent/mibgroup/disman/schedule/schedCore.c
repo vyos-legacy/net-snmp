@@ -11,6 +11,25 @@
 
 netsnmp_tdata *schedule_table;
 
+
+#ifndef HAVE_LOCALTIME_R
+/*
+ * localtime_r() replacement for MinGW.
+ * Note: this implementation is not thread-safe, while it should.
+ */
+struct tm      *
+localtime_r(const time_t * timer, struct tm *result)
+{
+    struct tm      *result_p;
+
+    result_p = localtime(timer);
+    if (result && result_p)
+        *result = *result_p;
+    return result_p;
+}
+#endif
+
+
     /*
      * Initialize the container for the schedule table,
      * regardless of which initialisation routine is called first.
@@ -84,10 +103,10 @@ _sched_callback( unsigned int reg, void *magic )
      * Internal utility routines to help interpret
      *  calendar-based schedule bit strings
      */
-static char _masks[] = { /* 0xff, */ 0x7f, 0x3f, 0x1f,
-                         0x0f, 0x07, 0x03, 0x01, 0x00 };
-static char _bits[]  = { 0x80, 0x40, 0x20, 0x10,
-                         0x08, 0x04, 0x02, 0x01 };
+static u_char _masks[] = { /* 0xff, */ 0x7f, 0x3f, 0x1f,
+                           0x0f, 0x07, 0x03, 0x01, 0x00 };
+static u_char _bits[]  = { 0x80, 0x40, 0x20, 0x10,
+                           0x08, 0x04, 0x02, 0x01 };
 
 /*
  * Are any of the bits set?
@@ -146,7 +165,7 @@ _bit_next( char *pattern, int current, size_t len ) {
         /*
          * Look for the first bit that's set
          */
-    for ( i=0; i<len; i++ ) {
+    for ( i=0; i<(int)len; i++ ) {
         if ( buf[i] != 0 ) {
             major = i*8;
             for ( j=0; j<8; j++ ) {
@@ -164,9 +183,9 @@ static int _daysPerMonth[] = { 31, 28, 31, 30,
                                31, 30, 31, 31,
                                30, 31, 30, 31, 29 };
 
-static char _truncate[] = { 0xfe, 0xf0, 0xfe, 0xfc,
-                            0xfe, 0xfc, 0xfe, 0xfe,
-                            0xfc, 0xfe, 0xfc, 0xfe, 0xf8 };
+static u_char _truncate[] = { 0xfe, 0xf0, 0xfe, 0xfc,
+                              0xfe, 0xfc, 0xfe, 0xfe,
+                              0xfc, 0xfe, 0xfc, 0xfe, 0xf8 };
 
 /*
  * What is the next day with a relevant bit set?
@@ -449,13 +468,15 @@ schedTable_createEntry(const char *schedOwner, const char *schedName)
      */
     if (schedOwner) {
         memcpy(entry->schedOwner, schedOwner, strlen(schedOwner));
+        netsnmp_tdata_row_add_index(row, ASN_OCTET_STR,
+                           entry->schedOwner, strlen(schedOwner));
     }
+    else
+        netsnmp_tdata_row_add_index(row, ASN_OCTET_STR, "", 0 );
+
     memcpy(    entry->schedName,  schedName,  strlen(schedName));
     netsnmp_tdata_row_add_index(row, ASN_OCTET_STR,
-                                (entry->schedOwner || ""),
-                                ((schedOwner) ? strlen(schedOwner) : 0));
-    netsnmp_tdata_row_add_index(row, ASN_OCTET_STR,
-                                entry->schedName,  strlen(schedName));
+                           entry->schedName,  strlen(schedName));
     /*
      * Set the (non-zero) default values in the row data structure.
      */

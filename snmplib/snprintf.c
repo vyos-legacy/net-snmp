@@ -803,4 +803,6 @@ main(void)
 }
 #endif                          /* SNPRINTF_TEST */
 
+#else
+int snprintf_unused;	/* Suppress "empty translation unit" warning */
 #endif                          /* !HAVE_SNPRINTF */

@@ -73,11 +73,7 @@ PERFORMANCE OF THIS SOFTWARE.
 #include <fcntl.h>
 
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -85,9 +81,6 @@ PERFORMANCE OF THIS SOFTWARE.
 # else
 #  include <time.h>
 # endif
-#endif
-#if HAVE_WINSOCK_H
-# include <winsock.h>
 #endif
 #if HAVE_SYS_SOCKET_H
 # include <sys/socket.h>
@@ -234,8 +227,6 @@ u_char          return_buf[258];
 u_char          return_buf[256];        /* nee 64 */
 #endif
 
-struct timeval  starttime;
-
 int             callback_master_num = -1;
 
 #ifdef NETSNMP_TRANSPORT_CALLBACK_DOMAIN
@@ -283,9 +274,7 @@ init_agent(const char *app)
     /*
      * get current time (ie, the time the agent started) 
      */
-    gettimeofday(&starttime, NULL);
-    starttime.tv_sec--;
-    starttime.tv_usec += 1000000L;
+    netsnmp_set_agent_starttime(NULL);
 
     /*
      * we handle alarm signals ourselves in the select loop 
@@ -317,9 +306,11 @@ init_agent(const char *app)
      * initialize agentx configs
      */
     agentx_config_init();
+#if defined(USING_AGENTX_SUBAGENT_MODULE)
     if(netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
                               NETSNMP_DS_AGENT_ROLE) == SUB_AGENT)
         subagent_init();
+#endif
 #endif
 
     /*
@@ -372,6 +363,9 @@ shutdown_agent(void) {
     clear_callback();
     clear_user_list();
     netsnmp_addrcache_destroy();
+#ifdef NETSNMP_CAN_USE_NLIST
+    free_kmem();
+#endif
 
     done_init_agent = 0;
 }

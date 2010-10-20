@@ -39,9 +39,6 @@
 #include <strings.h>
 #endif
 #include <sys/types.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_SYS_SYSCTL_H
 #ifdef _I_DEFINED_KERNEL
 #undef _KERNEL
@@ -959,7 +956,7 @@ var_ipAddrEntry(struct variable *vp,
 
 #endif                          /* NETSNMP_CAN_USE_SYSCTL && IPCTL_STATS */
 
-#else                           /* WIN32 cygwin */
+#elif defined(HAVE_IPHLPAPI_H)  /* WIN32 cygwin */
 #include <iphlpapi.h>
 u_char         *
 var_ipAddrEntry(struct variable *vp,

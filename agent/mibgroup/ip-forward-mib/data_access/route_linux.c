@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: route_linux.c 17099 2008-07-02 12:39:23Z jsafranek $
+ * $Id: route_linux.c 18994 2010-06-16 13:13:25Z dts12 $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -53,7 +53,7 @@ _load_ipv4(netsnmp_container* container, u_long *index )
      * fetch routes from the proc file-system:
      */
     if (!(in = fopen("/proc/net/route", "r"))) {
-        snmp_log(LOG_ERR, "cannot open /proc/net/route\n");
+        NETSNMP_LOGONCE((LOG_ERR, "cannot open /proc/net/route\n"));
         return -2;
     }
 
@@ -71,9 +71,9 @@ _load_ipv4(netsnmp_container* container, u_long *index )
 
     while (fgets(line, sizeof(line), in)) {
         char            rtent_name[32];
-        int             refcnt, flags, rc;
+        int             refcnt, rc;
         uint32_t        dest, nexthop, mask, tmp_mask;
-        unsigned        use;
+        unsigned        flags, use;
 
         entry = netsnmp_access_route_entry_create();
 
@@ -83,7 +83,7 @@ _load_ipv4(netsnmp_container* container, u_long *index )
          * BE eth0  00000000 C0A80101 0003  0      0   0   FFFFFFFF 1500 0   0 
          * LE eth0  00000000 0101A8C0 0003  0      0   0   00FFFFFF    0 0   0  
          */
-        rc = sscanf(line, "%s %x %x %x %u %d %d %x %*d %*d %*d\n",
+        rc = sscanf(line, "%s %x %x %x %d %u %d %x %*d %*d %*d\n",
                     rtent_name, &dest, &nexthop,
                     /*
                      * XXX: fix type of the args 
@@ -217,7 +217,7 @@ _load_ipv6(netsnmp_container* container, u_long *index )
      */
     if (!(in = fopen("/proc/net/ipv6_route", "r"))) {
         if (1 == log_open_err) {
-            snmp_log(LOG_ERR, "cannot open /proc/net/ipv6_route\n");
+            NETSNMP_LOGONCE((LOG_ERR, "cannot open /proc/net/ipv6_route\n"));
             log_open_err = 0;
         }
         return -2;

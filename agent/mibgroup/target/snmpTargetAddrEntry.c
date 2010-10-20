@@ -15,9 +15,6 @@
 #endif
 #include <stdlib.h>
 #include <ctype.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
@@ -128,7 +125,7 @@ snmpTargetAddrTable_addToList(struct targetAddrTable_struct *newEntry,
     /*
      * if the list is empty, add the new entry to the top 
      */
-    if ((prev_struct = curr_struct = *listPtr) == 0) {
+    if ((prev_struct = curr_struct = *listPtr) == NULL) {
         *listPtr = newEntry;
         return;
     } else {
@@ -143,7 +140,7 @@ snmpTargetAddrTable_addToList(struct targetAddrTable_struct *newEntry,
         /*
          * search through the list for an equal or greater OID value 
          */
-        while (curr_struct != 0) {
+        while (curr_struct != NULL) {
             currOIDLen = strlen(curr_struct->name);
             for (i = 0; i < (int) currOIDLen; i++) {
                 currOID[i] = curr_struct->name[i];
@@ -433,7 +430,7 @@ snmpTargetAddr_addTimeout(struct targetAddrTable_struct *entry, char *cptr)
         DEBUGMSGTL(("snmpTargetAddrEntry",
                     "ERROR snmpTargetParamsEntry: no Timeout in config string\n"));
         return (0);
-    } else if (!(isdigit(*cptr))) {
+    } else if (!(isdigit((unsigned char)(*cptr)))) {
         DEBUGMSGTL(("snmpTargetAddrEntry",
                     "ERROR snmpTargeParamsEntry: Timeout is not a digit in config string\n"));
         return (0);
@@ -458,7 +455,7 @@ snmpTargetAddr_addRetryCount(struct targetAddrTable_struct *entry,
         DEBUGMSGTL(("snmpTargetAddrEntry",
                     "ERROR snmpTargetParamsEntry: no Retry Count in config string\n"));
         return (0);
-    } else if (!(isdigit(*cptr))) {
+    } else if (!(isdigit((unsigned char)(*cptr)))) {
         DEBUGMSGTL(("snmpTargetAddrEntry",
                     "ERROR snmpTargeParamsEntry: Retry Count is not a digit in config string\n"));
         return (0);
@@ -481,17 +478,16 @@ snmpTargetAddr_addRetryCount(struct targetAddrTable_struct *entry,
 int
 snmpTargetAddr_addTagList(struct targetAddrTable_struct *entry, char *cptr)
 {
-    size_t          len;
     if (cptr == NULL) {
         DEBUGMSGTL(("snmpTargetAddrEntry",
                     "ERROR snmpTargetAddrEntry: no tag list in config string\n"));
         return (0);
     } else {
-        len = strlen(cptr);
+        size_t len = strlen(cptr);
         /*
          * spec check for string 0-255 
          */
-        if (len < 0 || len > 255) {
+        if (len > 255) {
             DEBUGMSGTL(("snmpTargetAddrEntry",
                         "ERROR snmpTargetAddrEntry: tag list out of range in config string\n"));
             return (0);
@@ -540,7 +536,7 @@ snmpTargetAddr_addStorageType(struct targetAddrTable_struct *entry,
                     "ERROR snmpTargetAddrEntry: no storage type in config "
                     "string\n"));
         return (0);
-    } else if (!(isdigit(*cptr))) {
+    } else if (!(isdigit((unsigned char)(*cptr)))) {
         DEBUGMSGTL(("snmpTargetAddrEntry",
                     "ERROR snmpTargetAddrEntry: storage type is not a digit "
                     "in config string\n"));
@@ -577,7 +573,7 @@ snmpTargetAddr_addRowStatus(struct targetAddrTable_struct *entry,
                     "ERROR snmpTargetAddrEntry: no Row Status in config "
                     "string\n"));
         return (0);
-    } else if (!(isdigit(*cptr))) {
+    } else if (!(isdigit((unsigned char)(*cptr)))) {
         DEBUGMSGTL(("snmpTargetAddrEntry",
                     "ERROR snmpTargetAddrEntry: Row Status is not a digit in "
                     "config string\n"));
@@ -1008,7 +1004,7 @@ write_snmpTargetAddrTAddress(int action,
                 return SNMP_ERR_INCONSISTENTVALUE;
             }
 
-            old_addr = target->tAddress;
+            old_addr = (char *) target->tAddress;
             old_len = target->tAddressLen;
             target->tAddress = (u_char *) malloc(var_val_len);
             if (target->tAddress == NULL) {
@@ -1041,7 +1037,7 @@ write_snmpTargetAddrTAddress(int action,
             if (target->storageType != SNMP_STORAGE_READONLY
                 && target->rowStatus != SNMP_ROW_ACTIVE) {
                 SNMP_FREE(target->tAddress);
-                target->tAddress = old_addr;
+                target->tAddress = (u_char *) old_addr;
                 target->tAddressLen = old_len;
                 if (target->rowStatus == SNMP_ROW_NOTINSERVICE &&
                     snmpTargetAddr_rowStatusCheck(target) == 0) {
@@ -1237,7 +1233,7 @@ write_snmpTargetAddrTagList(int action,
                         "write to snmpTargetAddrTagList: bad length\n"));
             return SNMP_ERR_WRONGLENGTH;
         }
-        if (!snmpTagListValid(var_val, var_val_len)) {
+        if (!snmpTagListValid((char *) var_val, var_val_len)) {
             return SNMP_ERR_WRONGVALUE;
         }
     } else if (action == RESERVE2) {
@@ -1326,7 +1322,7 @@ write_snmpTargetAddrParams(int action,
             }
 
             old_params = target->params;
-            target->params = (u_char *) malloc(var_val_len + 1);
+            target->params = (char*)malloc(var_val_len + 1);
             if (target->params == NULL) {
                 return SNMP_ERR_RESOURCEUNAVAILABLE;
             }
@@ -1501,7 +1497,7 @@ write_snmpTargetAddrRowStatus(int action,
                         "write to snmpTargetAddrRowStatus not ASN_INTEGER\n"));
             return SNMP_ERR_WRONGTYPE;
         }
-        if (var_val_len != sizeof(int)) {
+        if (var_val_len != sizeof(long)) {
             DEBUGMSGTL(("snmpTargetAddrEntry",
                         "write to snmpTargetAddrRowStatus: bad length\n"));
             return SNMP_ERR_WRONGLENGTH;

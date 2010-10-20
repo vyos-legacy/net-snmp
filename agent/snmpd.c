@@ -36,6 +36,7 @@
  * distributed with the Net-SNMP package.
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/types.h>
 
 #if HAVE_IO_H
 #include <io.h>
@@ -61,11 +62,7 @@
 #include <arpa/inet.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -79,8 +76,6 @@
 #endif
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
-#elif HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_NET_IF_H
 #include <net/if.h>
@@ -188,7 +183,7 @@ int             Facility = LOG_DAEMON;
 #define AGENT_STOPPED 0
 int             agent_status = AGENT_STOPPED;
 /* app_name_long used for Event Log (syslog), SCM, registry etc */
-LPTSTR          app_name_long = _T("Net-SNMP Agent");     /* Application Name */
+LPCTSTR         app_name_long = _T("Net-SNMP Agent");     /* Application Name */
 #endif
 
 const char     *app_name = "snmpd";
@@ -261,81 +256,90 @@ static void
 usage(char *prog)
 {
 #ifdef WIN32SERVICE
-    printf("\nUsage:  %s [-register] [-quiet] [OPTIONS] [LISTENING ADDRESSES]",
-           prog);
-    printf("\n        %s [-unregister] [-quiet]", prog);
+    printf("\nUsage:  %s [-register] [-quiet] [OPTIONS] [LISTENING ADDRESSES]"
+           "\n        %s [-unregister] [-quiet]", prog, prog);
 #else
     printf("\nUsage:  %s [OPTIONS] [LISTENING ADDRESSES]", prog);
 #endif
-    printf("\n");
-    printf("\n\tVersion:  %s\n", netsnmp_get_version());
-    printf("\tWeb:      http://www.net-snmp.org/\n");
-    printf("\tEmail:    net-snmp-coders@lists.sourceforge.net\n");
-    printf("\n  -a\t\t\tlog addresses\n");
-    printf("  -A\t\t\tappend to the logfile rather than truncating it\n");
-    printf("  -c FILE[,...]\t\tread FILE(s) as configuration file(s)\n");
-    printf("  -C\t\t\tdo not read the default configuration files\n");
-    printf("  -d\t\t\tdump sent and received SNMP packets\n");
-    printf("  -DTOKEN[,...]\tturn on debugging output for the given TOKEN(s)\n"
+    printf("\n"
+           "\n\tVersion:  %s\n%s"
+           "\t\t\t  (config search path: %s)\n%s%s",
+           netsnmp_get_version(),
+           "\tWeb:      http://www.net-snmp.org/\n"
+           "\tEmail:    net-snmp-coders@lists.sourceforge.net\n"
+           "\n  -a\t\t\tlog addresses\n"
+           "  -A\t\t\tappend to the logfile rather than truncating it\n"
+           "  -c FILE[,...]\t\tread FILE(s) as configuration file(s)\n"
+           "  -C\t\t\tdo not read the default configuration files\n",
+           get_configuration_directory(),
+           "  -d\t\t\tdump sent and received SNMP packets\n"
+           "  -D[TOKEN[,...]]\tturn on debugging output for the given TOKEN(s)\n"
 	   "\t\t\t  (try ALL for extremely verbose output)\n"
-	   "\t\t\t  Don't put space(s) between -D and TOKEN(s).\n");
-    printf("  -f\t\t\tdo not fork from the shell\n");
+	   "\t\t\t  Don't put space(s) between -D and TOKEN(s).\n"
+           "  -f\t\t\tdo not fork from the shell\n",
 #if HAVE_UNISTD_H
-    printf("  -g GID\t\tchange to this numeric gid after opening\n"
-	   "\t\t\t  transport endpoints\n");
+           "  -g GID\t\tchange to this numeric gid after opening\n"
+	   "\t\t\t  transport endpoints\n"
 #endif
-    printf("  -h, --help\t\tdisplay this usage message\n");
-    printf("  -H\t\t\tdisplay configuration file directives understood\n");
-    printf("  -I [-]INITLIST\tlist of mib modules to initialize (or not)\n");
-    printf("\t\t\t  (run snmpd with -Dmib_init for a list)\n");
-    printf("  -L <LOGOPTS>\t\ttoggle options controlling where to log to\n");
+           "  -h, --help\t\tdisplay this usage message\n"
+           "  -H\t\t\tdisplay configuration file directives understood\n"
+           "  -I [-]INITLIST\tlist of mib modules to initialize (or not)\n"
+           "\t\t\t  (run snmpd with -Dmib_init for a list)\n"
+           "  -L <LOGOPTS>\t\ttoggle options controlling where to log to\n");
     snmp_log_options_usage("\t", stdout);
-    printf("  -m MIBLIST\t\tuse MIBLIST instead of the default MIB list\n");
-    printf("  -M DIRLIST\t\tuse DIRLIST as the list of locations\n\t\t\t  to look for MIBs\n");
-    printf("  -p FILE\t\tstore process id in FILE\n");
-    printf("  -q\t\t\tprint information in a more parsable format\n");
-    printf("  -r\t\t\tdo not exit if files only accessible to root\n"
-	   "\t\t\t  cannot be opened\n");
+    printf("  -m MIBLIST\t\tuse MIBLIST instead of the default MIB list\n"
+           "  -M DIRLIST\t\tuse DIRLIST as the list of locations to look for MIBs\n"
+           "\t\t\t  (default %s)\n%s%s",
+#ifndef NETSNMP_DISABLE_MIB_LOADING
+           netsnmp_get_mib_directory(),
+#else
+           "MIBs not loaded",
+#endif
+           "  -p FILE\t\tstore process id in FILE\n"
+           "  -q\t\t\tprint information in a more parsable format\n"
+           "  -r\t\t\tdo not exit if files only accessible to root\n"
+	   "\t\t\t  cannot be opened\n"
 #ifdef WIN32SERVICE
-    printf("  -register\t\tregister as a Windows service\n");
-    printf("  \t\t\t  (followed by -quiet to prevent message popups)\n");
-    printf("  \t\t\t  (followed by the startup parameter list)\n");
-    printf("  \t\t\t  Note that some parameters are not relevant when running as a service\n");
+           "  -register\t\tregister as a Windows service\n"
+           "  \t\t\t  (followed by -quiet to prevent message popups)\n"
+           "  \t\t\t  (followed by the startup parameter list)\n"
+           "  \t\t\t  Note that some parameters are not relevant when running as a service\n"
 #endif
 #if HAVE_UNISTD_H
-    printf("  -u UID\t\tchange to this uid (numeric or textual) after\n"
-	   "\t\t\t  opening transport endpoints\n");
+           "  -u UID\t\tchange to this uid (numeric or textual) after\n"
+	   "\t\t\t  opening transport endpoints\n"
 #endif
 #ifdef WIN32SERVICE
-    printf("  -unregister\t\tunregister as a Windows service\n");
-    printf("  \t\t\t  (followed -quiet to prevent message popups)\n");
+           "  -unregister\t\tunregister as a Windows service\n"
+           "  \t\t\t  (followed -quiet to prevent message popups)\n"
 #endif
-    printf("  -v, --version\t\tdisplay version information\n");
-    printf("  -V\t\t\tverbose display\n");
+           "  -v, --version\t\tdisplay version information\n"
+           "  -V\t\t\tverbose display\n"
 #if defined(USING_AGENTX_SUBAGENT_MODULE)|| defined(USING_AGENTX_MASTER_MODULE)
-    printf("  -x ADDRESS\t\tuse ADDRESS as AgentX address\n");
+           "  -x ADDRESS\t\tuse ADDRESS as AgentX address\n"
 #endif
 #ifdef USING_AGENTX_SUBAGENT_MODULE
-    printf("  -X\t\t\trun as an AgentX subagent rather than as an\n"
-	   "\t\t\t  SNMP master agent\n");
+           "  -X\t\t\trun as an AgentX subagent rather than as an\n"
+	   "\t\t\t  SNMP master agent\n"
 #endif
-
-    printf("\nDeprecated options:\n");
-    printf("  -l FILE\t\tuse -Lf <FILE> instead\n");
-    printf("  -P\t\t\tuse -p instead\n");
-    printf("  -s\t\t\tuse -Lsd instead\n");
-    printf("  -S d|i|0-7\t\tuse -Ls <facility> instead\n");
-
-    printf("\n");
+           ,
+           "\nDeprecated options:\n"
+           "  -l FILE\t\tuse -Lf <FILE> instead\n"
+           "  -P\t\t\tuse -p instead\n"
+           "  -s\t\t\tuse -Lsd instead\n"
+           "  -S d|i|0-7\t\tuse -Ls <facility> instead\n"
+           "\n"
+           );
     exit(1);
 }
 
 static void
 version(void)
 {
-    printf("\nNET-SNMP version:  %s\n", netsnmp_get_version());
-    printf("Web:               http://www.net-snmp.org/\n");
-    printf("Email:             net-snmp-coders@lists.sourceforge.net\n\n");
+    printf("\nNET-SNMP version:  %s\n"
+           "Web:               http://www.net-snmp.org/\n"
+           "Email:             net-snmp-coders@lists.sourceforge.net\n\n",
+           netsnmp_get_version());
     exit(0);
 }
 
@@ -842,7 +846,7 @@ main(int argc, char *argv[])
             char *c, *astring;
             if ((c = netsnmp_ds_get_string(NETSNMP_DS_APPLICATION_ID, 
 					   NETSNMP_DS_AGENT_PORTS))) {
-                astring = malloc(strlen(c) + 2 + strlen(argv[i]));
+                astring = (char*)malloc(strlen(c) + 2 + strlen(argv[i]));
                 if (astring == NULL) {
                     fprintf(stderr, "malloc failure processing argv[%d]\n", i);
                     exit(1);
@@ -903,10 +907,6 @@ main(int argc, char *argv[])
     }
     *cptr = 0;
     *argvptr = NULL;
-
-#ifdef BUFSIZ
-    setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
-#endif
 
     SOCK_STARTUP;
     init_agent(app_name);        /* do what we need to do first. */
@@ -975,8 +975,10 @@ main(int argc, char *argv[])
     gid = netsnmp_ds_get_int(NETSNMP_DS_APPLICATION_ID, 
 			     NETSNMP_DS_AGENT_GROUPID);
     
+#ifdef HAVE_CHOWN
     if ( uid != 0 || gid != 0 )
         chown( persistent_dir, uid, gid );
+#endif
 
 #ifdef HAVE_SETGID
     if ((gid = netsnmp_ds_get_int(NETSNMP_DS_APPLICATION_ID, 
@@ -998,6 +1000,23 @@ main(int argc, char *argv[])
 #ifdef HAVE_SETUID
     if ((uid = netsnmp_ds_get_int(NETSNMP_DS_APPLICATION_ID, 
 				  NETSNMP_DS_AGENT_USERID)) != 0) {
+#if HAVE_GETPWNAM && HAVE_PWD_H && HAVE_INITGROUPS
+        /*
+         * Set supplementary groups before changing UID
+         *   (which probably involves giving up privileges)
+         */
+        info = getpwuid(uid);
+        if (info) {
+            DEBUGMSGTL(("snmpd/main", "Supplementary groups for %s.\n", info->pw_name));
+            if (initgroups(info->pw_name, (gid != 0 ? (gid_t)gid : info->pw_gid)) == -1) {
+                snmp_log_perror("initgroups failed");
+                if (!netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
+                                            NETSNMP_DS_AGENT_NO_ROOT_ACCESS)) {
+                    exit(1);
+                }
+            }
+        }
+#endif
         DEBUGMSGTL(("snmpd/main", "Changing uid to %d.\n", uid));
         if (setuid(uid) == -1) {
             snmp_log_perror("setuid failed");
@@ -1006,19 +1025,6 @@ main(int argc, char *argv[])
                 exit(1);
             }
         }
-#if HAVE_GETPWNAM && HAVE_PWD_H && HAVE_INITGROUPS
-        info = getpwuid(uid);
-        if (info) {
-            DEBUGMSGTL(("snmpd/main", "Supplementary groups for %s.\n", info->pw_name));
-            if (initgroups(info->pw_name, (gid != 0 ? gid : info->pw_gid)) == -1) {
-                if (!netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
-                                            NETSNMP_DS_AGENT_NO_ROOT_ACCESS)) {
-                    snmp_log_perror("initgroups failed");
-                    exit(1);
-                }
-            }
-        }
-#endif
     }
 #endif
 #endif
@@ -1244,6 +1250,11 @@ receive(void)
                 snmp_log(LOG_ERR, "select returned %d\n", count);
                 return -1;
             }                   /* endif -- count>0 */
+
+        /*
+         * see if persistent store needs to be saved
+         */
+        snmp_store_if_needed();
 
         /*
          * run requested alarms 

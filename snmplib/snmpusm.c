@@ -24,19 +24,12 @@
 #include <net-snmp/net-snmp-config.h>
 
 #include <sys/types.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -473,7 +466,7 @@ usm_calc_offsets(size_t globalDataLen,  /* SNMPv3Message + HeaderData */
                     engBtlen,   /*   for fields within                     */
                     engTmlen,   /*   msgSecurityParameters portion of      */
                     namelen,    /*   SNMPv3Message.                        */
-                    authlen, privlen;
+                    authlen, privlen, ret;
 
     /*
      * If doing authentication, msgAuthParmLen = 12 else msgAuthParmLen = 0.
@@ -523,15 +516,17 @@ usm_calc_offsets(size_t globalDataLen,  /* SNMPv3Message + HeaderData */
     *seq_len =
         engIDlen + engBtlen + engTmlen + namelen + authlen + privlen;
 
-    if ((*otstlen = asn_predict_length(ASN_SEQUENCE,
-                                       NULL, *seq_len)) == -1) {
+    if ((ret = asn_predict_length(ASN_SEQUENCE,
+                                      NULL, *seq_len)) == -1) {
         return -1;
     }
+    *otstlen = (size_t)ret;
 
-    if ((*msgSecParmLen = asn_predict_length(ASN_OCTET_STR,
-                                             NULL, *otstlen)) == -1) {
+    if ((ret = asn_predict_length(ASN_OCTET_STR,
+                                      NULL, *otstlen)) == -1) {
         return -1;
     }
+    *msgSecParmLen = (size_t)ret;
 
     *authParamsOffset = globalDataLen + +(*msgSecParmLen - *seq_len)
         + engIDlen + engBtlen + engTmlen + namelen
@@ -556,10 +551,10 @@ usm_calc_offsets(size_t globalDataLen,  /* SNMPv3Message + HeaderData */
     if (secLevel == SNMP_SEC_LEVEL_AUTHPRIV) {
         scopedPduLen = ROUNDUP8(scopedPduLen);
 
-        if ((*datalen =
-             asn_predict_length(ASN_OCTET_STR, NULL, scopedPduLen)) == -1) {
+        if ((ret = asn_predict_length(ASN_OCTET_STR, NULL, scopedPduLen)) == -1) {
             return -1;
         }
+        *datalen = (size_t)ret;
     } else {
         *datalen = scopedPduLen;
     }
@@ -1967,7 +1962,7 @@ usm_parse_security_parameters(u_char * secParams,
     /*
      * FIX -- doesn't this also indicate a buffer overrun?
      */
-    if ((int) origNameLen < *secNameLen + 1) {
+    if (origNameLen < *secNameLen + 1) {
         /*
          * RETURN parse error, but it's really a parameter error 
          */
@@ -2113,7 +2108,7 @@ usm_check_and_update_timeliness(u_char * secEngineID,
     /*
      * This is a local reference.
      */
-    if ((int) secEngineIDLen == myIDLength
+    if (secEngineIDLen == myIDLength
         && memcmp(secEngineID, myID, myIDLength) == 0) {
         u_int           time_difference = myTime > time_uint ?
             myTime - time_uint : time_uint - myTime;
@@ -2443,11 +2438,18 @@ usm_process_in_msg(int msgProcModel,    /* (UNUSED) */
         return SNMPERR_USM_UNKNOWNSECURITYNAME;
     }
 
+    /* ensure the user is active */
+    if (user->userStatus != RS_ACTIVE) {
+        DEBUGMSGTL(("usm", "Attempt to use an inactive user.\n"));
+        return SNMPERR_USM_UNKNOWNSECURITYNAME;
+    }
 
     /*
      * Make sure the security level is appropriate.
      */
-    if (usm_check_secLevel(secLevel, user) == 1) {
+
+    rc = usm_check_secLevel(secLevel, user);
+    if (1 == rc) {
         DEBUGMSGTL(("usm", "Unsupported Security Level (%d).\n",
                     secLevel));
         if (snmp_increment_statistic
@@ -2455,8 +2457,10 @@ usm_process_in_msg(int msgProcModel,    /* (UNUSED) */
             DEBUGMSGTL(("usm", "%s\n", "Failed to increment statistic."));
         }
         return SNMPERR_USM_UNSUPPORTEDSECURITYLEVEL;
+    } else if (rc != 0) {
+        DEBUGMSGTL(("usm", "Unknown issue.\n"));
+        return SNMPERR_USM_GENERICERROR;
     }
-
 
     /*
      * Check the authentication credentials of the message.
@@ -2597,6 +2601,17 @@ usm_process_in_msg(int msgProcModel,    /* (UNUSED) */
 
             end_of_overhead = value_ptr;
 
+            if ( !user->privKey ) {
+                DEBUGMSGTL(("usm", "No privacy pass phrase for %s\n", user->secName));
+                if (snmp_increment_statistic(STAT_USMSTATSDECRYPTIONERRORS) ==
+                    0) {
+                    DEBUGMSGTL(("usm", "%s\n", "Failed increment statistic."));
+                }
+                usm_free_usmStateReference(*secStateRef);
+                *secStateRef = NULL;
+                return SNMPERR_USM_DECRYPTIONERROR;
+            }
+
             /*
              * XOR the salt with the last (iv_length) bytes
              * of the priv_key to obtain the IV.
@@ -2656,8 +2671,7 @@ usm_process_in_msg(int msgProcModel,    /* (UNUSED) */
      *
      * FIX  Correct? 
      */
-    *maxSizeResponse = maxMsgSize - (int)
-        ((u_long) end_of_overhead - (u_long) wholeMsg);
+    *maxSizeResponse = maxMsgSize - (end_of_overhead - wholeMsg);
 
 
     DEBUGMSGTL(("usm", "USM processing completed.\n"));
@@ -2717,13 +2731,111 @@ usm_handle_report(void *sessp,
         break;
     }       
 }
+
+/* sets up initial default session parameters */
+int
+usm_session_init(netsnmp_session *in_session, netsnmp_session *session)
+{
+    char *cp;
+    size_t i;
+    
+    if (in_session->securityAuthProtoLen > 0) {
+        session->securityAuthProto =
+            snmp_duplicate_objid(in_session->securityAuthProto,
+                                 in_session->securityAuthProtoLen);
+        if (session->securityAuthProto == NULL) {
+            in_session->s_snmp_errno = SNMPERR_MALLOC;
+            return SNMPERR_MALLOC;
+        }
+    } else if (get_default_authtype(&i) != NULL) {
+        session->securityAuthProto =
+            snmp_duplicate_objid(get_default_authtype(NULL), i);
+        session->securityAuthProtoLen = i;
+    }
+
+    if (in_session->securityPrivProtoLen > 0) {
+        session->securityPrivProto =
+            snmp_duplicate_objid(in_session->securityPrivProto,
+                                 in_session->securityPrivProtoLen);
+        if (session->securityPrivProto == NULL) {
+            in_session->s_snmp_errno = SNMPERR_MALLOC;
+            return SNMPERR_MALLOC;
+        }
+    } else if (get_default_privtype(&i) != NULL) {
+        session->securityPrivProto =
+            snmp_duplicate_objid(get_default_privtype(NULL), i);
+        session->securityPrivProtoLen = i;
+    }
+
+    if ((in_session->securityAuthKeyLen <= 0) &&
+        ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
+				     NETSNMP_DS_LIB_AUTHMASTERKEY)))) {
+        size_t buflen = sizeof(session->securityAuthKey);
+        u_char *tmpp = session->securityAuthKey;
+        session->securityAuthKeyLen = 0;
+        /* it will be a hex string */
+        if (!snmp_hex_to_binary(&tmpp, &buflen,
+                                &session->securityAuthKeyLen, 0, cp)) {
+            snmp_set_detail("error parsing authentication master key");
+            return SNMP_ERR_GENERR;
+        }
+    } else if ((in_session->securityAuthKeyLen <= 0) &&
+               ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
+                                            NETSNMP_DS_LIB_AUTHPASSPHRASE)) ||
+                (cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
+                                            NETSNMP_DS_LIB_PASSPHRASE)))) {
+        session->securityAuthKeyLen = USM_AUTH_KU_LEN;
+        if (generate_Ku(session->securityAuthProto,
+                        session->securityAuthProtoLen,
+                        (u_char *) cp, strlen(cp),
+                        session->securityAuthKey,
+                        &session->securityAuthKeyLen) != SNMPERR_SUCCESS) {
+            snmp_set_detail
+                ("Error generating a key (Ku) from the supplied authentication pass phrase.");
+            return SNMP_ERR_GENERR;
+        }
+    }
+
+    
+    if ((in_session->securityPrivKeyLen <= 0) &&
+        ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
+				     NETSNMP_DS_LIB_PRIVMASTERKEY)))) {
+        size_t buflen = sizeof(session->securityPrivKey);
+        u_char *tmpp = session->securityPrivKey;
+        session->securityPrivKeyLen = 0;
+        /* it will be a hex string */
+        if (!snmp_hex_to_binary(&tmpp, &buflen,
+                                &session->securityPrivKeyLen, 0, cp)) {
+            snmp_set_detail("error parsing encryption master key");
+            return SNMP_ERR_GENERR;
+        }
+    } else if ((in_session->securityPrivKeyLen <= 0) &&
+               ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
+                                            NETSNMP_DS_LIB_PRIVPASSPHRASE)) ||
+                (cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
+                                            NETSNMP_DS_LIB_PASSPHRASE)))) {
+        session->securityPrivKeyLen = USM_PRIV_KU_LEN;
+        if (generate_Ku(session->securityAuthProto,
+                        session->securityAuthProtoLen,
+                        (u_char *) cp, strlen(cp),
+                        session->securityPrivKey,
+                        &session->securityPrivKeyLen) != SNMPERR_SUCCESS) {
+            snmp_set_detail
+                ("Error generating a key (Ku) from the supplied privacy pass phrase.");
+            return SNMP_ERR_GENERR;
+        }
+    }
+
+    return SNMPERR_SUCCESS;
+}
+
 void
 init_usm(void)
 {
     struct snmp_secmod_def *def;
 
-    DEBUGMSGTL(("init_usm", "unit_usm: %lu %lu\n", usmNoPrivProtocol[0],
-                usmNoPrivProtocol[1]));
+    DEBUGMSGTL(("init_usm", "unit_usm: %" NETSNMP_PRIo "u %" NETSNMP_PRIo "u\n",
+                usmNoPrivProtocol[0], usmNoPrivProtocol[1]));
 
     sc_init();                  /* initalize scapi code */
 
@@ -2740,6 +2852,7 @@ init_usm(void)
     def->encode_forward = usm_secmod_generate_out_msg;
     def->decode = usm_secmod_process_in_msg;
     def->pdu_free_state_ref = usm_free_usmStateReference;
+    def->session_setup = usm_session_init;
     def->handle_report = usm_handle_report;
     register_sec_mod(USM_SEC_MODEL_NUMBER, "usm", def);
 
@@ -2883,8 +2996,8 @@ usm_check_secLevel(int level, struct usmUser *user)
     if (user->userStatus != RS_ACTIVE)
         return -1;
 
-    DEBUGMSGTL(("comparex", "Comparing: %lu %lu ", usmNoPrivProtocol[0],
-                usmNoPrivProtocol[1]));
+    DEBUGMSGTL(("comparex", "Comparing: %" NETSNMP_PRIo "u %" NETSNMP_PRIo "u ",
+                usmNoPrivProtocol[0], usmNoPrivProtocol[1]));
     DEBUGMSGOID(("comparex", usmNoPrivProtocol,
                  sizeof(usmNoPrivProtocol) / sizeof(oid)));
     DEBUGMSG(("comparex", "\n"));
@@ -3494,11 +3607,11 @@ usm_save_user(struct usmUser *user, const char *token, const char *type)
     *cptr++ = ' ';
     cptr = read_config_save_octet_string(cptr, (u_char *) user->name,
                                          (user->name == NULL) ? 0 :
-                                         strlen(user->name) + 1);
+                                         strlen(user->name));
     *cptr++ = ' ';
     cptr = read_config_save_octet_string(cptr, (u_char *) user->secName,
                                          (user->secName == NULL) ? 0 :
-                                         strlen(user->secName) + 1);
+                                         strlen(user->secName));
     *cptr++ = ' ';
     cptr =
         read_config_save_objid(cptr, user->cloneFrom, user->cloneFromLen);
@@ -3528,7 +3641,7 @@ usm_save_user(struct usmUser *user, const char *token, const char *type)
  * and returns a pointer to a newly created struct usmUser. 
  */
 struct usmUser *
-usm_read_user(char *line)
+usm_read_user(const char *line)
 {
     struct usmUser *user;
     size_t          len;
@@ -3539,11 +3652,11 @@ usm_read_user(char *line)
         return NULL;
 
     user->userStatus = atoi(line);
-    line = skip_token(line);
+    line = skip_token_const(line);
     user->userStorageType = atoi(line);
-    line = skip_token(line);
-    line = read_config_read_octet_string(line, &user->engineID,
-                                         &user->engineIDLen);
+    line = skip_token_const(line);
+    line = read_config_read_octet_string_const(line, &user->engineID,
+                                               &user->engineIDLen);
 
     /*
      * set the lcd entry for this engineID to the minimum boots/time
@@ -3560,22 +3673,21 @@ usm_read_user(char *line)
     SNMP_FREE(user->cloneFrom);
     user->cloneFromLen = 0;
 
-    line =
-        read_config_read_objid(line, &user->cloneFrom,
-                               &user->cloneFromLen);
+    line = read_config_read_objid_const(line, &user->cloneFrom,
+                                        &user->cloneFromLen);
 
     SNMP_FREE(user->authProtocol);
     user->authProtocolLen = 0;
 
-    line = read_config_read_objid(line, &user->authProtocol,
-                                  &user->authProtocolLen);
-    line = read_config_read_octet_string(line, &user->authKey,
-                                         &user->authKeyLen);
+    line = read_config_read_objid_const(line, &user->authProtocol,
+                                        &user->authProtocolLen);
+    line = read_config_read_octet_string_const(line, &user->authKey,
+                                               &user->authKeyLen);
     SNMP_FREE(user->privProtocol);
     user->privProtocolLen = 0;
 
-    line = read_config_read_objid(line, &user->privProtocol,
-                                  &user->privProtocolLen);
+    line = read_config_read_objid_const(line, &user->privProtocol,
+                                        &user->privProtocolLen);
     line = read_config_read_octet_string(line, &user->privKey,
                                          &user->privKeyLen);
 #ifndef NETSNMP_DISABLE_DES

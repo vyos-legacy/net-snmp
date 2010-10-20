@@ -84,8 +84,8 @@ netsnmp_cpu_info *netsnmp_cpu_get_byIdx(  int idx, int create ) {
          */
     cpu = SNMP_MALLOC_TYPEDEF( netsnmp_cpu_info );
     if (!cpu) {
-        return NULL;
         DEBUGMSG(("cpu", "(failed)\n"));
+        return NULL;
     }
     DEBUGMSG(("cpu", "(created)\n"));
     cpu->idx = idx;
@@ -175,7 +175,7 @@ _cpu_update_stats( unsigned int reg, void* magic ) {
              * First time through, we need to create buffers
              * for the historical stats
              */
-            cpu->history  = calloc( _cpuHistoryLen, sizeof(struct netsnmp_cpu_history));
+            cpu->history  = (struct netsnmp_cpu_history *)calloc( _cpuHistoryLen, sizeof(struct netsnmp_cpu_history));
         } else {
             /*
              * Otherwise, rotate these values - in descending order

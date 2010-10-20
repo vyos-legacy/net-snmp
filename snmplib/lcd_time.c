@@ -8,9 +8,6 @@
 #include <net-snmp/net-snmp-config.h>
 
 #include <sys/types.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -21,11 +18,7 @@
 #include <strings.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -92,7 +85,7 @@ static Enginetime etimelist[ETIMELIST_SIZE];
  *            this is another matter.
  */
 int
-get_enginetime(u_char * engineID,
+get_enginetime(const u_char * engineID,
                u_int engineID_len,
                u_int * engineboot,
                u_int * engine_time, u_int authenticated)
@@ -339,7 +332,7 @@ void free_etimelist(void)
  * XXX	"Current time within the local engine" == time(NULL)...
  */
 int
-set_enginetime(u_char * engineID,
+set_enginetime(const u_char * engineID,
                u_int engineID_len,
                u_int engineboot, u_int engine_time, u_int authenticated)
 {
@@ -420,7 +413,7 @@ set_enginetime(u_char * engineID,
  * ASSUMES that no engineID will have more than one record in the list.
  */
 Enginetime
-search_enginetime_list(u_char * engineID, u_int engineID_len)
+search_enginetime_list(const u_char * engineID, u_int engineID_len)
 {
     int             rval = SNMPERR_SUCCESS;
     Enginetime      e = NULL;
@@ -478,7 +471,7 @@ search_enginetime_list(u_char * engineID, u_int engineID_len)
  *
  */
 int
-hash_engineID(u_char * engineID, u_int engineID_len)
+hash_engineID(const u_char * engineID, u_int engineID_len)
 {
     int             rval = SNMPERR_GENERR;
     size_t          buf_len = SNMP_MAXBUF;
@@ -518,7 +511,7 @@ hash_engineID(u_char * engineID, u_int engineID_len)
     SNMP_FREE(context);
     memset(buf, 0, SNMP_MAXBUF);
 
-    return (rval < 0) ? rval : (additive % ETIMELIST_SIZE);
+    return (rval < 0) ? rval : (int)(additive % ETIMELIST_SIZE);
 
 }                               /* end hash_engineID() */
 

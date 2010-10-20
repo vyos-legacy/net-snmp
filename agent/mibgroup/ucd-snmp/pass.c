@@ -23,9 +23,6 @@
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #ifdef WIN32
 #include <limits.h>
 #endif
@@ -128,23 +125,23 @@ asc2bin(char *p)
 int
 bin2asc(char *p, size_t n)
 {
-    int             i, flag = 0;
+    size_t          i, flag = 0;
     char            buffer[SNMP_MAXBUF];
 
     /* prevent buffer overflow */
-    if ((int)n > (sizeof(buffer) - 1))
+    if (n > (sizeof(buffer) - 1))
         n = sizeof(buffer) - 1;
 
-    for (i = 0; i < (int) n; i++) {
+    for (i = 0; i < n; i++) {
         buffer[i] = p[i];
-        if (!isprint(p[i]))
+        if (!isprint((unsigned char)(p[i])))
             flag = 1;
     }
     if (flag == 0) {
         p[n] = 0;
         return n;
     }
-    for (i = 0; i < (int) n; i++) {
+    for (i = 0; i < n; i++) {
         sprintf(p, "%02x ", (unsigned char) (buffer[i] & 0xff));
         p += 3;
     }
@@ -226,7 +223,7 @@ pass_parse_config(const char *token, char *cptr)
 	/* change priority level */
 	cptr++;
 	cptr = skip_white(cptr);
-	if (! isdigit(*cptr)) {
+	if (! isdigit((unsigned char)(*cptr))) {
 	  config_perror("priority must be an integer");
 	  return;
 	}
@@ -249,7 +246,7 @@ pass_parse_config(const char *token, char *cptr)
      */
     if (*cptr == '.')
         cptr++;
-    if (!isdigit(*cptr)) {
+    if (!isdigit((unsigned char)(*cptr))) {
         config_perror("second token is not a OID");
         return;
     }
@@ -263,7 +260,7 @@ pass_parse_config(const char *token, char *cptr)
     (*ppass)->type = PASSTHRU;
 
     (*ppass)->miblen = parse_miboid(cptr, (*ppass)->miboid);
-    while (isdigit(*cptr) || *cptr == '.')
+    while (isdigit((unsigned char)(*cptr)) || *cptr == '.')
         cptr++;
     /*
      * path
@@ -420,13 +417,8 @@ var_extensible_pass(struct variable *vp,
                 else if (!strncasecmp(buf, "integer64", 9)) {
                     static struct counter64 c64;
                     uint64_t v64 = strtoull(buf2, NULL, 10);
-                    if (sizeof(long) > 4) {    /* 64-bit machine */
-                        c64.high = v64 >> 32;
-                        c64.low = v64 & 0xffffffff;
-                    }
-                    else {    /* 32-bit machine */
-                        *((uint64_t *) &c64) = v64;
-                    }
+                    c64.high = (unsigned long)(v64 >> 32);
+                    c64.low  = (unsigned long)(v64 & 0xffffffff);
                     *var_len = sizeof(c64);
                     vp->type = ASN_INTEGER64;
                     return ((unsigned char *) &c64);
@@ -445,13 +437,8 @@ var_extensible_pass(struct variable *vp,
                 else if (!strncasecmp(buf, "counter64", 9)) {
                     static struct counter64 c64;
                     uint64_t v64 = strtoull(buf2, NULL, 10);
-                    if (sizeof(long) > 4) {    /* 64-bit machine */
-                        c64.high = v64 >> 32;
-                        c64.low = v64 & 0xffffffff;
-                    }
-                    else {    /* 32-bit machine */
-                        *((uint64_t *) &c64) = v64;
-                    }
+                    c64.high = (unsigned long)(v64 >> 32);
+                    c64.low  = (unsigned long)(v64 & 0xffffffff);
                     *var_len = sizeof(c64);
                     vp->type = ASN_COUNTER64;
                     return ((unsigned char *) &c64);
@@ -588,7 +575,7 @@ setPass(int action,
                 buf[ sizeof(buf)-1 ] = 0;
                 break;
             }
-            strncat(passthru->command, buf, sizeof(passthru->command));
+            strncat(passthru->command, buf, sizeof(passthru->command)-strlen(passthru->command)-1);
             passthru->command[ sizeof(passthru->command)-1 ] = 0;
             DEBUGMSGTL(("ucd-snmp/pass", "pass-running:  %s",
                         passthru->command));

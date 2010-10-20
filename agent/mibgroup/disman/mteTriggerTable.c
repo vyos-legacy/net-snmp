@@ -193,17 +193,6 @@ init_mteTriggerTable(void)
     se_add_pair_to_slist("mteBooleanOperators", strdup(">="),
                          MTETRIGGERBOOLEANCOMPARISON_GREATEROREQUAL);
 
-#ifdef NETSNMP_TRANSPORT_CALLBACK_DOMAIN
-    /*
-     * open a 'callback' session to the main agent 
-     */
-    if (mte_callback_sess == NULL) {
-        mte_callback_sess = netsnmp_callback_open(callback_master_num,
-                                                  NULL, NULL, NULL);
-        DEBUGMSGTL(("mteTriggerTable", "created callback session = %08x\n",
-                    mte_callback_sess));
-    }
-#endif
     DEBUGMSGTL(("mteTriggerTable", "done.\n"));
 }
 
@@ -1617,6 +1606,7 @@ write_mteTriggerComment(int action,
          * permanently.  Make sure that anything done here can't fail! 
          */
         SNMP_FREE(tmpvar);
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -1704,6 +1694,7 @@ write_mteTriggerTest(int action,
          * permanently.  Make sure that anything done here can't fail! 
          */
         SNMP_FREE(tmpvar);
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -1786,7 +1777,7 @@ write_mteTriggerSampleType(int action,
          * Things are working well, so it's now safe to make the change
          * permanently.  Make sure that anything done here can't fail! 
          */
-
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -1881,6 +1872,7 @@ write_mteTriggerValueID(int action,
          * previous values, as these are from a different object?  
          */
         SNMP_FREE(tmpvar);
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -1964,7 +1956,7 @@ write_mteTriggerValueIDWildcard(int action,
          * Things are working well, so it's now safe to make the change
          * permanently.  Make sure that anything done here can't fail! 
          */
-
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -2054,6 +2046,7 @@ write_mteTriggerTargetTag(int action,
          * permanently.  Make sure that anything done here can't fail! 
          */
         SNMP_FREE(tmpvar);
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -2143,6 +2136,7 @@ write_mteTriggerContextName(int action,
          * permanently.  Make sure that anything done here can't fail! 
          */
         SNMP_FREE(tmpvar);
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -2226,7 +2220,7 @@ write_mteTriggerContextNameWildcard(int action,
          * Things are working well, so it's now safe to make the change
          * permanently.  Make sure that anything done here can't fail! 
          */
-
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -2313,6 +2307,7 @@ write_mteTriggerFrequency(int action,
             StorageTmp->mteTriggerEntryStatus == RS_ACTIVE)
             mte_enable_trigger(StorageTmp);
 
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -2402,6 +2397,7 @@ write_mteTriggerObjectsOwner(int action,
          * permanently.  Make sure that anything done here can't fail! 
          */
         SNMP_FREE(tmpvar);
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -2491,6 +2487,7 @@ write_mteTriggerObjects(int action,
          * permanently.  Make sure that anything done here can't fail! 
          */
         SNMP_FREE(tmpvar);
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -2579,7 +2576,7 @@ write_mteTriggerEnabled(int action,
         else if (StorageTmp->mteTriggerEnabled == MTETRIGGERENABLED_FALSE)
             mte_disable_trigger(StorageTmp);
 
-
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -2910,6 +2907,7 @@ write_mteTriggerEntryStatus(int action,
             StorageTmp->mteTriggerEnabled == MTETRIGGERENABLED_TRUE &&
             StorageTmp->mteTriggerEntryStatus == RS_ACTIVE)
             mte_enable_trigger(StorageTmp);
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;
@@ -3060,6 +3058,11 @@ mte_get_response(struct mteTriggerTable_data *item, netsnmp_pdu *pdu)
         /*
          * send to the local agent 
          */
+
+        if (mte_callback_sess == NULL)
+            mte_callback_sess =  netsnmp_query_get_default_session();
+        if (!mte_callback_sess)
+            return NULL;
 
         status = snmp_synch_response(mte_callback_sess, pdu, &response);
 

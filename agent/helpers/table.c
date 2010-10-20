@@ -168,8 +168,8 @@ table_helper_handler(netsnmp_mib_handler *handler,
     int             oid_index_pos;
     unsigned int    oid_column_pos;
     unsigned int    tmp_idx;
-    size_t	    tmp_len;
-    int             incomplete, out_of_range, cleaned_up = 0;
+    int 	    tmp_len;
+    int             incomplete, out_of_range;
     int             status = SNMP_ERR_NOERROR, need_processing = 0;
     oid            *tmp_name;
     netsnmp_table_request_info *tbl_req_info;
@@ -195,8 +195,9 @@ table_helper_handler(netsnmp_mib_handler *handler,
 
     DEBUGIF("helper:table:req") {
         DEBUGMSGTL(("helper:table:req",
-                    "Got request for handler %s: base oid:",
-                    handler->handler_name));
+                    "Got %s (%d) mode request for handler %s: base oid:",
+                    se_find_label_in_slist("agent_mode", reqinfo->mode),
+                    reqinfo->mode, handler->handler_name));
         DEBUGMSGOID(("helper:table:req", reginfo->rootoid,
                      reginfo->rootoid_len));
         DEBUGMSG(("helper:table:req", "\n"));
@@ -229,15 +230,15 @@ table_helper_handler(netsnmp_mib_handler *handler,
          * a valid table info pointer).
          */
         if(NULL == netsnmp_extract_table_info(requests)) {
-            DEBUGMSGTL(("table:helper","no table info for set - skipping\n"));
+            DEBUGMSGTL(("helper:table","no table info for set - skipping\n"));
         }
         else
             need_processing = 1;
     }
     else {
         /*
-         * for RESERVE1 and GETS, only continue if we have at least
-         * one valid request.
+         * for GETS, only continue if we have at least one valid request.
+         * for RESERVE1, only continue if we have indexes for all requests.
          */
            
     /*
@@ -309,11 +310,11 @@ table_helper_handler(netsnmp_mib_handler *handler,
          * length) 
          */
         if (reginfo->rootoid_len > var->name_length)
-            tmp_len = var->name_length;
+            tmp_len = (int)var->name_length;
         else
-            tmp_len = reginfo->rootoid_len;
+            tmp_len = (int)reginfo->rootoid_len;
         if (snmp_oid_compare(reginfo->rootoid, reginfo->rootoid_len,
-                             var->name, tmp_len) > 0) {
+                             var->name, (size_t)tmp_len) > 0) {
             if (reqinfo->mode == MODE_GETNEXT) {
                 if (var->name != var->name_loc)
                     SNMP_FREE(var->name);
@@ -394,7 +395,8 @@ table_helper_handler(netsnmp_mib_handler *handler,
             /*
              * oid is long enough to contain COLUMN info
              */
-            DEBUGMSGTL(("helper:table:col", "  have at least a column (%ld)\n",
+            DEBUGMSGTL(("helper:table:col",
+                        "  have at least a column (%" NETSNMP_PRIo "d)\n",
                         var->name[oid_column_pos]));
             if (var->name[oid_column_pos] < tbl_info->min_column) {
                 DEBUGMSGTL(("helper:table:col",
@@ -450,8 +452,9 @@ table_helper_handler(netsnmp_mib_handler *handler,
                     continue;
                 if (tbl_req_info->colnum != var->name[oid_column_pos]) {
                     DEBUGMSGTL(("helper:table:col",
-                                "    which doesn't match req %ld - truncating index info\n",
-                                   var->name[oid_column_pos]));
+                                "    which doesn't match req "
+                                "%" NETSNMP_PRIo "d - truncating index info\n",
+                                var->name[oid_column_pos]));
                     /*
                      * different column! truncate useless index info 
                      */
@@ -512,7 +515,7 @@ table_helper_handler(netsnmp_mib_handler *handler,
             incomplete = 1;
             tmp_len = -1;
         } else
-            tmp_len = tbl_req_info->index_oid_len;
+            tmp_len = (int)tbl_req_info->index_oid_len;
 
 
         /*
@@ -537,11 +540,6 @@ table_helper_handler(netsnmp_mib_handler *handler,
                  *
                  * Reject requests of the form 'myObject'   (no instance)
                  */
-                if (reqinfo->mode != MODE_GETNEXT) {
-                    table_helper_cleanup(reqinfo, requests,
-                                         SNMP_NOSUCHINSTANCE);
-                    cleaned_up = 1;
-                }
                 tmp_len = 0;
                 tmp_name = (oid *) & tmp_len;
                 break;
@@ -549,7 +547,7 @@ table_helper_handler(netsnmp_mib_handler *handler,
             /*
              * try and parse current index 
              */
-            if (parse_one_oid_index(&tmp_name, &tmp_len,
+            if (parse_one_oid_index(&tmp_name, (size_t*)&tmp_len,
                                     vb, 1) != SNMPERR_SUCCESS) {
                 incomplete = 1;
                 tmp_len = -1;   /* is this necessary? Better safe than
@@ -572,12 +570,11 @@ table_helper_handler(netsnmp_mib_handler *handler,
         }                       /** for loop */
 
         DEBUGIF("helper:table:results") {
-            DEBUGMSGTL(("helper:table:results", "  found %d indexes\n",
-                        tbl_req_info->number_indexes));
-            if (!cleaned_up) {
                 unsigned int    count;
                 u_char         *buf = NULL;
                 size_t          buf_len = 0, out_len = 0;
+                DEBUGMSGTL(("helper:table:results", "  found %d indexes\n",
+                            tbl_req_info->number_indexes));
                 DEBUGMSGTL(("helper:table:results",
                             "  column: %d, indexes: %d",
                             tbl_req_info->colnum,
@@ -607,19 +604,32 @@ table_helper_handler(netsnmp_mib_handler *handler,
                     free(buf);
                 }
                 DEBUGMSG(("helper:table:results", "\n"));
-            }
         }
 
 
         /*
-         * do we have sufficent index info to continue?
+         * do we have sufficient index info to continue?
          */
 
         if ((reqinfo->mode != MODE_GETNEXT) &&
             ((tbl_req_info->number_indexes != tbl_info->number_indexes) ||
              (tmp_len != -1))) {
+
             DEBUGMSGTL(("helper:table",
                         "invalid index(es) for table - skipping\n"));
+
+            if ( MODE_IS_SET(reqinfo->mode) ) {
+                /*
+                 * no point in continuing without indexes for set.
+                 */
+                netsnmp_assert(reqinfo->mode == MODE_SET_RESERVE1);
+                /** clear first request so we wont try to run FREE mode */
+                netsnmp_free_request_data_sets(requests);
+                /** set actual error */
+                table_helper_cleanup(reqinfo, request, SNMP_ERR_NOCREATION);
+                need_processing = 0; /* don't call next handler */
+                break;
+            }
             table_helper_cleanup(reqinfo, request, SNMP_NOSUCHINSTANCE);
             continue;
         }
@@ -885,10 +895,7 @@ netsnmp_table_build_oid_from_index(netsnmp_handler_registration *reginfo,
     memcpy(&tmpoid[len], table_info->index_oid,
            table_info->index_oid_len * sizeof(oid));
     len += table_info->index_oid_len;
-    if (var->name && var->name != var->name_loc)
-        SNMP_FREE(var->name);
-    snmp_clone_mem((void **) &var->name, tmpoid, len * sizeof(oid));
-    var->name_length = len;
+    snmp_set_var_objid( var, tmpoid, len );
 
     return SNMPERR_SUCCESS;
 }
@@ -1153,7 +1160,7 @@ netsnmp_table_get_or_create_row_stash(netsnmp_agent_request_info *reqinfo,
 {
     netsnmp_oid_stash_node **stashp = NULL;
     stashp = (netsnmp_oid_stash_node **)
-        netsnmp_agent_get_list_data(reqinfo, storage_name);
+        netsnmp_agent_get_list_data(reqinfo, (const char *) storage_name);
 
     if (!stashp) {
         /*
@@ -1165,7 +1172,7 @@ netsnmp_table_get_or_create_row_stash(netsnmp_agent_request_info *reqinfo,
             return NULL;        /* ack. out of mem */
 
         netsnmp_agent_add_list_data(reqinfo,
-                                    netsnmp_create_data_list(storage_name,
+                                    netsnmp_create_data_list((const char *) storage_name,
                                                              stashp,
                                                              _row_stash_data_list_free));
     }

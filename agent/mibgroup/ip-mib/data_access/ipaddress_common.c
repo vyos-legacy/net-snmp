@@ -1,7 +1,7 @@
 /*
  *  Ipaddress MIB architecture support
  *
- * $Id: ipaddress_common.c 17594 2009-05-06 21:45:20Z nba $
+ * $Id: ipaddress_common.c 17810 2009-10-30 08:28:20Z magfr $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -211,7 +211,8 @@ netsnmp_access_ipaddress_entry_set(netsnmp_ipaddress_entry * entry)
      * make sure interface and ifIndex match up
      */
     if (NULL == netsnmp_access_interface_name_find(entry->if_index)) {
-        DEBUGMSGT(("access:ipaddress:set", "cant find name for index %ld\n",
+        DEBUGMSGT(("access:ipaddress:set",
+                   "cant find name for index %" NETSNMP_PRIo "d\n",
                   entry->if_index));
         return -1;
     }

@@ -56,11 +56,7 @@ SOFTWARE.
 #endif
 #include <sys/types.h>
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -89,18 +85,17 @@ SOFTWARE.
 #include <dmalloc.h>
 #endif
 
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
-
 #include <net-snmp/types.h>
 
+#include <net-snmp/agent/ds_agent.h>
+#include <net-snmp/library/default_store.h>
 #include <net-snmp/library/snmp_api.h>
 #include <net-snmp/library/snmp_client.h>
 #include <net-snmp/library/snmp_secmod.h>
 #include <net-snmp/library/mib.h>
 #include <net-snmp/library/snmp_logging.h>
 #include <net-snmp/library/snmp_assert.h>
+#include <net-snmp/pdu_api.h>
 
 
 #ifndef BSD4_3
@@ -540,7 +535,7 @@ _clone_pdu(netsnmp_pdu *pdu, int drop_err)
 /*
  * This function will clone a full varbind list
  *
- * Returns a pointer to the cloned PDU if successful.
+ * Returns a pointer to the cloned varbind list if successful.
  * Returns 0 if failure
  */
 netsnmp_variable_list *
@@ -603,7 +598,7 @@ snmp_fix_pdu(netsnmp_pdu *pdu, int command)
     if ((pdu->command != SNMP_MSG_RESPONSE)
         || (pdu->errstat == SNMP_ERR_NOERROR)
         || (NULL == pdu->variables)
-        || (pdu->errindex > snmp_varbind_len(pdu))
+        || (pdu->errindex > (int)snmp_varbind_len(pdu))
         || (pdu->errindex <= 0)) {
         return NULL;            /* pre-condition tests fail */
     }
@@ -653,8 +648,7 @@ snmp_set_var_objid(netsnmp_variable_list * vp,
 {
     size_t          len = sizeof(oid) * name_length;
 
-    if (vp->name != vp->name_loc && vp->name != NULL &&
-        vp->name_length > (sizeof(vp->name_loc) / sizeof(oid))) {
+    if (vp->name != vp->name_loc && vp->name != NULL) {
         /*
          * Probably previously-allocated "big storage".  Better free it
          * else memory leaks possible.  
@@ -743,7 +737,7 @@ find_varbind_of_type(netsnmp_variable_list * var_ptr, u_char type)
 
 netsnmp_variable_list*
 find_varbind_in_list( netsnmp_variable_list *vblist,
-                      oid *name, size_t len)
+                      const oid *name, size_t len)
 {
     for (; vblist != NULL; vblist = vblist->next_variable)
         if (!snmp_oid_compare(vblist->name, vblist->name_length, name, len))
@@ -1021,7 +1015,8 @@ snmp_synch_response_cb(netsnmp_session * ss,
         block = NETSNMP_SNMPBLOCK;
         tvp = &timeout;
         timerclear(tvp);
-        snmp_select_info(&numfds, &fdset, tvp, &block);
+        snmp_sess_select_info_flags(0, &numfds, &fdset, tvp, &block,
+                                    NETSNMP_SELECT_NOALARMS);
         if (block == 1)
             tvp = NULL;         /* block without timeout */
         count = select(numfds, &fdset, NULL, NULL, tvp);
@@ -1089,6 +1084,10 @@ snmp_sess_synch_response(void *sessp,
     int             block;
 
     ss = snmp_sess_session(sessp);
+    if (ss == NULL) {
+        return STAT_ERROR;
+    }
+
     memset((void *) &lstate, 0, sizeof(lstate));
     state = &lstate;
     cbsav = ss->callback;
@@ -1108,7 +1107,8 @@ snmp_sess_synch_response(void *sessp,
         block = NETSNMP_SNMPBLOCK;
         tvp = &timeout;
         timerclear(tvp);
-        snmp_sess_select_info(sessp, &numfds, &fdset, tvp, &block);
+        snmp_sess_select_info_flags(sessp, &numfds, &fdset, tvp, &block,
+                                    NETSNMP_SELECT_NOALARMS);
         if (block == 1)
             tvp = NULL;         /* block without timeout */
         count = select(numfds, &fdset, NULL, NULL, tvp);
@@ -1196,10 +1196,36 @@ netsnmp_query_set_default_session( netsnmp_session *sess) {
     _def_query_session = sess;
 }
 
+/**
+ * Return a pointer to the default internal query session.
+ */
 netsnmp_session *
-netsnmp_query_get_default_session( void ) {
+netsnmp_query_get_default_session_unchecked( void ) {
     DEBUGMSGTL(("iquery", "get default session %p\n", _def_query_session));
     return _def_query_session;
+}
+
+/**
+ * Return a pointer to the default internal query session and log a
+ * warning message once if this session does not exist.
+ */
+netsnmp_session *
+netsnmp_query_get_default_session( void ) {
+    static int warning_logged = 0;
+
+    if (! _def_query_session && ! warning_logged) {
+        if (! netsnmp_ds_get_string(NETSNMP_DS_APPLICATION_ID,
+                                    NETSNMP_DS_AGENT_INTERNAL_SECNAME)) {
+            snmp_log(LOG_WARNING,
+                     "iquerySecName has not been configured - internal queries will fail\n");
+        } else {
+            snmp_log(LOG_WARNING,
+                     "default session is not available - internal queries will fail\n");
+        }
+        warning_logged = 1;
+    }
+
+    return netsnmp_query_get_default_session_unchecked();
 }
 
 
@@ -1213,7 +1239,7 @@ static int _query(netsnmp_variable_list *list,
     netsnmp_pdu *pdu      = snmp_pdu_create( request );
     netsnmp_pdu *response = NULL;
     netsnmp_variable_list *vb1, *vb2, *vtmp;
-    int ret;
+    int ret, count;
 
     DEBUGMSGTL(("iquery", "query on session %p\n", session));
     /*
@@ -1240,6 +1266,8 @@ retry:
      */
     if ( ret == SNMP_ERR_NOERROR ) {
         if ( response->errstat != SNMP_ERR_NOERROR ) {
+            DEBUGMSGT(("iquery", "Error in packet: %s\n",
+                       snmp_errstring(response->errstat)));
             /*
              * If the request failed, then remove the
              *  offending varbind and try again.
@@ -1249,6 +1277,16 @@ retry:
              *       NETSNMP_DS_APP_DONT_FIX_PDUS ??
              */
             ret = response->errstat;
+            if (response->errindex != 0) {
+                DEBUGMSGT(("iquery:result", "Failed object:\n"));
+                for (count = 1, vtmp = response->variables;
+                     vtmp && count != response->errindex;
+                     vtmp = vtmp->next_variable, count++)
+                    /*EMPTY*/;
+                if (vtmp)
+                    DEBUGMSGVAR(("iquery:result", vtmp));
+                DEBUGMSG(("iquery:result", "\n"));
+            }
             if (request != SNMP_MSG_SET &&
                 response->errindex != 0) {
                 DEBUGMSGTL(("iquery", "retrying query (%d, %ld)\n", ret, response->errindex));
@@ -1262,6 +1300,8 @@ retry:
             for (vb1 = response->variables, vb2 = list;
                  vb1;
                  vb1 = vb1->next_variable,  vb2 = vb2->next_variable) {
+                DEBUGMSGVAR(("iquery:result", vb1));
+                DEBUGMSG(("iquery:results", "\n"));
                 if ( !vb2 ) {
                     ret = SNMP_ERR_GENERR;
                     break;
@@ -1349,4 +1389,444 @@ int netsnmp_query_walk(netsnmp_variable_list *list,
     snmp_free_varbind( vb );
     return ret;
 }
+
+/** **************************************************************************
+ *
+ * state machine
+ *
+ */
+int
+netsnmp_state_machine_run( netsnmp_state_machine_input *input)
+{
+    netsnmp_state_machine_step *current, *last;
+
+    netsnmp_require_ptr_LRV( input, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( input->steps, SNMPERR_GENERR );
+    last = current = input->steps;
+
+    DEBUGMSGT(("state_machine:run", "starting step: %s\n", current->name));
+
+    while (current) {
+
+        /*
+         * log step and check for required data
+         */
+        DEBUGMSGT(("state_machine:run", "at step: %s\n", current->name));
+        if (NULL == current->run) {
+            DEBUGMSGT(("state_machine:run", "no run step\n"));
+            current->result = last->result;
+            break;
+        }
+
+        /*
+         * run step
+         */
+        DEBUGMSGT(("state_machine:run", "running step: %s\n", current->name));
+        current->result = (*current->run)( input, current );
+        ++input->steps_so_far;
+        
+        /*
+         * log result and move to next step
+         */
+        input->last_run = current;
+        DEBUGMSGT(("state_machine:run:result", "step %s returned %d\n",
+                   current->name, current->result));
+        if (SNMPERR_SUCCESS == current->result)
+            current = current->on_success;
+        else if (SNMPERR_ABORT == current->result) {
+            DEBUGMSGT(("state_machine:run:result", "ABORT from %s\n",
+                       current->name));
+            break;
+        }
+        else
+            current = current->on_error;
+    }
+
+    /*
+     * run cleanup
+     */
+    if ((input->cleanup) && (input->cleanup->run))
+        (*input->cleanup->run)( input, input->last_run );
+
+    return input->last_run->result;
+}
+
+/** **************************************************************************
+ *
+ * row create state machine steps
+ *
+ */
+typedef struct rowcreate_state_s {
+
+    netsnmp_session        *session;
+    netsnmp_variable_list  *vars;
+    int                     row_status_index;
+} rowcreate_state;
+
+static netsnmp_variable_list *
+_get_vb_num(netsnmp_variable_list *vars, int index)
+{
+    for (; vars && index > 0; --index)
+        vars = vars->next_variable;
+
+    if (!vars || index > 0)
+        return NULL;
+    
+    return vars;
+}
+
+
+/*
+ * cleanup
+ */
+static int 
+_row_status_state_cleanup(netsnmp_state_machine_input *input,
+                 netsnmp_state_machine_step *step)
+{
+    rowcreate_state       *ctx;
+
+    netsnmp_require_ptr_LRV( input, SNMPERR_ABORT );
+    netsnmp_require_ptr_LRV( step, SNMPERR_ABORT );
+
+    DEBUGMSGT(("row_create:called", "_row_status_state_cleanup, last run step was %s rc %d\n",
+               step->name, step->result));
+
+    ctx = (rowcreate_state *)input->input_context;
+    if (ctx && ctx->vars)
+        snmp_free_varbind( ctx->vars );
+
+    return SNMPERR_SUCCESS;
+}
+
+/*
+ * send a request to activate the row
+ */
+static int 
+_row_status_state_activate(netsnmp_state_machine_input *input,
+                  netsnmp_state_machine_step *step)
+{
+    rowcreate_state       *ctx;
+    netsnmp_variable_list *rs_var, *var = NULL;
+    int32_t                rc, val = RS_ACTIVE;
+
+    netsnmp_require_ptr_LRV( input, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( step, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( input->input_context, SNMPERR_GENERR );
+
+    ctx = (rowcreate_state *)input->input_context;
+
+    DEBUGMSGT(("row_create:called", "called %s\n", step->name));
+
+    /*
+     * just send the rowstatus varbind
+     */
+    rs_var = _get_vb_num(ctx->vars, ctx->row_status_index);
+    netsnmp_require_ptr_LRV(rs_var, SNMPERR_GENERR);
+
+    var = snmp_varlist_add_variable(&var, rs_var->name, rs_var->name_length,
+                                    rs_var->type, &val, sizeof(val));
+    netsnmp_require_ptr_LRV( var, SNMPERR_GENERR );
+
+    /*
+     * send set
+     */
+    rc = netsnmp_query_set( var, ctx->session );
+    if (-2 == rc)
+        rc = SNMPERR_ABORT;
+
+    snmp_free_varbind(var);
+
+    return rc;
+}
+
+/*
+ * send each non-row status column, one at a time
+ */
+static int 
+_row_status_state_single_value_cols(netsnmp_state_machine_input *input,
+                                    netsnmp_state_machine_step *step)
+{
+    rowcreate_state       *ctx;
+    netsnmp_variable_list *var, *tmp_next, *row_status;
+    int                    rc = SNMPERR_GENERR;
+
+    netsnmp_require_ptr_LRV( input, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( step, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( input->input_context, SNMPERR_GENERR );
+
+    ctx = (rowcreate_state *)input->input_context;
+
+    DEBUGMSGT(("row_create:called", "called %s\n", step->name));
+
+    row_status = _get_vb_num(ctx->vars, ctx->row_status_index);
+    netsnmp_require_ptr_LRV(row_status, SNMPERR_GENERR);
+
+    /*
+     * try one varbind at a time
+     */
+    for (var = ctx->vars; var; var = var->next_variable) {
+        if (var == row_status)
+            continue;
+
+        tmp_next = var->next_variable;
+        var->next_variable = NULL;
+
+        /*
+         * send set
+         */
+        rc = netsnmp_query_set( var, ctx->session );
+        var->next_variable = tmp_next;
+        if (-2 == rc)
+            rc = SNMPERR_ABORT;
+        if (rc != SNMPERR_SUCCESS)
+            break;
+    }
+
+    return rc;
+}
+
+/*
+ * send all values except row status
+ */
+static int 
+_row_status_state_multiple_values_cols(netsnmp_state_machine_input *input,
+                                       netsnmp_state_machine_step *step)
+{
+    rowcreate_state       *ctx;
+    netsnmp_variable_list *vars, *var, *last, *row_status;
+    int                    rc;
+
+    netsnmp_require_ptr_LRV( input, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( step, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( input->input_context, SNMPERR_GENERR );
+
+    ctx = (rowcreate_state *)input->input_context;
+
+    DEBUGMSGT(("row_create:called", "called %s\n", step->name));
+
+    vars = snmp_clone_varbind(ctx->vars);
+    netsnmp_require_ptr_LRV(vars, SNMPERR_GENERR);
+
+    row_status = _get_vb_num(vars, ctx->row_status_index);
+    if (NULL == row_status) {
+        snmp_free_varbind(vars);
+        return SNMPERR_GENERR;
+    }
+
+    /*
+     * remove row status varbind
+     */
+    if (row_status == vars) {
+        vars = row_status->next_variable;
+        row_status->next_variable = NULL;
+    }
+    else {
+        for (last=vars, var=last->next_variable;
+             var;
+             last=var, var = var->next_variable) {
+            if (var == row_status) {
+                last->next_variable = var->next_variable;
+                break;
+            }
+        }
+    }
+    snmp_free_var(row_status);
+
+    /*
+     * send set
+     */
+    rc = netsnmp_query_set( vars, ctx->session );
+    if (-2 == rc)
+        rc = SNMPERR_ABORT;
+
+    snmp_free_varbind(vars);
+
+    return rc;
+}
+
+/*
+ * send a createAndWait request with no other values
+ */
+static int 
+_row_status_state_single_value_createAndWait(netsnmp_state_machine_input *input,
+                                             netsnmp_state_machine_step *step)
+{
+    rowcreate_state       *ctx;
+    netsnmp_variable_list *var = NULL, *rs_var;
+    int32_t                rc, val = RS_CREATEANDWAIT;
+
+    netsnmp_require_ptr_LRV( input, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( step, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( input->input_context, SNMPERR_GENERR );
+
+    ctx = (rowcreate_state *)input->input_context;
+
+    DEBUGMSGT(("row_create:called", "called %s\n", step->name));
+
+    rs_var = _get_vb_num(ctx->vars, ctx->row_status_index);
+    netsnmp_require_ptr_LRV(rs_var, SNMPERR_GENERR);
+
+    var = snmp_varlist_add_variable(&var, rs_var->name, rs_var->name_length,
+                                    rs_var->type, &val, sizeof(val));
+    netsnmp_require_ptr_LRV(var, SNMPERR_GENERR);
+
+    /*
+     * send set
+     */
+    rc = netsnmp_query_set( var, ctx->session );
+    if (-2 == rc)
+        rc = SNMPERR_ABORT;
+
+    snmp_free_varbind(var);
+
+    return rc;
+}
+
+/*
+ * send a creatAndWait request with all values
+ */
+static int 
+_row_status_state_all_values_createAndWait(netsnmp_state_machine_input *input,
+                                           netsnmp_state_machine_step *step)
+{
+    rowcreate_state       *ctx;
+    netsnmp_variable_list *vars, *rs_var;
+    int                    rc;
+
+    netsnmp_require_ptr_LRV( input, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( step, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( input->input_context, SNMPERR_GENERR );
+
+    ctx = (rowcreate_state *)input->input_context;
+
+    DEBUGMSGT(("row_create:called", "called %s\n", step->name));
+
+    vars = snmp_clone_varbind(ctx->vars);
+    netsnmp_require_ptr_LRV(vars, SNMPERR_GENERR);
+
+    /*
+     * make sure row stats is createAndWait
+     */
+    rs_var = _get_vb_num(vars, ctx->row_status_index);
+    if (NULL == rs_var) {
+        snmp_free_varbind(vars);
+        return SNMPERR_GENERR;
+    }
+
+    if (*rs_var->val.integer != RS_CREATEANDWAIT)
+        *rs_var->val.integer = RS_CREATEANDWAIT;
+
+    /*
+     * send set
+     */
+    rc = netsnmp_query_set( vars, ctx->session );
+    if (-2 == rc)
+        rc = SNMPERR_ABORT;
+
+    snmp_free_varbind(vars);
+
+    return rc;
+}
+
+
+/**
+ * send createAndGo request with all values
+ */
+static int 
+_row_status_state_all_values_createAndGo(netsnmp_state_machine_input *input,
+                                         netsnmp_state_machine_step *step)
+{
+    rowcreate_state       *ctx;
+    netsnmp_variable_list *vars, *rs_var;
+    int                    rc;
+
+    netsnmp_require_ptr_LRV( input, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( step, SNMPERR_GENERR );
+    netsnmp_require_ptr_LRV( input->input_context, SNMPERR_GENERR );
+
+    ctx = (rowcreate_state *)input->input_context;
+
+    DEBUGMSGT(("row_create:called", "called %s\n", step->name));
+
+    vars = snmp_clone_varbind(ctx->vars);
+    netsnmp_require_ptr_LRV(vars, SNMPERR_GENERR);
+
+    /*
+     * make sure row stats is createAndGo
+     */
+    rs_var = _get_vb_num(vars, ctx->row_status_index + 1);
+    if (NULL == rs_var) {
+        snmp_free_varbind(vars);
+        return SNMPERR_GENERR;
+    }
+
+    if (*rs_var->val.integer != RS_CREATEANDGO)
+        *rs_var->val.integer = RS_CREATEANDGO;
+
+    /*
+     * send set
+     */
+    rc = netsnmp_query_set( vars, ctx->session );
+    if (-2 == rc)
+        rc = SNMPERR_ABORT;
+
+    snmp_free_varbind(vars);
+
+    return rc;
+}
+
+/** **************************************************************************
+ *
+ * row api
+ *
+ */
+int
+netsnmp_row_create(netsnmp_session *sess, netsnmp_variable_list *vars,
+                   int row_status_index)
+{
+    netsnmp_state_machine_step rc_cleanup =
+        { "row_create_cleanup", 0, _row_status_state_cleanup,
+          0, NULL, NULL, 0, NULL };
+    netsnmp_state_machine_step rc_activate =
+        { "row_create_activate", 0, _row_status_state_activate,
+          0, NULL, NULL, 0, NULL };
+    netsnmp_state_machine_step rc_sv_cols =
+        { "row_create_single_value_cols", 0,
+          _row_status_state_single_value_cols, 0, &rc_activate,NULL, 0, NULL };
+    netsnmp_state_machine_step rc_mv_cols =
+        { "row_create_multiple_values_cols", 0,
+          _row_status_state_multiple_values_cols, 0, &rc_activate, &rc_sv_cols,
+          0, NULL };
+    netsnmp_state_machine_step rc_sv_caw =
+        { "row_create_single_value_createAndWait", 0,
+          _row_status_state_single_value_createAndWait, 0, &rc_mv_cols, NULL,
+          0, NULL };
+    netsnmp_state_machine_step rc_av_caw =
+        { "row_create_all_values_createAndWait", 0,
+          _row_status_state_all_values_createAndWait, 0, &rc_activate,
+          &rc_sv_caw, 0, NULL };
+    netsnmp_state_machine_step rc_av_cag =
+        { "row_create_all_values_createAndGo", 0,
+          _row_status_state_all_values_createAndGo, 0, NULL, &rc_av_caw, 0,
+          NULL };
+
+    netsnmp_state_machine_input sm_input = { "row_create_machine", 0,
+                                             &rc_av_cag, &rc_cleanup };
+    rowcreate_state state;
+
+    netsnmp_require_ptr_LRV( sess, SNMPERR_GENERR);
+    netsnmp_require_ptr_LRV( vars, SNMPERR_GENERR);
+
+    state.session = sess;
+    state.vars = vars;
+
+    state.row_status_index = row_status_index;
+    sm_input.input_context = &state;
+
+    netsnmp_state_machine_run( &sm_input);
+
+    return SNMPERR_SUCCESS;
+}
+
+
 /** @} */

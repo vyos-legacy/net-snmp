@@ -40,9 +40,6 @@
 #if HAVE_NETDB_H
 #include <netdb.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
@@ -53,11 +50,7 @@
 #include "util_funcs/header_generic.h"
 
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -151,7 +144,7 @@ var_vacm_sec2group(struct variable * vp,
 {
     struct vacm_groupEntry *gp;
     oid            *groupSubtree;
-    int             groupSubtreeLen;
+    ssize_t         groupSubtreeLen;
     int             secmodel;
     char            secname[VACMSTRINGLEN], *cp;
 
@@ -1551,11 +1544,6 @@ view_parse_oid(oid * oidIndex, size_t oidLen,
     viewName[0][viewNameL] = 0;
 
     for (i = 0; i < subtreeL; i++) {
-	if (oidIndex[i + viewNameL + 1] > 255) {
-	    free(*viewName);
-	    free(*subtree);
-	    return SNMP_ERR_INCONSISTENTNAME;
-	}
         subtree[0][i] = (oid) oidIndex[i + viewNameL + 1];
     }
 

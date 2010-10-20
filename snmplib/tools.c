@@ -10,11 +10,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -26,8 +22,8 @@
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
+#ifdef HAVE_SYS_TIME_H
+#include <sys/time.h>
 #endif
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
@@ -60,9 +56,20 @@
 #include <net-snmp/library/mib.h>
 #include <net-snmp/library/scapi.h>
 
-#ifdef WIN32
+#ifdef HAVE_CRTDBG_H
+/*
+ * Define _CRTDBG_MAP_ALLOC such that in debug builds (when _DEBUG has been
+ * defined) e.g. malloc() is rerouted to _malloc_dbg().
+ */
+#define _CRTDBG_MAP_ALLOC 1
+#include <crtdbg.h>
+#endif
+
 /**
  * This function is a wrapper for the strdup function.
+ *
+ * @note The strdup() implementation calls _malloc_dbg() when linking with
+ * MSVCRT??D.dll and malloc() when linking with MSVCRT??.dll
  */
 char * netsnmp_strdup( const char * ptr)
 {
@@ -101,7 +108,6 @@ void netsnmp_free( void * ptr)
     if (ptr)
         free(ptr);
 }
-#endif /* WIN32 */
 
 /**
  * This function increase the size of the buffer pointed at by *buf, which is
@@ -273,6 +279,58 @@ netsnmp_strdup_and_null(const u_char * from, size_t from_len)
 
 /** converts binary to hexidecimal
  *
+ *     @param *input            Binary data.
+ *     @param len               Length of binary data.
+ *     @param **dest            NULL terminated string equivalent in hex.
+ *     @param *dest_len         size of destination buffer
+ *     @param allow_realloc     flag indicating if buffer can be realloc'd
+ *      
+ * @return olen	Length of output string not including NULL terminator.
+ */
+u_int
+netsnmp_binary_to_hex(u_char ** dest, size_t *dest_len, int allow_realloc, 
+                      const u_char * input, size_t len)
+{
+    u_int           olen = (len * 2) + 1;
+    u_char         *s, *op;
+    const u_char   *ip = input;
+
+    if (dest == NULL || dest_len == NULL || input == NULL)
+        return 0;
+
+    if (NULL == *dest) {
+        s = (unsigned char *) calloc(1, olen);
+        *dest_len = olen;
+    }
+    else
+        s = *dest;
+
+    if (*dest_len < olen) {
+        if (!allow_realloc)
+            return 0;
+        *dest_len = olen;
+        if (snmp_realloc(dest, dest_len))
+            return 0;
+    }
+
+    op = s;
+    while (ip - input < (int) len) {
+        *op++ = VAL2HEX((*ip >> 4) & 0xf);
+        *op++ = VAL2HEX(*ip & 0xf);
+        ip++;
+    }
+    *op = '\0';
+
+    if (s != *dest)
+        *dest = s;
+    *dest_len = olen;
+
+    return olen;
+
+}                               /* end netsnmp_binary_to_hex() */
+
+/** converts binary to hexidecimal
+ *
  *	@param *input		Binary data.
  *	@param len		Length of binary data.
  *	@param **output	NULL terminated string equivalent in hex.
@@ -286,21 +344,11 @@ netsnmp_strdup_and_null(const u_char * from, size_t from_len)
 u_int
 binary_to_hex(const u_char * input, size_t len, char **output)
 {
-    u_int           olen = (len * 2) + 1;
-    char           *s = (char *) calloc(1, olen), *op = s;
-    const u_char   *ip = input;
+    size_t out_len = 0;
 
+    *output = NULL; /* will alloc new buffer */
 
-    while (ip - input < (int) len) {
-        *op++ = VAL2HEX((*ip >> 4) & 0xf);
-        *op++ = VAL2HEX(*ip & 0xf);
-        ip++;
-    }
-    *op = '\0';
-
-    *output = s;
-    return olen;
-
+    return netsnmp_binary_to_hex((u_char**)output, &out_len, 1, input, len);
 }                               /* end binary_to_hex() */
 
 
@@ -425,7 +473,7 @@ int
 netsnmp_hex_to_binary(u_char ** buf, size_t * buf_len, size_t * offset,
                       int allow_realloc, const char *hex, const char *delim)
 {
-    int             subid = 0;
+    unsigned int    subid = 0;
     const char     *cp = hex;
 
     if (buf == NULL || buf_len == NULL || offset == NULL || hex == NULL) {
@@ -696,7 +744,7 @@ dump_snmpEngineID(const u_char * estring, size_t * estring_len)
         /*
          * s += snprintf(s, remaining_len+3, "\"%s\"", esp); 
          */
-        s += sprintf(s, "\"%s\"", esp);
+        s += sprintf(s, "\"%.*s\"", sizeof(buf)-strlen(buf)-3, esp);
         goto dump_snmpEngineID_quit;
         break;
      /*NOTREACHED*/ case 5:    /* Octets. */
@@ -792,15 +840,11 @@ atime_setMarker(marker_t pm)
  * Returns the difference (in msec) between the two markers
  */
 long
-atime_diff(marker_t first, marker_t second)
+atime_diff(const_marker_t first, const_marker_t second)
 {
-    struct timeval *tv1, *tv2, diff;
+    struct timeval diff;
 
-    tv1 = (struct timeval *) first;
-    tv2 = (struct timeval *) second;
-
-    diff.tv_sec = tv2->tv_sec - tv1->tv_sec - 1;
-    diff.tv_usec = tv2->tv_usec - tv1->tv_usec + 1000000;
+    NETSNMP_TIMERSUB((const struct timeval *) second, (const struct timeval *) first, &diff);
 
     return (diff.tv_sec * 1000 + diff.tv_usec / 1000);
 }
@@ -809,15 +853,11 @@ atime_diff(marker_t first, marker_t second)
  * Returns the difference (in u_long msec) between the two markers
  */
 u_long
-uatime_diff(marker_t first, marker_t second)
+uatime_diff(const_marker_t first, const_marker_t second)
 {
-    struct timeval *tv1, *tv2, diff;
+    struct timeval diff;
 
-    tv1 = (struct timeval *) first;
-    tv2 = (struct timeval *) second;
-
-    diff.tv_sec = tv2->tv_sec - tv1->tv_sec - 1;
-    diff.tv_usec = tv2->tv_usec - tv1->tv_usec + 1000000;
+    NETSNMP_TIMERSUB((const struct timeval *) second, (const struct timeval *) first, &diff);
 
     return (((u_long) diff.tv_sec) * 1000 + diff.tv_usec / 1000);
 }
@@ -827,19 +867,12 @@ uatime_diff(marker_t first, marker_t second)
  * (functionally this is what sysUpTime needs)
  */
 u_long
-uatime_hdiff(marker_t first, marker_t second)
+uatime_hdiff(const_marker_t first, const_marker_t second)
 {
-    struct timeval *tv1, *tv2, diff;
-    u_long          res;
+    struct timeval diff;
 
-    tv1 = (struct timeval *) first;
-    tv2 = (struct timeval *) second;
-
-    diff.tv_sec = tv2->tv_sec - tv1->tv_sec - 1;
-    diff.tv_usec = tv2->tv_usec - tv1->tv_usec + 1000000;
-
-    res = ((u_long) diff.tv_sec) * 100 + diff.tv_usec / 10000;
-    return res;
+    NETSNMP_TIMERSUB((const struct timeval *) second, (const struct timeval *) first, &diff);
+    return ((u_long) diff.tv_sec) * 100 + diff.tv_usec / 10000;
 }
 
 /**
@@ -847,7 +880,7 @@ uatime_hdiff(marker_t first, marker_t second)
  * Returns 0 if test fails or cannot be tested (no marker).
  */
 int
-atime_ready(marker_t pm, int deltaT)
+atime_ready(const_marker_t pm, int deltaT)
 {
     marker_t        now;
     long            diff;
@@ -869,7 +902,7 @@ atime_ready(marker_t pm, int deltaT)
  * Returns 0 if test fails or cannot be tested (no marker).
  */
 int
-uatime_ready(marker_t pm, unsigned int deltaT)
+uatime_ready(const_marker_t pm, unsigned int deltaT)
 {
     marker_t        now;
     u_long          diff;
@@ -895,7 +928,7 @@ uatime_ready(marker_t pm, unsigned int deltaT)
  * Return the number of timeTicks since the given marker 
  */
 int
-marker_tticks(marker_t pm)
+marker_tticks(const_marker_t pm)
 {
     int             res;
     marker_t        now = atime_newMarker();
@@ -906,9 +939,9 @@ marker_tticks(marker_t pm)
 }
 
 int
-timeval_tticks(struct timeval *tv)
+timeval_tticks(const struct timeval *tv)
 {
-    return marker_tticks((marker_t) tv);
+    return marker_tticks((const_marker_t) tv);
 }
 
 /**
@@ -971,7 +1004,7 @@ char *netsnmp_getenv(const char *name)
         /* Allocate memory needed +1 to allow RegQueryValueExA to NULL terminate the
          * string data in registry is missing one (which is unlikely).
          */
-        key_value = (char *) malloc((sizeof(char) * key_value_size)+sizeof(char));
+        key_value = malloc((sizeof(char) * key_value_size)+sizeof(char));
         
         if (RegQueryValueExA(
               hKey, 
@@ -981,7 +1014,7 @@ char *netsnmp_getenv(const char *name)
               key_value, 
               &key_value_size) == ERROR_SUCCESS) {
         }
-        temp = key_value;
+        temp = (char *) key_value;
       }
       RegCloseKey(hKey);
       if (temp)
@@ -1013,7 +1046,7 @@ char *netsnmp_getenv(const char *name)
         /* Allocate memory needed +1 to allow RegQueryValueExA to NULL terminate the
          * string data in registry is missing one (which is unlikely).
          */
-        key_value = (char *) malloc((sizeof(char) * key_value_size)+sizeof(char));
+        key_value = malloc((sizeof(char) * key_value_size)+sizeof(char));
         
         if (RegQueryValueExA(
               hKey, 
@@ -1023,7 +1056,7 @@ char *netsnmp_getenv(const char *name)
               key_value, 
               &key_value_size) == ERROR_SUCCESS) {
         }
-        temp = key_value;
+        temp = (char *) key_value;
 
       }
       RegCloseKey(hKey);

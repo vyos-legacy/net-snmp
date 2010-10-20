@@ -1,3 +1,4 @@
+
 /* Portions of this file are subject to the following copyright(s).  See
  * the Net-SNMP's COPYING file for more details and other copyrights
  * that may apply:
@@ -56,11 +57,7 @@ SOFTWARE.
 #include <sys/param.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -80,9 +77,6 @@ SOFTWARE.
 #endif
 #if HAVE_IO_H
 #include <io.h>
-#endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
@@ -141,7 +135,13 @@ SOFTWARE.
 #include <net-snmp/library/snmp_service.h>
 #include <net-snmp/library/vacm.h>
 
+#if defined(NETSNMP_USE_OPENSSL) && defined(HAVE_LIBSSL)
+extern void netsnmp_certs_init(void);
+#endif
+
 static void     _init_snmp(void);
+
+static int      _snmp_store_needed = 0;
 
 #include "../agent/mibgroup/agentx/protocol.h"
 #include <net-snmp/library/transform_oids.h>
@@ -301,6 +301,9 @@ static const char *api_errors[-SNMPERR_MAX + 1] = {
     "Kerberos related error",   /* SNMPERR_KRB5 */
     "Protocol error",		/* SNMPERR_PROTOCOL */
     "OID not increasing",       /* SNMPERR_OID_NONINCREASING */
+    "Context probe",            /* SNMPERR_JUST_A_CONTEXT_PROBE */
+    "Configuration data found but the transport can't be configured", /* SNMPERR_TRANSPORT_NO_CONFIG */
+    "Transport configuration failed", /* SNMPERR_TRANSPORT_CONFIG_ERROR */
 };
 
 static const char *secLevelName[] = {
@@ -361,7 +364,9 @@ static int      snmp_resend_request(struct session_list *slp,
 static void     register_default_handlers(void);
 static struct session_list *snmp_sess_copy(netsnmp_session * pss);
 int             snmp_get_errno(void);
+NETSNMP_IMPORT
 void            snmp_synch_reset(netsnmp_session * notused);
+NETSNMP_IMPORT
 void            snmp_synch_setup(netsnmp_session * notused);
 
 #ifndef HAVE_STRERROR
@@ -602,7 +607,7 @@ snmp_sess_error(void *sessp, int *p_errno, int *p_snmp_errno, char **p_str)
 }
 
 /*
- * snmp_sess_perror(): print a error stored in a session pointer 
+ * netsnmp_sess_log_error(): print a error stored in a session pointer 
  */
 void
 netsnmp_sess_log_error(int priority,
@@ -662,9 +667,6 @@ _init_snmp(void)
     /*
      * get pseudo-random values for request ID and message ID 
      */
-    /*
-     * don't allow zero value to repeat init 
-     */
 #ifdef SVR4
     srand48(tv.tv_sec ^ tv.tv_usec);
     tmpReqid = lrand48();
@@ -675,6 +677,9 @@ _init_snmp(void)
     tmpMsgid = random();
 #endif
 
+    /*
+     * don't allow zero value to repeat init 
+     */
     if (tmpReqid == 0)
         tmpReqid = 1;
     if (tmpMsgid == 0)
@@ -689,11 +694,16 @@ _init_snmp(void)
     netsnmp_register_default_target("snmp", "tcp", ":161");
     netsnmp_register_default_target("snmp", "udp6", ":161");
     netsnmp_register_default_target("snmp", "tcp6", ":161");
+    netsnmp_register_default_target("snmp", "dtlsudp", ":10161");
+    netsnmp_register_default_target("snmp", "tlstcp", ":10161");
     netsnmp_register_default_target("snmp", "ipx", "/36879");
+
     netsnmp_register_default_target("snmptrap", "udp", ":162");
     netsnmp_register_default_target("snmptrap", "tcp", ":162");
     netsnmp_register_default_target("snmptrap", "udp6", ":162");
     netsnmp_register_default_target("snmptrap", "tcp6", ":162");
+    netsnmp_register_default_target("snmptrap", "dtlsudp", ":10162");
+    netsnmp_register_default_target("snmptrap", "tlstcp", ":10162");
     netsnmp_register_default_target("snmptrap", "ipx", "/36880");
 
     netsnmp_ds_set_int(NETSNMP_DS_LIBRARY_ID, 
@@ -823,10 +833,14 @@ init_snmp(const char *type)
     snmp_init_statistics();
     register_mib_handlers();
     register_default_handlers();
+    init_snmp_transport();
     init_snmpv3(type);
     init_snmp_alarm();
     init_snmp_enum(type);
     init_vacm();
+#if defined(NETSNMP_USE_OPENSSL) && defined(HAVE_LIBSSL)
+    netsnmp_certs_init();
+#endif
 
     read_premib_configs();
 #ifndef NETSNMP_DISABLE_MIB_LOADING
@@ -836,6 +850,28 @@ init_snmp(const char *type)
     read_configs();
 
 }                               /* end init_snmp() */
+
+/**
+ * set a flag indicating that the persistent store needs to be saved.
+ */
+void
+snmp_store_needed(const char *type)
+{
+    DEBUGMSGTL(("snmp_store", "setting needed flag...\n"));
+    _snmp_store_needed = 1;
+}
+
+void
+snmp_store_if_needed(void)
+{
+    if (0 == _snmp_store_needed)
+        return;
+    
+    DEBUGMSGTL(("snmp_store", "store needed...\n"));
+    snmp_store(netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
+                                     NETSNMP_DS_LIB_APPTYPE));
+    _snmp_store_needed = 0;
+}
 
 void
 snmp_store(const char *type)
@@ -954,7 +990,6 @@ _sess_copy(netsnmp_session * in_session)
     struct snmp_secmod_def *sptr;
     char           *cp;
     u_char         *ucp;
-    size_t          i;
 
     in_session->s_snmp_errno = 0;
     in_session->s_errno = 0;
@@ -1056,39 +1091,6 @@ _sess_copy(netsnmp_session * in_session)
             netsnmp_ds_get_int(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_SECLEVEL);
     }
 
-    if (session->securityLevel == 0)
-        session->securityLevel = SNMP_SEC_LEVEL_NOAUTH;
-
-    if (in_session->securityAuthProtoLen > 0) {
-        session->securityAuthProto =
-            snmp_duplicate_objid(in_session->securityAuthProto,
-                                 in_session->securityAuthProtoLen);
-        if (session->securityAuthProto == NULL) {
-            snmp_sess_close(slp);
-            in_session->s_snmp_errno = SNMPERR_MALLOC;
-            return (NULL);
-        }
-    } else if (get_default_authtype(&i) != NULL) {
-        session->securityAuthProto =
-            snmp_duplicate_objid(get_default_authtype(NULL), i);
-        session->securityAuthProtoLen = i;
-    }
-
-    if (in_session->securityPrivProtoLen > 0) {
-        session->securityPrivProto =
-            snmp_duplicate_objid(in_session->securityPrivProto,
-                                 in_session->securityPrivProtoLen);
-        if (session->securityPrivProto == NULL) {
-            snmp_sess_close(slp);
-            in_session->s_snmp_errno = SNMPERR_MALLOC;
-            return (NULL);
-        }
-    } else if (get_default_privtype(&i) != NULL) {
-        session->securityPrivProto =
-            snmp_duplicate_objid(get_default_privtype(NULL), i);
-        session->securityPrivProtoLen = i;
-    }
-
     if (in_session->securityEngineIDLen > 0) {
         ucp = (u_char *) malloc(in_session->securityEngineIDLen);
         if (ucp == NULL) {
@@ -1165,69 +1167,6 @@ _sess_copy(netsnmp_session * in_session)
         session->securityNameLen = strlen(cp);
     }
 
-    if ((in_session->securityAuthKeyLen <= 0) &&
-        ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
-				     NETSNMP_DS_LIB_AUTHMASTERKEY)))) {
-        size_t buflen = sizeof(session->securityAuthKey);
-        u_char *tmpp = session->securityAuthKey;
-        session->securityAuthKeyLen = 0;
-        /* it will be a hex string */
-        if (!snmp_hex_to_binary(&tmpp, &buflen,
-                                &session->securityAuthKeyLen, 0, cp)) {
-            snmp_set_detail("error parsing authentication master key");
-            snmp_sess_close(slp);
-            return NULL;
-        }
-    } else if ((in_session->securityAuthKeyLen <= 0) &&
-        ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
-				     NETSNMP_DS_LIB_AUTHPASSPHRASE)) ||
-         (cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
-				     NETSNMP_DS_LIB_PASSPHRASE)))) {
-        session->securityAuthKeyLen = USM_AUTH_KU_LEN;
-        if (generate_Ku(session->securityAuthProto,
-                        session->securityAuthProtoLen,
-                        (u_char *) cp, strlen(cp),
-                        session->securityAuthKey,
-                        &session->securityAuthKeyLen) != SNMPERR_SUCCESS) {
-            snmp_set_detail
-                ("Error generating a key (Ku) from the supplied authentication pass phrase.");
-            snmp_sess_close(slp);
-            return NULL;
-        }
-    }
-
-    
-    if ((in_session->securityPrivKeyLen <= 0) &&
-        ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
-				     NETSNMP_DS_LIB_PRIVMASTERKEY)))) {
-        size_t buflen = sizeof(session->securityPrivKey);
-        u_char *tmpp = session->securityPrivKey;
-        session->securityPrivKeyLen = 0;
-        /* it will be a hex string */
-        if (!snmp_hex_to_binary(&tmpp, &buflen,
-                                &session->securityPrivKeyLen, 0, cp)) {
-            snmp_set_detail("error parsing encryption master key");
-            snmp_sess_close(slp);
-            return NULL;
-        }
-    } else if ((in_session->securityPrivKeyLen <= 0) &&
-        ((cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
-				     NETSNMP_DS_LIB_PRIVPASSPHRASE)) ||
-         (cp = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID, 
-				     NETSNMP_DS_LIB_PASSPHRASE)))) {
-        session->securityPrivKeyLen = USM_PRIV_KU_LEN;
-        if (generate_Ku(session->securityAuthProto,
-                        session->securityAuthProtoLen,
-                        (u_char *) cp, strlen(cp),
-                        session->securityPrivKey,
-                        &session->securityPrivKeyLen) != SNMPERR_SUCCESS) {
-            snmp_set_detail
-                ("Error generating a key (Ku) from the supplied privacy pass phrase.");
-            snmp_sess_close(slp);
-            return NULL;
-        }
-    }
-
     if (session->retries == SNMP_DEFAULT_RETRIES)
         session->retries = DEFAULT_RETRIES;
     if (session->timeout == SNMP_DEFAULT_TIMEOUT)
@@ -1237,13 +1176,34 @@ _sess_copy(netsnmp_session * in_session)
     snmp_call_callbacks(SNMP_CALLBACK_LIBRARY, SNMP_CALLBACK_SESSION_INIT,
                         session);
 
-    if ((sptr = find_sec_mod(session->securityModel)) != NULL &&
-        sptr->session_open != NULL) {
+    if ((sptr = find_sec_mod(session->securityModel)) != NULL) {
         /*
-         * security module specific inialization 
+         * security module specific copying 
          */
-        (*sptr->session_open) (session);
+        if (sptr->session_setup) {
+            int ret = (*sptr->session_setup) (in_session, session);
+            if (ret != SNMPERR_SUCCESS) {
+                snmp_sess_close(slp);
+                return NULL;
+            }
+        }
+
+        /*
+         * security module specific opening
+         */
+        if (sptr->session_open) {
+            int ret = (*sptr->session_open) (session);
+            if (ret != SNMPERR_SUCCESS) {
+                snmp_sess_close(slp);
+                return NULL;
+            }
+        }
     }
+
+    /* Anything below this point should only be done if the transport
+       had no say in the matter */
+    if (session->securityLevel == 0)
+        session->securityLevel = SNMP_SEC_LEVEL_NOAUTH;
 
     return (slp);
 }
@@ -1339,7 +1299,7 @@ snmpv3_probe_contextEngineID_rfc5343(void *slp, netsnmp_session *session) {
             response->variables->val_len;
         
         if (snmp_get_do_debugging()) {
-            int i;
+            size_t i;
             DEBUGMSGTL(("snmp_sess_open",
                         "  probe found engineID:  "));
             for (i = 0; i < session->securityEngineIDLen; i++)
@@ -1473,7 +1433,113 @@ snmpv3_engineID_probe(struct session_list *slp,
     return 1;
 }
 
+/*******************************************************************-o-******
+ * netsnmp_sess_config_transport
+ *
+ * Parameters:
+ *	*in_session
+ *	*in_transport
+ *
+ * Returns:
+ *      SNMPERR_SUCCESS                     - Yay
+ *      SNMPERR_GENERR                      - Generic Error
+ *      SNMPERR_TRANSPORT_CONFIG_ERROR      - Transport rejected config
+ *      SNMPERR_TRANSPORT_NO_CONFIG         - Transport can't config
+ */
+int
+netsnmp_sess_config_transport(netsnmp_container *transport_configuration,
+                              netsnmp_transport *transport)
+{
+    /* Optional supplimental transport configuration information and
+       final call to actually open the transport */
+    if (transport_configuration) {
+        DEBUGMSGTL(("snmp_sess", "configuring transport\n"));
+        if (transport->f_config) {
+            netsnmp_iterator *iter;
+            netsnmp_transport_config *config_data;
+            int ret;
 
+            iter = CONTAINER_ITERATOR(transport_configuration);
+            if (NULL == iter) {
+                return SNMPERR_GENERR;
+            }
+
+            for(config_data = (netsnmp_transport_config*)ITERATOR_FIRST(iter); config_data;
+                config_data = (netsnmp_transport_config*)ITERATOR_NEXT(iter)) {
+                ret = transport->f_config(transport, config_data->key,
+                                          config_data->value);
+                if (ret) {
+                    return SNMPERR_TRANSPORT_CONFIG_ERROR;
+                }
+            }
+        } else {
+            return SNMPERR_TRANSPORT_NO_CONFIG;
+        }
+    }
+    return SNMPERR_SUCCESS;
+}
+
+ 
+/**
+ * Copies configuration from the session and calls f_open
+ * This function copies any configuration stored in the session
+ * pointer to the transport if it has a f_config pointer and then
+ * calls the transport's f_open function to actually open the
+ * connection.
+ *
+ * @param in_session A pointer to the session that config information is in.
+ * @param transport A pointer to the transport to config/open.
+ *
+ * @return SNMPERR_SUCCESS : on success
+ */
+
+/*******************************************************************-o-******
+ * netsnmp_sess_config_transport
+ *
+ * Parameters:
+ *	*in_session
+ *	*in_transport
+ *
+ * Returns:
+ *      SNMPERR_SUCCESS                     - Yay
+ *      SNMPERR_GENERR                      - Generic Error
+ *      SNMPERR_TRANSPORT_CONFIG_ERROR      - Transport rejected config
+ *      SNMPERR_TRANSPORT_NO_CONFIG         - Transport can't config
+ */
+int
+netsnmp_sess_config_and_open_transport(netsnmp_session *in_session,
+                                       netsnmp_transport *transport)
+{
+    int rc;
+    
+    DEBUGMSGTL(("snmp_sess", "opening transport: %x\n", transport->flags & NETSNMP_TRANSPORT_FLAG_OPENED));
+
+    /* don't double open */
+    if (transport->flags & NETSNMP_TRANSPORT_FLAG_OPENED)
+        return SNMPERR_SUCCESS;
+
+    if ((rc = netsnmp_sess_config_transport(in_session->transport_configuration,
+                                            transport)) != SNMPERR_SUCCESS) {
+        in_session->s_snmp_errno = rc;
+        in_session->s_errno = 0;
+        return rc;
+    }
+        
+    if (transport->f_open)
+        transport = transport->f_open(transport);
+
+    if (transport == NULL) {
+        DEBUGMSGTL(("snmp_sess", "couldn't interpret peername\n"));
+        in_session->s_snmp_errno = SNMPERR_BAD_ADDRESS;
+        in_session->s_errno = errno;
+        snmp_set_detail(in_session->peername);
+        return SNMPERR_BAD_ADDRESS;
+    }
+
+    transport->flags |= NETSNMP_TRANSPORT_FLAG_OPENED;
+    DEBUGMSGTL(("snmp_sess", "done opening transport: %x\n", transport->flags & NETSNMP_TRANSPORT_FLAG_OPENED));
+    return SNMPERR_SUCCESS;
+}
 
 /*******************************************************************-o-******
  * snmp_sess_open
@@ -1491,6 +1557,7 @@ static void    *
 _sess_open(netsnmp_session * in_session)
 {
     netsnmp_transport *transport = NULL;
+    int rc;
 
     in_session->s_snmp_errno = 0;
     in_session->s_errno = 0;
@@ -1526,8 +1593,24 @@ _sess_open(netsnmp_session * in_session)
                                   NETSNMP_DS_LIB_CLIENT_ADDR, clientaddr_save);
     }
 
+    if (transport == NULL) {
+        DEBUGMSGTL(("_sess_open", "couldn't interpret peername\n"));
+        in_session->s_snmp_errno = SNMPERR_BAD_ADDRESS;
+        in_session->s_errno = errno;
+        snmp_set_detail(in_session->peername);
+        return NULL;
+    }
+
+    /* Optional supplimental transport configuration information and
+       final call to actually open the transport */
+    if ((rc = netsnmp_sess_config_and_open_transport(in_session, transport))
+        != SNMPERR_SUCCESS) {
+        transport = NULL;
+        return NULL;
+    }
+
 #if defined(SO_BROADCAST) && defined(SOL_SOCKET)
-    if ( transport != 0 && (in_session->flags & SNMP_FLAGS_UDP_BROADCAST) ) {
+    if ( in_session->flags & SNMP_FLAGS_UDP_BROADCAST) {
         int   b = 1;
         int   rc;
 
@@ -1543,14 +1626,6 @@ _sess_open(netsnmp_session * in_session)
         }
     }
 #endif
-
-    if (transport == NULL) {
-        DEBUGMSGTL(("_sess_open", "couldn't interpret peername\n"));
-        in_session->s_snmp_errno = SNMPERR_BAD_ADDRESS;
-        in_session->s_errno = errno;
-        snmp_set_detail(in_session->peername);
-        return NULL;
-    }
 
     return snmp_sess_add(in_session, transport, NULL, NULL);
 }
@@ -1647,7 +1722,8 @@ snmp_sess_add_ex(netsnmp_session * in_session,
                                               size_t))
 {
     struct session_list *slp;
-
+    int rc;
+    
     _init_snmp();
 
     if (transport == NULL)
@@ -1659,7 +1735,23 @@ snmp_sess_add_ex(netsnmp_session * in_session,
         return NULL;
     }
 
+    /* if the transport hasn't been fully opened yet, open it now */
+    if ((rc = netsnmp_sess_config_and_open_transport(in_session, transport))
+        != SNMPERR_SUCCESS) {
+        return NULL;
+    }
+
+    if (transport->f_setup_session) {
+        if (SNMPERR_SUCCESS !=
+            transport->f_setup_session(transport, in_session)) {
+            netsnmp_transport_free(transport);
+            return NULL;
+        }
+    }
+        
+            
     DEBUGMSGTL(("snmp_sess_add", "fd %d\n", transport->sock));
+
 
     if ((slp = snmp_sess_copy(in_session)) == NULL) {
         transport->f_close(transport);
@@ -2302,7 +2394,7 @@ snmpv3_build(u_char ** pkt, size_t * pkt_len, size_t * offset,
         }
     }
     if (pdu->securityNameLen == 0 && pdu->securityName == NULL) {
-        if (session->securityModel != NETSNMP_TSM_SECURITY_MODEL &&
+        if (session->securityModel != SNMP_SEC_MODEL_TSM &&
             session->securityNameLen == 0) {
             session->s_snmp_errno = SNMPERR_BAD_SEC_NAME;
             return -1;
@@ -2314,6 +2406,9 @@ snmpv3_build(u_char ** pkt, size_t * pkt_len, size_t * offset,
                 return -1;
             }
             pdu->securityNameLen = session->securityNameLen;
+        } else {
+            pdu->securityName = strdup("");
+            session->securityName = strdup("");
         }
     }
     if (pdu->securityLevel == 0) {
@@ -3659,8 +3754,10 @@ snmp_parse_version(u_char * data, size_t length)
     data = asn_parse_sequence(data, &length, &type,
                               (ASN_SEQUENCE | ASN_CONSTRUCTOR), "version");
     if (data) {
+        DEBUGDUMPHEADER("recv", "SNMP Version");
         data =
             asn_parse_int(data, &length, &type, &version, sizeof(version));
+        DEBUGINDENTLESS();
         if (!data || type != ASN_INTEGER) {
             return SNMPERR_BAD_VERSION;
         }
@@ -4813,11 +4910,12 @@ snmpv3_scopedPDU_parse(netsnmp_pdu *pdu, u_char * cp, size_t * length)
      * check that it agrees with engineID returned from USM above
      * * only a warning because this could be legal if we are a proxy
      */
-    if (pdu->securityEngineIDLen != pdu->contextEngineIDLen ||
-        memcmp(pdu->securityEngineID, pdu->contextEngineID,
-               pdu->securityEngineIDLen) != 0) {
+    if (pdu->securityModel == NETSNMP_SECMOD_USM &&
+        (pdu->securityEngineIDLen != pdu->contextEngineIDLen ||
+         memcmp(pdu->securityEngineID, pdu->contextEngineID,
+                pdu->securityEngineIDLen) != 0)) {
         DEBUGMSGTL(("scopedPDU_parse",
-                    "inconsistent engineID information in message\n"));
+                    "Note: security and context engineIDs differ\n"));
     }
 
     /*
@@ -5097,32 +5195,15 @@ _sess_async_send(void *sessp,
         return 0;
     }
 
-    if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DUMP_PACKET)) {
-        if (transport->f_fmtaddr != NULL) {
-            char           *dest_txt =
-                transport->f_fmtaddr(transport, pdu->transport_data,
-                                     pdu->transport_data_length);
-            if (dest_txt != NULL) {
-                snmp_log(LOG_DEBUG, "\nSending %lu bytes to %s\n", (unsigned long)length,
-                         dest_txt);
-                SNMP_FREE(dest_txt);
-            } else {
-                snmp_log(LOG_DEBUG, "\nSending %lu bytes to <UNKNOWN>\n",
-                         (unsigned long)length);
-            }
-        }
-        xdump(packet, length, "");
-    }
-
     /*
      * Send the message.  
      */
 
-    DEBUGMSGTL(("sess_process_packet", "sending message id#%ld reqid#%ld\n",
-                pdu->msgid, pdu->reqid));
-    result = transport->f_send(transport, packet, length,
-                               &(pdu->transport_data),
-                               &(pdu->transport_data_length));
+    DEBUGMSGTL(("sess_process_packet", "sending message id#%ld reqid#%ld len %"
+                NETSNMP_PRIz "u\n", pdu->msgid, pdu->reqid, length));
+    result = netsnmp_transport_send(transport, packet, length,
+                                    &(pdu->transport_data),
+                                    &(pdu->transport_data_length));
 
     SNMP_FREE(pktbuf);
 
@@ -5356,20 +5437,12 @@ _sess_process_packet(void *sessp, netsnmp_session * sp,
 	      "session %p fd %d pkt %p length %d\n", sessp,
 	      transport->sock, packetptr, length));
 
-  if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, 
-			     NETSNMP_DS_LIB_DUMP_PACKET)) {
-    if (transport->f_fmtaddr != NULL) {
-      char *addrtxt = transport->f_fmtaddr(transport, opaque, olength);
-      if (addrtxt != NULL) {
-	snmp_log(LOG_DEBUG, "\nReceived %d bytes from %s\n",
-		 length, addrtxt);
-	SNMP_FREE(addrtxt);
-      } else {
-	snmp_log(LOG_DEBUG, "\nReceived %d bytes from <UNKNOWN>\n",
-		 length);
-      }
-    }
-    xdump(packetptr, length, "");
+  if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID,NETSNMP_DS_LIB_DUMP_PACKET)) {
+      char *addrtxt = netsnmp_transport_peer_string(transport, opaque, olength);
+      snmp_log(LOG_DEBUG, "\nReceived %d byte packet from %s\n",
+               length, addrtxt);
+      SNMP_FREE(addrtxt);
+      xdump(packetptr, length, "");
   }
 
   /*
@@ -5412,8 +5485,8 @@ _sess_process_packet(void *sessp, netsnmp_session * sp,
     ret = snmp_parse(sessp, sp, pdu, packetptr, length);
   }
 
-  DEBUGMSGTL(("sess_process_packet", "received message id#%ld reqid#%ld\n",
-              pdu->msgid, pdu->reqid));
+  DEBUGMSGTL(("sess_process_packet", "received message id#%ld reqid#%ld len "
+              "%u\n", pdu->msgid, pdu->reqid, length));
 
   if (ret != SNMP_ERR_NOERROR) {
     DEBUGMSGTL(("sess_process_packet", "parse fail\n"));
@@ -5831,7 +5904,8 @@ _sess_read(void *sessp, netsnmp_large_fd_set * fdset)
         }
     }
 
-    length = transport->f_recv(transport, rxbuf, rxbuf_len, &opaque, &olength);
+    length = netsnmp_transport_recv(transport, rxbuf, rxbuf_len, &opaque,
+                                    &olength);
 
     if (length == -1 && !(transport->flags & NETSNMP_TRANSPORT_FLAG_STREAM)) {
         sp->s_snmp_errno = SNMPERR_BAD_RECVFROM;
@@ -5901,7 +5975,7 @@ _sess_read(void *sessp, netsnmp_large_fd_set * fdset)
             DEBUGMSGTL(("sess_read", "  loop packet_len %lu, PDU length %lu\n",
                         (unsigned long)isp->packet_len, (unsigned long)pdulen));
              
-            if ((pdulen > MAX_PACKET_LENGTH) || (pdulen < 0)) {
+            if (pdulen > MAX_PACKET_LENGTH) {
                 /*
                  * Illegal length, drop the connection.  
                  */
@@ -6142,16 +6216,27 @@ snmp_sess_select_info(void *sessp,
                       int *numfds,
                       fd_set * fdset, struct timeval *timeout, int *block)
 {
+    return snmp_sess_select_info_flags(sessp, numfds, fdset, timeout, block,
+                                       NETSNMP_SELECT_NOFLAGS);
+}
+        
+int
+snmp_sess_select_info_flags(void *sessp,
+                            int *numfds,
+                            fd_set * fdset, struct timeval *timeout, int *block,
+                            int flags)
+{
   int rc;
   netsnmp_large_fd_set lfdset;
 
   netsnmp_large_fd_set_init(&lfdset, FD_SETSIZE);
   netsnmp_copy_fd_set_to_large_fd_set(&lfdset, fdset);
-  rc = snmp_sess_select_info2(sessp, numfds, &lfdset, timeout, block);
+  rc = snmp_sess_select_info2_flags(sessp, numfds, &lfdset, timeout,
+                                    block, flags);
   if (netsnmp_copy_large_fd_set_to_fd_set(fdset, &lfdset) < 0) {
       snmp_log(LOG_ERR,
 	     "Use snmp_sess_select_info2() for processing"
-	     " large file descriptors");
+	     " large file descriptors\n");
   }
   netsnmp_large_fd_set_cleanup(&lfdset);
   return rc;
@@ -6162,6 +6247,16 @@ snmp_sess_select_info2(void *sessp,
                        int *numfds,
                        netsnmp_large_fd_set * fdset,
 		       struct timeval *timeout, int *block)
+{
+    return snmp_sess_select_info2_flags(sessp, numfds, fdset, timeout, block,
+                                        NETSNMP_SELECT_NOFLAGS);
+}
+
+int
+snmp_sess_select_info2_flags(void *sessp,
+                            int *numfds,
+                            netsnmp_large_fd_set * fdset,
+                            struct timeval *timeout, int *block, int flags)
 {
     struct session_list *slptest = (struct session_list *) sessp;
     struct session_list *slp, *next = NULL;
@@ -6244,7 +6339,9 @@ snmp_sess_select_info2(void *sessp,
     }
     DEBUGMSG(("sess_select", "\n"));
 
-    if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_ALARM_DONT_USE_SIG)) {
+    if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID,
+                               NETSNMP_DS_LIB_ALARM_DONT_USE_SIG) &&
+        !(flags & NETSNMP_SELECT_NOALARMS)) {
         next_alarm = get_next_alarm_delay_time(&delta);
         DEBUGMSGT(("sess_select","next alarm %d.%06d sec\n",
                    (int)delta.tv_sec, (int)delta.tv_usec));
@@ -6415,28 +6512,12 @@ snmp_resend_request(struct session_list *slp, netsnmp_request_list *rp,
         return -1;
     }
 
-    if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_DUMP_PACKET)) {
-        if (transport->f_fmtaddr != NULL) {
-            char           *str = NULL;
-            str = transport->f_fmtaddr(transport, rp->pdu->transport_data,
-                                       rp->pdu->transport_data_length);
-            if (str != NULL) {
-                snmp_log(LOG_DEBUG, "\nResending %lu bytes to %s\n", 
-                         (unsigned long)length, str);
-                SNMP_FREE(str);
-            } else {
-                snmp_log(LOG_DEBUG, "\nResending %lu bytes to <UNKNOWN>\n",
-                         (unsigned long)length);
-            }
-        }
-        xdump(packet, length, "");
-    }
-
-    DEBUGMSGTL(("sess_process_packet", "resending message id#%ld reqid#%ld rp_reqid#%ld rp_msgid#%ld\n",
-                rp->pdu->msgid, rp->pdu->reqid, rp->request_id, rp->message_id));
-    result = transport->f_send(transport, packet, length,
-                               &(rp->pdu->transport_data),
-                               &(rp->pdu->transport_data_length));
+    DEBUGMSGTL(("sess_process_packet", "resending message id#%ld reqid#%ld "
+                "rp_reqid#%ld rp_msgid#%ld len %" NETSNMP_PRIz "u\n",
+                rp->pdu->msgid, rp->pdu->reqid, rp->request_id, rp->message_id, length));
+    result = netsnmp_transport_send(transport, packet, length,
+                                    &(rp->pdu->transport_data),
+                                    &(rp->pdu->transport_data_length));
 
     /*
      * We are finished with the local packet buffer, if we allocated one (due
@@ -7523,12 +7604,12 @@ snmp_duplicate_objid(const oid * objToCopy, size_t objToCopyLen)
 /*
  * generic statistics counter functions 
  */
-static u_int    statistics[MAX_STATS];
+static u_int    statistics[NETSNMP_STAT_MAX_STATS];
 
 u_int
 snmp_increment_statistic(int which)
 {
-    if (which >= 0 && which < MAX_STATS) {
+    if (which >= 0 && which < NETSNMP_STAT_MAX_STATS) {
         statistics[which]++;
         return statistics[which];
     }
@@ -7538,7 +7619,7 @@ snmp_increment_statistic(int which)
 u_int
 snmp_increment_statistic_by(int which, int count)
 {
-    if (which >= 0 && which < MAX_STATS) {
+    if (which >= 0 && which < NETSNMP_STAT_MAX_STATS) {
         statistics[which] += count;
         return statistics[which];
     }
@@ -7548,7 +7629,7 @@ snmp_increment_statistic_by(int which, int count)
 u_int
 snmp_get_statistic(int which)
 {
-    if (which >= 0 && which < MAX_STATS)
+    if (which >= 0 && which < NETSNMP_STAT_MAX_STATS)
         return statistics[which];
     return 0;
 }

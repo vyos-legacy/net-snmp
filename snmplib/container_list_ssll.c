@@ -1,6 +1,6 @@
 /*
  * container_list_sl.c
- * $Id: container_list_ssll.c 17596 2009-05-06 21:59:20Z nba $
+ * $Id: container_list_ssll.c 18300 2010-03-14 21:02:22Z rstory $
  *
  */
 #include <net-snmp/net-snmp-config.h>
@@ -133,7 +133,7 @@ _ssll_insert(netsnmp_container *c, const void *data)
     new_node = SNMP_MALLOC_TYPEDEF(sl_node);
     if(NULL == new_node)
         return -1;
-    new_node->data = (void *)data;
+    new_node->data = NETSNMP_REMOVE_CONST(void *, data);
     ++sl->count;
     ++c->sync;
 
@@ -310,13 +310,9 @@ netsnmp_container_get_ssll(void)
         return NULL;
     }
 
-    sl->c.cfree = _ssll_free;
-        
-    sl->c.get_size = _ssll_size;
-    sl->c.init = NULL;
-    sl->c.insert = _ssll_insert;
-    sl->c.remove = _ssll_remove;
-    sl->c.find = _ssll_find;
+    netsnmp_init_container((netsnmp_container *)sl, NULL, _ssll_free,
+                           _ssll_size, NULL, _ssll_insert, _ssll_remove,
+                           _ssll_find);
     sl->c.find_next = _ssll_find_next;
     sl->c.get_subset = NULL;
     sl->c.get_iterator =_ssll_iterator_get;

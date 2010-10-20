@@ -24,11 +24,7 @@
 #include <stdlib.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -554,9 +550,6 @@ create_explanaition(CRTL_ENTRY_T * evptr, u_char is_rising,
     strcat(descr, expl);
     return descr;
 }
-
-extern void     send_enterprise_trap_vars(int, int, oid *, int,
-                                          netsnmp_variable_list *);
 
 static netsnmp_variable_list *
 oa_bind_var(netsnmp_variable_list * prev,

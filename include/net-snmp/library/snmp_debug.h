@@ -20,41 +20,53 @@ extern          "C" {
      * the macros below. 
      */
 #if !defined(__GNUC__) || __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 8)
-    void            debugmsg(const char *token, const char *format, ...);
-    void            debugmsgtoken(const char *token, const char *format,
-                                  ...);
-    void            debug_combo_nc(const char *token, const char *format,
-                                   ...);
+#define NETSNMP_ATTRIBUTE_FORMAT(type, formatArg, firstArg)
 #else
+#define NETSNMP_ATTRIBUTE_FORMAT(type, formatArg, firstArg) \
+  __attribute__((__format__( __ ## type ## __, formatArg, firstArg )))
+#endif
+
+    NETSNMP_IMPORT
     void            debugmsg(const char *token, const char *format, ...)
-                        __attribute__ ((__format__ (__printf__, 2, 3)));
+                        NETSNMP_ATTRIBUTE_FORMAT(printf, 2, 3);
+    NETSNMP_IMPORT
     void            debugmsgtoken(const char *token, const char *format,
                                   ...)
-                        __attribute__ ((__format__ (__printf__, 2, 3)));
+                        NETSNMP_ATTRIBUTE_FORMAT(printf, 2, 3);
     void            debug_combo_nc(const char *token, const char *format,
                                    ...)
-                        __attribute__ ((__format__ (__printf__, 2, 3)));
-#endif
+                        NETSNMP_ATTRIBUTE_FORMAT(printf, 2, 3);
+
+#undef NETSNMP_ATTRIBUTE_FORMAT
+
+    NETSNMP_IMPORT
     void            debugmsg_oid(const char *token, const oid * theoid,
                                  size_t len);
     void            debugmsg_suboid(const char *token, const oid * theoid,
                                     size_t len);
+    NETSNMP_IMPORT
     void            debugmsg_var(const char *token,
                                  netsnmp_variable_list * var);
+    NETSNMP_IMPORT
     void            debugmsg_oidrange(const char *token,
                                       const oid * theoid, size_t len,
                                       size_t var_subid, oid range_ubound);
-    void            debugmsg_hex(const char *token, u_char * thedata,
+    NETSNMP_IMPORT
+    void            debugmsg_hex(const char *token, const u_char * thedata,
                                  size_t len);
-    void            debugmsg_hextli(const char *token, u_char * thedata,
+    NETSNMP_IMPORT
+    void            debugmsg_hextli(const char *token, const u_char * thedata,
                                     size_t len);
+    NETSNMP_IMPORT
     void            debug_indent_add(int amount);
+    NETSNMP_IMPORT
     int             debug_indent_get(void);
     /*
      * What is said above is true for this function as well. Further this
      * function is deprecated and only provided for backwards compatibility.
      * Please use "%*s", debug_indent_get(), "" if you used this one before.
      */
+    NETSNMP_IMPORT
     const char     *debug_indent(void);
 
     /*
@@ -135,8 +147,11 @@ extern          "C" {
 #ifdef  NETSNMP_FUNCTION
 #define __DBGTRACE       __DBGMSGT(("trace","%s(): %s, %d:\n",\
 				NETSNMP_FUNCTION,__FILE__,__LINE__))
+#define __DBGTRACETOK(x) __DBGMSGT((x,"%s(): %s, %d:\n",       \
+                                    NETSNMP_FUNCTION,__FILE__,__LINE__))
 #else
 #define __DBGTRACE       __DBGMSGT(("trace"," %s, %d:\n", __FILE__,__LINE__))
+#define __DBGTRACETOK(x) __DBGMSGT((x," %s, %d:\n", __FILE__,__LINE__))
 #endif
 
 #define __DBGMSGL(x)     __DBGTRACE, debugmsg x
@@ -184,89 +199,19 @@ extern          "C" {
 
 /******************* End   private macros ************************/
 /*****************************************************************/
+#endif /* NETSNMP_NO_DEBUGGING */
 
-/*****************************************************************/
-/********************Start public  macros ************************/
+    /* Public macros moved to top-level API header file */
+#include <net-snmp/output_api.h>
 
-#define DEBUGMSG(x)        do {if (_DBG_IF_) {debugmsg x;} }while(0)
-#define DEBUGMSGT(x)       do {if (_DBG_IF_) {__DBGMSGT(x);} }while(0)
-#define DEBUGTRACE         do {if (_DBG_IF_) {__DBGTRACE;} }while(0)
-#define DEBUGMSGL(x)       do {if (_DBG_IF_) {__DBGMSGL(x);} }while(0)
-#define DEBUGMSGTL(x)      do {if (_DBG_IF_) {__DBGMSGTL(x);} }while(0)
-#define DEBUGMSGOID(x)     do {if (_DBG_IF_) {__DBGMSGOID(x);} }while(0)
-#define DEBUGMSGSUBOID(x)  do {if (_DBG_IF_) {__DBGMSGSUBOID(x);} }while(0)
-#define DEBUGMSGVAR(x)     do {if (_DBG_IF_) {__DBGMSGVAR(x);} }while(0)
-#define DEBUGMSGOIDRANGE(x) do {if (_DBG_IF_) {__DBGMSGOIDRANGE(x);} }while(0)
-#define DEBUGMSGHEX(x)     do {if (_DBG_IF_) {__DBGMSGHEX(x);} }while(0)
-#define DEBUGMSGHEXTLI(x)  do {if (_DBG_IF_) {__DBGMSGHEXTLI(x);} }while(0)
-#define DEBUGINDENTADD(x)  do {if (_DBG_IF_) {__DBGINDENTADD(x);} }while(0)
-#define DEBUGINDENTMORE()  do {if (_DBG_IF_) {__DBGINDENTMORE();} }while(0)
-#define DEBUGINDENTLESS()  do {if (_DBG_IF_) {__DBGINDENTLESS();} }while(0)
-#define DEBUGPRINTINDENT(token) \
-	do {if (_DBG_IF_) {__DBGPRINTINDENT(token);} }while(0)
-
-
-#define DEBUGDUMPHEADER(token,x) \
-	do {if (_DBG_IF_) {__DBGDUMPHEADER(token,x);} }while(0)
-
-#define DEBUGDUMPSECTION(token,x) \
-	do {if (_DBG_IF_) {__DBGDUMPSECTION(token,x);} }while(0)
-
-#define DEBUGDUMPSETUP(token,buf,len) \
-	do {if (_DBG_IF_) {__DBGDUMPSETUP(token,buf,len);} }while(0)
-
-#define DEBUGMSG_NC(x)  do { __DBGMSG_NC(x); }while(0)
-#define DEBUGMSGT_NC(x) do { __DBGMSGT_NC(x); }while(0)
-
-#else                           /* NETSNMP_NO_DEBUGGING := enable streamlining of the code */
-
-#define DEBUGMSG(x)
-#define DEBUGMSGT(x)
-#define DEBUGTRACE
-#define DEBUGMSGL(x)
-#define DEBUGMSGTL(x)
-#define DEBUGMSGOID(x)
-#define DEBUGMSGSUBOID(x)
-#define DEBUGMSGVAR(x)
-#define DEBUGMSGOIDRANGE(x)
-#define DEBUGMSGHEX(x)
-#define DEBUGIF(x)        if(0)
-#define DEBUGDUMP(t,b,l,p)
-#define DEBUGINDENTMORE()
-#define DEBUGINDENTLESS()
-#define DEBUGINDENTADD(x)
-#define DEBUGMSGHEXTLI(x)
-#define DEBUGPRINTINDENT(token)
-#define DEBUGDUMPHEADER(token,x)
-#define DEBUGDUMPSECTION(token,x)
-#define DEBUGDUMPSETUP(token, buf, len)
-
-#define DEBUGMSG_NC(x)
-#define DEBUGMSGT_NC(x)
-
-#endif
+    void            snmp_debug_init(void);
 
 #define MAX_DEBUG_TOKENS 256
 #define MAX_DEBUG_TOKEN_LEN 128
 #define DEBUG_TOKEN_DELIMITER ","
 #define DEBUG_ALWAYS_TOKEN "all"
 
-    /*
-     * setup routines:
-     * 
-     * debug_register_tokens(char *):     registers a list of tokens to
-     * print debugging output for.
-     * 
-     * debug_is_token_registered(char *): returns SNMPERR_SUCCESS or SNMPERR_GENERR
-     * if a token has been registered or
-     * not (and debugging output is "on").
-     * snmp_debug_init(void):             registers .conf handlers.
-     */
-    void            debug_register_tokens(char *tokens);
-    int             debug_is_token_registered(const char *token);
-    void            snmp_debug_init(void);
-    void            snmp_set_do_debugging(int);
-    int             snmp_get_do_debugging(void);
+#ifndef NETSNMP_NO_DEBUGGING
 
 /*
  * internal:
@@ -280,7 +225,9 @@ typedef struct netsnmp_token_descr_s {
 
 NETSNMP_IMPORT int                 debug_num_tokens;
 NETSNMP_IMPORT netsnmp_token_descr dbg_tokens[MAX_DEBUG_TOKENS];
-    
+
+#endif /* NETSNMP_NO_DEBUGGING */
+
 #ifdef __cplusplus
 }
 #endif

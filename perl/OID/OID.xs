@@ -1,4 +1,5 @@
 /* -*- C -*- */
+#include <net-snmp/net-snmp-config.h>
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
@@ -15,13 +16,6 @@ typedef struct netsnmp_oid_s {
     oid                  namebuf[ MAX_OID_LEN ];
 } netsnmp_oid;
 
-static int
-not_here(char *s)
-{
-    croak("%s not implemented on this architecture", s);
-    return -1;
-}
-
 static double
 constant(char *name, int len, int arg)
 {
@@ -33,7 +27,7 @@ netsnmp_oid *
 nso_newarrayptr(oid *name, size_t name_len) 
 {
     netsnmp_oid *RETVAL;
-    RETVAL = SNMP_MALLOC_TYPEDEF(netsnmp_oid);
+    RETVAL = malloc(sizeof(netsnmp_oid));
     RETVAL->name = RETVAL->namebuf;
     RETVAL->len = name_len;
     memcpy(RETVAL->name, name, name_len * sizeof(oid));
@@ -151,25 +145,10 @@ int len;
    int i;
    buf[0] = '\0';
    for (i=0; i < len; i++) {
-	sprintf(buf,".%lu",*objid++);
+	sprintf(buf,".%" NETSNMP_PRIo "u",*objid++);
 	buf += strlen(buf);
    }
    return SNMPERR_SUCCESS;
-}
-
-static int
-__tp_sprint_num_objid (buf, tp)
-char *buf;
-struct tree *tp;
-{
-   oid newname[MAX_OID_LEN], *op;
-   /* code taken from get_node in snmp_client.c */
-   for (op = newname + MAX_OID_LEN - 1; op >= newname; op--) {
-      *op = tp->subid;
-      tp = tp->parent;
-      if (tp == NULL) break;
-   }
-   return __sprint_num_objid(buf, op, newname + MAX_OID_LEN - op);
 }
 
 MODULE = NetSNMP::OID		PACKAGE = NetSNMP::OID		PREFIX=nso_
@@ -180,12 +159,13 @@ nso_newptr(initstring)
     CODE:
         if (get_tree_head() == NULL)
             netsnmp_init_mib();
-        RETVAL = SNMP_MALLOC_TYPEDEF(netsnmp_oid);
+        RETVAL = malloc(sizeof(netsnmp_oid));
         RETVAL->name = RETVAL->namebuf;
         RETVAL->len = sizeof(RETVAL->namebuf)/sizeof(RETVAL->namebuf[0]);
         if (!snmp_parse_oid(initstring, (oid *) RETVAL->name, &RETVAL->len)) {
             snmp_log(LOG_ERR, "Can't parse: %s\n", initstring);
             RETVAL->len = 0;
+            free(RETVAL);
             RETVAL = NULL;
         }
     OUTPUT:
@@ -283,11 +263,12 @@ nsop_get_indexes(oid1)
                 return;
             }
                 
-            if ((buf = (u_char *) calloc(buf_len, 1)) == NULL) {
+            if ((buf = netsnmp_malloc(buf_len)) == NULL) {
                 RETVAL = NULL;
                 return;
             }
 
+            tpe = NULL;
             nodecount = 0;
             for(tpnode = tp; tpnode; tpnode = tpnode->parent) {
                 nodecount++;
@@ -298,9 +279,16 @@ nsop_get_indexes(oid1)
                      strcmp(tpnode->label + strlen(tpnode->label) - 5,
                             "Table"))) {
                     /* we're not within a table.  bad logic, little choice */
+                    netsnmp_free(buf);
                     RETVAL = NULL;
                     return;
                 }
+            }
+
+            if (!tpe) {
+                netsnmp_free(buf);
+                RETVAL = NULL;
+                return;
             }
 
             if (tpe->augments && strlen(tpe->augments) > 0) {
@@ -309,6 +297,7 @@ nsop_get_indexes(oid1)
                     (NULL ==
                      (tpe = get_tree(name, name_len,
                                      get_tree_head())))) {
+                    netsnmp_free(buf);
                     RETVAL = NULL;
                     return; /* XXX: better error recovery needed? */
                 }
@@ -331,12 +320,14 @@ nsop_get_indexes(oid1)
                     (NULL ==
                      (indexnode = get_tree(name, name_len,
                                            get_tree_head())))) {
+                    netsnmp_free(buf);
                     RETVAL = NULL;
                     return;             /* xxx mem leak */
                 }
                 vbdata.type = mib_to_asn_type(indexnode->type);
 
                 if (vbdata.type == (u_char) -1) {
+                    netsnmp_free(buf);
                     RETVAL = NULL;
                     return; /* XXX: not good.  half populated stack? */
                 }
@@ -358,9 +349,9 @@ nsop_get_indexes(oid1)
                     }
                 }
 
-                /* possible memory leak: vbdata.data should be freed later */
                 if (parse_one_oid_index(&oidp, &oidp_len, &vbdata, 0)
                     != SNMPERR_SUCCESS) {
+                    netsnmp_free(buf);
                     RETVAL = NULL;
                     return;
                 }
@@ -374,9 +365,10 @@ nsop_get_indexes(oid1)
                 sprint_realloc_value(&buf, &buf_len, &out_len,
                                      1, name, name_len, &vbdata);
 */
-
-                av_push(myret, newSVpv(buf, out_len));
+                snmp_free_var_internals(&vbdata);
+                av_push(myret, newSVpv((char *)buf, out_len));
             }
+            netsnmp_free(buf);
             RETVAL = newRV((SV *)myret);
         }
     OUTPUT:

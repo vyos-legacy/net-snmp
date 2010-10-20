@@ -32,12 +32,16 @@
  * static char sccsid[] = "from: @(#)getopt.c   8.2 (Berkeley) 4/2/94"; 
  */
 static char    *rcsid =
-    "$Id: getopt.c 13265 2005-10-27 09:43:13Z dts12 $";
+    "$Id: getopt.c 18212 2010-02-27 13:11:15Z bvassche $";
 #endif                          /* LIBC_SCCS and not lint */
+
+#include <net-snmp/net-snmp-config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <net-snmp/library/getopt.h>
 
 #ifdef _BSD
 extern char    *__progname;

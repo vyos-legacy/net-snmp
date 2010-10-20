@@ -1,7 +1,7 @@
 /*
  *  Arp MIB architecture support
  *
- * $Id: arp_common.c 17431 2009-03-23 09:21:30Z jsafranek $
+ * $Id: arp_common.c 18993 2010-06-16 03:28:07Z rstory $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -62,8 +62,11 @@ netsnmp_access_arp_container_load(netsnmp_container* container, u_int load_flags
 
     DEBUGMSGTL(("access:arp:container", "load\n"));
 
-    if (NULL == container)
+    if (NULL == container) {
         container = netsnmp_container_find("access:arp:table_container");
+        if (container)
+            container->container_name = strdup("arp");
+    }
     if (NULL == container) {
         snmp_log(LOG_ERR, "no container specified/found for access_arp\n");
         return NULL;

@@ -51,11 +51,6 @@ SOFTWARE.
 #include <stdio.h>
 #include <ctype.h>
 #include <net-snmp/utilities.h>
-
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
-
 #include <net-snmp/config_api.h>
 #include <net-snmp/output_api.h>
 #include <net-snmp/mib_api.h>
@@ -79,7 +74,7 @@ usage(void)
     fprintf(stderr,
             "  -M DIR[:...]\t\tlook in given list of directories for MIBs\n");
     fprintf(stderr,
-            "  -D TOKEN[,...]\tturn on debugging output for the specified TOKENs\n\t\t\t   (ALL gives extremely verbose debugging output)\n");
+            "  -D[TOKEN[,...]]\tturn on debugging output for the specified TOKENs\n\t\t\t   (ALL gives extremely verbose debugging output)\n");
     fprintf(stderr, "  -w WIDTH\t\tset width of tree and detail output\n");
     fprintf(stderr,
             "  -T TRANSOPTS\t\tSet various options controlling report produced:\n");
@@ -240,7 +235,6 @@ main(int argc, char *argv[])
         }
     }
 
-    snmp_enable_stderrlog();
     init_snmp("snmpapp");
     if (optind < argc)
         current_name = argv[optind];

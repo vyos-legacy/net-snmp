@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: ipaddress_ioctl.c 17596 2009-05-06 21:59:20Z nba $
+ * $Id: ipaddress_ioctl.c 19018 2010-06-16 21:34:42Z dts12 $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -35,7 +35,7 @@ netsnmp_ioctl_ipaddress_extras_get(netsnmp_ipaddress_entry *entry)
     if ((NULL == entry) || (NULL == entry->arch_data))
         return NULL;
 
-    return netsnmp_get_list_data(entry->arch_data, LIST_TOKEN);
+    return (_ioctl_extras*)netsnmp_get_list_data(entry->arch_data, LIST_TOKEN);
 }
 
 /**
@@ -135,7 +135,6 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
     struct ifreq   *ifrp;
     struct sockaddr save_addr;
     struct sockaddr_in * si;
-    netsnmp_ipaddress_entry *entry, *bcastentry = NULL;
     struct address_flag_info addr_info;
     in_addr_t       ipval;
     _ioctl_extras           *extras;
@@ -156,6 +155,7 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
 
     ifrp = ifc.ifc_req;
     for(i=0; i < interfaces; ++i, ++ifrp) {
+        netsnmp_ipaddress_entry *entry, *bcastentry = NULL;
 
         DEBUGMSGTL(("access:ipaddress:container",
                     " interface %d, %s\n", i, ifrp->ifr_name));
@@ -236,8 +236,8 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
            }
            bcastentry->if_index = entry->if_index;
            bcastentry->ns_ia_index = ++idx_offset;
-           bcastentry->ia_address_len = sizeof(addr_info.inp->s_addr);
-           memcpy(bcastentry->ia_address, &addr_info.inp->s_addr,
+           bcastentry->ia_address_len = sizeof(addr_info.addr);
+           memcpy(bcastentry->ia_address, &addr_info.addr,
                   bcastentry->ia_address_len);
         }
 #endif
@@ -307,7 +307,7 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
 
         DEBUGIF("access:ipaddress:container") {
             DEBUGMSGT_NC(("access:ipaddress:container",
-                          " if %d: addr len %d, index 0x%lx\n",
+                          " if %d: addr len %d, index 0x%" NETSNMP_PRIo "x\n",
                           i, entry->ia_address_len, entry->if_index));
             if (4 == entry->ia_address_len)
                 DEBUGMSGT_NC(("access:ipaddress:container", " address %p\n",
@@ -328,6 +328,7 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
                 netsnmp_access_ipaddress_entry_free(entry);
                 continue;
             }
+            bcastentry = NULL;
         }
 
         if (CONTAINER_INSERT(container, entry) < 0) {
@@ -382,7 +383,7 @@ _next_alias(const char *if_name)
     netsnmp_assert(NULL != ifc.ifc_buf);
     DEBUGMSGTL(("access:ipaddress:container", "processing %d interfaces\n", interfaces));
 
-    alias_list = malloc(interfaces * sizeof(int));
+    alias_list = (int*)malloc(interfaces * sizeof(int));
     if (NULL == alias_list) {
         close(sd);
         return -2;
@@ -465,7 +466,8 @@ _netsnmp_ioctl_ipaddress_set_v4(netsnmp_ipaddress_entry * entry)
         int   alias_idx;
 
         if (NULL == name) {
-            DEBUGMSGT(("access:ipaddress:set", "cant find name for index %ld\n",
+            DEBUGMSGT(("access:ipaddress:set",
+                       "cant find name for index %" NETSNMP_PRIo "d\n",
                        entry->if_index));
             close(fd);
             return -1;
@@ -479,7 +481,7 @@ _netsnmp_ioctl_ipaddress_set_v4(netsnmp_ipaddress_entry * entry)
                  name, alias_idx);
     }
     else
-        strncpy(ifrq.ifr_name, extras->name, sizeof(ifrq.ifr_name));
+        strncpy(ifrq.ifr_name, (char *) extras->name, sizeof(ifrq.ifr_name));
 
     ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
 
@@ -529,7 +531,7 @@ _netsnmp_ioctl_ipaddress_delete_v4(netsnmp_ipaddress_entry * entry)
 
     memset(&ifrq, 0, sizeof(ifrq));
 
-    strncpy(ifrq.ifr_name, extras->name, sizeof(ifrq.ifr_name));
+    strncpy(ifrq.ifr_name, (char *) extras->name, sizeof(ifrq.ifr_name));
     ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
 
     ifrq.ifr_flags = 0;
@@ -570,7 +572,7 @@ netsnmp_access_ipaddress_ioctl_get_interface_count(int sd, struct ifconf * ifc)
      */
 
     for (i = 8;; i *= 2) {
-        ifc->ifc_buf = calloc(i, sizeof(struct ifreq));
+        ifc->ifc_buf = (caddr_t)calloc(i, sizeof(struct ifreq));
         if (NULL == ifc->ifc_buf) {
             snmp_log(LOG_ERR, "could not allocate memory for %d interfaces\n",
                      i);
@@ -585,7 +587,7 @@ netsnmp_access_ipaddress_ioctl_get_interface_count(int sd, struct ifconf * ifc)
                  */
                 snmp_log(LOG_ERR, "bad rc from ioctl, errno %d", errno);
                 SNMP_FREE(ifc->ifc_buf);
-                break;
+                return -1;
             }
             /*
              * Otherwise, it could just be that the buffer is too small.  
@@ -635,7 +637,7 @@ _print_flags(short flags)
         { IFF_AUTOMEDIA,   "auto media select active"},
     };
     short unknown = flags;
-    int i;
+    size_t i;
 
     for(i = 0; i < sizeof(map)/sizeof(map[0]); ++i)
         if(flags & map[i].flag) {

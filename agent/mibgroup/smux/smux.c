@@ -26,11 +26,7 @@
 #include <err.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -47,8 +43,6 @@
 #include <sys/stat.h>
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
-#elif HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_SYS_FILIO_H
 #include <sys/filio.h>
@@ -351,7 +345,8 @@ var_smux_write(int action,
     u_char          buf[SMUXMAXPKTSIZE], *ptr, sout[3], type;
     int             reterr;
     size_t          var_len, datalen, name_length, packet_len;
-    ssize_t         len, tmp_len;
+    size_t          len;
+    ssize_t         tmp_len;
     long            reqid, errsts, erridx;
     u_char          var_type, *dataptr;
 
@@ -441,8 +436,8 @@ var_smux_write(int action,
                 return SNMP_ERR_GENERR;
             }
 
-            DEBUGMSGTL(("smux", "[var_smux_write] Peeked at %d bytes\n",
-                        len));
+            DEBUGMSGTL(("smux", "[var_smux_write] Peeked at %" NETSNMP_PRIz
+                        "d bytes\n", len));
             DEBUGDUMPSETUP("var_smux_write", buf, len);
 
             /*
@@ -477,8 +472,8 @@ var_smux_write(int action,
                 return SNMP_ERR_GENERR;
             }
 
-            DEBUGMSGTL(("smux", "[var_smux_write] Received %d bytes\n",
-                        len));
+            DEBUGMSGTL(("smux", "[var_smux_write] Received %" NETSNMP_PRIz
+                        "d bytes\n", len));
 
             if (buf[0] == SMUX_TRAP) {
                 DEBUGMSGTL(("smux", "[var_smux_write] Received trap\n"));
@@ -571,9 +566,10 @@ smux_accept(int sd)
     u_char          data[SMUXMAXPKTSIZE], *ptr, type;
     struct sockaddr_in in_socket;
     struct timeval  tv;
-    int             fail, fd, alen;
+    int             fail, fd;
+    socklen_t       alen;
     int             length;
-    ssize_t         len;
+    size_t          len;
 
     alen = sizeof(struct sockaddr_in);
     /*
@@ -740,8 +736,8 @@ smux_pdu_process(int fd, u_char * data, size_t length)
     size_t          len;
     u_char         *ptr, type;
 
-    DEBUGMSGTL(("smux", "[smux_pdu_process] Processing %d bytes\n",
-                length));
+    DEBUGMSGTL(("smux", "[smux_pdu_process] Processing %" NETSNMP_PRIz
+                "d bytes\n", length));
 
     error = 0;
     ptr = data;
@@ -827,8 +823,8 @@ smux_open_process(int fd, u_char * ptr, size_t * len, int *fail)
         return ((ptr += *len));
     }
     DEBUGMSGTL(("smux",
-                "[smux_open_process] version %d, len %d, type %d\n",
-                version, *len, (int) type));
+                "[smux_open_process] version %ld, len %" NETSNMP_PRIz
+                "u, type %d\n", version, *len, (int) type));
 
     oid_name_len = MAX_OID_LEN;
     if ((ptr = asn_parse_objid(ptr, len, &type, oid_name,
@@ -842,8 +838,8 @@ smux_open_process(int fd, u_char * ptr, size_t * len, int *fail)
     if (snmp_get_do_debugging()) {
         DEBUGMSGTL(("smux", "[smux_open_process] smux peer: %s\n",
                     oid_print));
-        DEBUGMSGTL(("smux", "[smux_open_process] len %d, type %d\n", *len,
-                    (int) type));
+        DEBUGMSGTL(("smux", "[smux_open_process] len %" NETSNMP_PRIz
+                    "u, type %d\n", *len, (int) type));
     }
 
     string_len = SMUXMAXSTRLEN;
@@ -859,8 +855,8 @@ smux_open_process(int fd, u_char * ptr, size_t * len, int *fail)
         for (i = 0; i < (int) string_len; i++)
             DEBUGMSG(("smux", "%c", descr[i]));
         DEBUGMSG(("smux", "\n"));
-        DEBUGMSGTL(("smux", "[smux_open_process] len %d, type %d\n", *len,
-                    (int) type));
+        DEBUGMSGTL(("smux", "[smux_open_process] len %" NETSNMP_PRIz
+                    "u, type %d\n", *len, (int) type));
     }
     descr[string_len] = 0;
 
@@ -877,8 +873,8 @@ smux_open_process(int fd, u_char * ptr, size_t * len, int *fail)
         for (i = 0; i < (int) string_len; i++)
             DEBUGMSG(("smux", "%c", passwd[i]));
         DEBUGMSG(("smux", "\n"));
-        DEBUGMSGTL(("smux", "[smux_open_process] len %d, type %d\n", *len,
-                    (int) type));
+        DEBUGMSGTL(("smux", "[smux_open_process] len %" NETSNMP_PRIz
+                    "u, type %d\n", *len, (int) type));
     }
     passwd[string_len] = '\0';
     if (!smux_auth_peer(oid_name, oid_name_len, passwd, fd)) {
@@ -981,7 +977,7 @@ smux_close_process(int fd, u_char * ptr, size_t * len)
     }
 
     DEBUGMSGTL(("smux",
-                "[smux_close_process] close from peer on fd %d reason %d\n",
+                "[smux_close_process] close from peer on fd %d reason %ld\n",
                 fd, down));
     smux_peer_cleanup(fd);
 
@@ -1013,7 +1009,7 @@ smux_rreq_process(int sd, u_char * ptr, size_t * len)
         smux_send_rrsp(sd, -1);
         return NULL;
     }
-    DEBUGMSGTL(("smux", "[smux_rreq_process] priority %d\n", priority));
+    DEBUGMSGTL(("smux", "[smux_rreq_process] priority %ld\n", priority));
 
     if ((ptr = asn_parse_int(ptr, len, &type, &operation,
                              sizeof(operation))) == NULL) {
@@ -1022,7 +1018,7 @@ smux_rreq_process(int sd, u_char * ptr, size_t * len)
         smux_send_rrsp(sd, -1);
         return NULL;
     }
-    DEBUGMSGTL(("smux", "[smux_rreq_process] operation %d\n", operation));
+    DEBUGMSGTL(("smux", "[smux_rreq_process] operation %ld\n", operation));
 
     if (operation == SMUX_REGOP_DELETE) {
         /*
@@ -1311,6 +1307,7 @@ smux_list_add(smux_reg ** head, smux_reg * add)
      */
     if ( prev ) { prev->sr_next = add; }
     else        {         *head = add; }
+    add->sr_next = NULL;
     return 0;
 }
 
@@ -1356,7 +1353,7 @@ smux_snmp_process(int exact,
                   size_t * return_len, u_char * return_type, int sd)
 {
     u_char          packet[SMUXMAXPKTSIZE], *ptr, result[SMUXMAXPKTSIZE];
-    int             length = SMUXMAXPKTSIZE;
+    size_t          length = SMUXMAXPKTSIZE;
     int             tmp_length;
     u_char          type;
     size_t          packet_len;
@@ -1385,7 +1382,7 @@ smux_snmp_process(int exact,
     }
 
     DEBUGMSGTL(("smux",
-                "[smux_snmp_process] Sent %d request to peer; %d bytes\n",
+                "[smux_snmp_process] Sent %d request to peer; %" NETSNMP_PRIz "d bytes\n",
                 (int) type, length));
 
     while (1) {
@@ -1408,7 +1405,7 @@ smux_snmp_process(int exact,
             }
         }
 
-        DEBUGMSGTL(("smux", "[smux_snmp_process] Peeked at %d bytes\n",
+        DEBUGMSGTL(("smux", "[smux_snmp_process] Peeked at %" NETSNMP_PRIz "d bytes\n",
                     length));
         DEBUGDUMPSETUP("smux_snmp_process", result, length);
 
@@ -1443,7 +1440,7 @@ smux_snmp_process(int exact,
            return NULL;
         }
 
-        DEBUGMSGTL(("smux", "[smux_snmp_process] Received %d bytes\n",
+        DEBUGMSGTL(("smux", "[smux_snmp_process] Received %" NETSNMP_PRIz "d bytes\n",
                     length));
 
         if (result[0] == SMUX_TRAP) {
@@ -1516,7 +1513,7 @@ smux_parse(u_char * rsp,
      * XXX How to send something intelligent back in case of an error 
      */
     DEBUGMSGTL(("smux",
-                "[smux_parse] Message type %d, reqid %d, errstat %d, \n\terrindex %d\n",
+                "[smux_parse] Message type %d, reqid %ld, errstat %ld, \n\terrindex %ld\n",
                 (int) type, reqid, errstat, errindex));
     if (ptr == NULL || errstat != SNMP_ERR_NOERROR)
         return NULL;
@@ -1576,8 +1573,8 @@ smux_parse_var(u_char * varbind,
      */
     len = SMUXMAXPKTSIZE;
     DEBUGMSGTL(("smux",
-                "[smux_parse_var] Asn coded len of var %d, type %d\n",
-                var_val_len, (int) *vartype));
+                "[smux_parse_var] Asn coded len of var %" NETSNMP_PRIz
+                "u, type %d\n", var_val_len, (int) *vartype));
 
     switch ((short) *vartype) {
     case ASN_INTEGER:
@@ -1984,7 +1981,7 @@ smux_trap_process(u_char * rsp, size_t * len)
             /*
              * XXX 
              */
-            if (len == 0)
+            if (len == NULL)
                 return NULL;
             var_val_len = SMUXMAXSTRLEN;
             asn_parse_string(var_val, &maxlen, &vartype,
@@ -2008,7 +2005,7 @@ smux_trap_process(u_char * rsp, size_t * len)
             /*
              * XXX 
              */
-            if (len == 0)
+            if (len == NULL)
                 return NULL;
             var_val_len = SMUXMAXSTRLEN;
             asn_parse_bitstring(var_val, &maxlen, &vartype,

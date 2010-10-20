@@ -1,11 +1,11 @@
 /* -*- C -*- */
+#include <net-snmp/net-snmp-config.h>
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
 #include <netdb.h>
 #include <sys/socket.h>
 
-#include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -15,11 +15,11 @@
 
 typedef netsnmp_handler_registration *NetSNMP__agent__netsnmp_handler_registration;
 
-/* Copied from snmpUDPDomain.c */
-typedef struct netsnmp_udp_addr_pair_s {
-	struct sockaddr_in remote_addr;
-	struct in_addr local_addr;
-} netsnmp_udp_addr_pair;
+/*
+ * needs to be in sync with the definitions in snmplib/snmpUDPDomain.c
+ * and snmplib/snmpTCPDomain.c
+ */
+typedef netsnmp_indexed_addr_pair netsnmp_udp_addr_pair;
 
 typedef struct handler_cb_data_s {
    SV *perl_cb;
@@ -30,16 +30,6 @@ typedef struct netsnmp_oid_s {
     size_t               len;
     oid                  namebuf[ MAX_OID_LEN ];
 } netsnmp_oid;
-
-static int have_done_agent = 0;
-static int have_done_lib = 0;
-
-static int
-not_here(char *s)
-{
-    croak("%s not implemented on this architecture", s);
-    return -1;
-}
 
 static double
 constant_MODE_G(char *name, int len, int arg)
@@ -77,7 +67,9 @@ constant_MODE_G(char *name, int len, int arg)
     errno = EINVAL;
     return 0;
 
+#if !defined(MODE_GET) || !defined(MODE_GETBULK) || !defined(MODE_GETNEXT)
 not_there:
+#endif
     errno = ENOENT;
     return 0;
 }
@@ -110,7 +102,9 @@ constant_MODE_SET_R(char *name, int len, int arg)
     errno = EINVAL;
     return 0;
 
+#if !defined(MODE_SET_RESERVE1) || !defined(MODE_SET_RESERVE2)
 not_there:
+#endif
     errno = ENOENT;
     return 0;
 }
@@ -287,7 +281,26 @@ constant_SNMP_ERR(char *name, int len, int arg)
 #endif
 	}
     }
+#if !defined(SNMP_ERR_AUTHORIZATIONERROR) \
+ || !defined(SNMP_ERR_BADVALUE) \
+ || !defined(SNMP_ERR_COMMITFAILED) \
+ || !defined(SNMP_ERR_GENERR) \
+ || !defined(SNMP_ERR_INCONSISTENTVALUE) \
+ || !defined(SNMP_ERR_NOACCESS) \
+ || !defined(SNMP_ERR_NOCREATION) \
+ || !defined(SNMP_ERR_NOERROR) \
+ || !defined(SNMP_ERR_NOSUCHNAME) \
+ || !defined(SNMP_ERR_NOTWRITABLE) \
+ || !defined(SNMP_ERR_READONLY) \
+ || !defined(SNMP_ERR_RESOURCEUNAVAILABLE) \
+ || !defined(SNMP_ERR_TOOBIG) \
+ || !defined(SNMP_ERR_UNDOFAILED) \
+ || !defined(SNMP_ERR_WRONGENCODING) \
+ || !defined(SNMP_ERR_WRONGLENGTH) \
+ || !defined(SNMP_ERR_WRONGTYPE) \
+ || !defined(SNMP_ERR_WRONGVALUE)
 not_there:
+#endif
     errno = ENOENT;
     return 0;
 }
@@ -348,7 +361,9 @@ constant_MODE_S(char *name, int len, int arg)
     errno = EINVAL;
     return 0;
 
+#if !defined(MODE_SET_ACTION) || !defined(MODE_SET_BEGIN) || !defined(MODE_SET_COMMIT) || !defined(MODE_SET_FREE) || !defined(MODE_SET_UNDO)
 not_there:
+#endif
     errno = ENOENT;
     return 0;
 }
@@ -377,10 +392,6 @@ constant(char *name, int len, int arg)
     }
     errno = EINVAL;
     return 0;
-
-not_there:
-    errno = ENOENT;
-    return 0;
 }
 
 int
@@ -389,7 +400,6 @@ handler_wrapper(netsnmp_mib_handler          *handler,
                 netsnmp_agent_request_info   *reqinfo,
                 netsnmp_request_info         *requests) 
 {
-    u_long intret = 5;
     handler_cb_data *cb_data = (handler_cb_data *) handler->myvoid;
     SV *cb;
 
@@ -464,6 +474,11 @@ init_mib()
 int
 init_agent(name)
         const char *name;
+    CODE:
+        SOCK_STARTUP;
+        RETVAL = init_agent(name);
+    OUTPUT:
+        RETVAL
 
 void
 init_snmp(name)
@@ -535,7 +550,14 @@ nsahr_new(name, regoid, perlcallback)
 void
 nsahr_DESTROY(reginfo)
 	netsnmp_handler_registration *reginfo
+    PREINIT:
+        handler_cb_data *cb_data;
     CODE:
+        if (reginfo && reginfo->handler && reginfo->handler->myvoid) {
+	    cb_data = (handler_cb_data *) (reginfo->handler->myvoid);
+	    SvREFCNT_dec(cb_data->perl_cb);
+	    free(cb_data);
+        }
 	netsnmp_handler_registration_free(reginfo);
 
 int
@@ -572,7 +594,7 @@ nsahr_getRootOID(me)
         PUSHMARK(SP);
         reginfo = (netsnmp_handler_registration *) SvIV(SvRV(me));
 
-        o = SNMP_MALLOC_TYPEDEF(netsnmp_oid);
+        o = malloc(sizeof(netsnmp_oid));
         o->name = o->namebuf;
         o->len = reginfo->rootoid_len;
         memcpy(o->name, reginfo->rootoid,
@@ -611,7 +633,7 @@ getOID(me)
         PUSHMARK(SP);
         request = (netsnmp_request_info *) SvIV(SvRV(me));
 
-        o = SNMP_MALLOC_TYPEDEF(netsnmp_oid);
+        o = malloc(sizeof(netsnmp_oid));
         o->name = o->namebuf;
         o->len = request->requestvb->name_length;
         memcpy(o->name, request->requestvb->name,
@@ -641,7 +663,7 @@ nari_getOIDptr(me)
         netsnmp_request_info *request;
         CODE:
         request = (netsnmp_request_info *) SvIV(SvRV(me));
-        RETVAL = SNMP_MALLOC_TYPEDEF(netsnmp_oid);
+        RETVAL = malloc(sizeof(netsnmp_oid));
         RETVAL->name = RETVAL->namebuf;
         RETVAL->len = request->requestvb->name_length;
         memcpy(RETVAL->name, request->requestvb->name,
@@ -671,19 +693,19 @@ nari_setType(me, newvalue)
         request = (netsnmp_request_info *) SvIV(SvRV(me));
         request->requestvb->type=newvalue;
 
-char *
+SV *
 nari_getValue(me)
         SV *me;
     PREINIT:
-        u_char buf[1024] ;
-        u_char *oidbuf = buf ;
-        size_t ob_len = 1024, oo_len = 0;
+        char *outbuf = NULL;
+        size_t ob_len = 0, oo_len = 0;
         netsnmp_request_info *request;
     CODE:
         request = (netsnmp_request_info *) SvIV(SvRV(me));
-	sprint_realloc_by_type(&oidbuf, &ob_len, &oo_len, 0,
+	sprint_realloc_by_type((u_char **) &outbuf, &ob_len, &oo_len, 1,
                                request->requestvb, 0, 0, 0);
-        RETVAL = oidbuf; /* mem leak */
+        RETVAL = newSVpv(outbuf, 0);
+	netsnmp_free(outbuf);
     OUTPUT:
         RETVAL
 
@@ -777,8 +799,6 @@ nari_setValue(me, type, value)
         int type;
         SV *value;
     PREINIT:
-        u_char *oidbuf = NULL;
-        size_t ob_len = 0, oo_len = 0;
         netsnmp_request_info *request;
         u_long utmp;
         long ltmp;
@@ -830,8 +850,8 @@ nari_setValue(me, type, value)
 		  break;
 	      }
 	      else {
-		snmp_log(LOG_ERR, "Non-integer value passed to setValue with ASN_INTEGER: type was %d\n",
-			SvTYPE(value));
+		snmp_log(LOG_ERR, "Non-integer value passed to setValue with ASN_INTEGER: type was %lu\n",
+			(unsigned long)SvTYPE(value));
 		RETVAL = 0;
 		break;
 	      }
@@ -866,8 +886,8 @@ nari_setValue(me, type, value)
 		  break;
 	      }
 	      else {
-		snmp_log(LOG_ERR, "Non-unsigned-integer value passed to setValue with ASN_UNSIGNED/ASN_COUNTER/ASN_TIMETICKS: type was %d\n",
-			SvTYPE(value));
+		snmp_log(LOG_ERR, "Non-unsigned-integer value passed to setValue with ASN_UNSIGNED/ASN_COUNTER/ASN_TIMETICKS: type was %lu\n",
+			(unsigned long)SvTYPE(value));
 		RETVAL = 0;
 		break;
 	      }
@@ -877,53 +897,40 @@ nari_setValue(me, type, value)
 	      if ((SvTYPE(value) == SVt_IV) || (SvTYPE(value) == SVt_PVMG)) {
 		  /* Good - got a real one (or a blessed scalar which we have to hope will turn out OK) */
 		  ulltmp = SvIV(value);
-#ifndef WIN32
-		  c64.high = (ulltmp & 0xffffffff00000000ULL) >> 32;
-		  c64.low  = (ulltmp & 0xffffffffULL);
-#else
-		  c64.high = (ulltmp & 0xffffffff00000000ui64) >> 32;
-		  c64.low  = (ulltmp & 0xffffffffui64);
-#endif
-                  snmp_set_var_typed_value(request->requestvb, (u_char)type,
-                                       (u_char *) &c64, sizeof(struct counter64));
 		  RETVAL = 1;
-		  break;
 	      }
 	      else if (SvPOKp(value)) {
 	          /* Might be OK - got a string, so try to convert it, allowing base 10, octal, and hex forms */
 	          stringptr = SvPV(value, stringlen);
-		  ulltmp = strtoul( stringptr, NULL, 0 );
-		  if (errno == EINVAL) {
-		  	snmp_log(LOG_ERR, "Could not convert string to number in setValue: '%s'", stringptr);
-			RETVAL = 0;
-			break;
-		  }
-#ifndef WIN32
-		  c64.high = (ulltmp & 0xffffffff00000000ULL) >> 32;
-		  c64.low  = (ulltmp & 0xffffffffULL);
-#else
-		  c64.high = (ulltmp & 0xffffffff00000000ui64) >> 32;
-		  c64.low  = (ulltmp & 0xffffffffui64);
-#endif
-                  snmp_set_var_typed_value(request->requestvb, (u_char)type,
-                                       (u_char *) &c64, sizeof(struct counter64));
-		  RETVAL = 1;
-		  break;
+	          errno = 0;
+		  ulltmp = strtoull( stringptr, NULL, 0 );
+		  if (errno != 0) {
+		      snmp_log(LOG_ERR, "Could not convert string to number in setValue: '%s'", stringptr);
+		      RETVAL = 0;
+		  } else
+
+		      RETVAL = 1;
 	      }
 	      else {
-		snmp_log(LOG_ERR, "Non-unsigned-integer value passed to setValue with ASN_COUNTER64: type was %d\n",
-			SvTYPE(value));
+		snmp_log(LOG_ERR, "Non-unsigned-integer value passed to setValue with ASN_COUNTER64: type was %lu\n",
+			(unsigned long)SvTYPE(value));
 		RETVAL = 0;
-		break;
 	      }
+	      if (RETVAL) {
+		  c64.high = (uint32_t)(ulltmp >> 32);
+		  c64.low  = (uint32_t)(ulltmp >> 0);
+		  snmp_set_var_typed_value(request->requestvb, (u_char)type,
+				     (u_char *) &c64, sizeof(struct counter64));
+	      }
+	      break;
 
           case ASN_OCTET_STR:
           case ASN_BIT_STR:
           case ASN_OPAQUE:
 	      /* Check that we have been passed something with a string value (or a blessed scalar) */
 	      if (!SvPOKp(value) && (SvTYPE(value) != SVt_PVMG)) {
-		snmp_log(LOG_ERR, "Non-string value passed to setValue with ASN_OCTET_STR/ASN_BIT_STR: type was %d\n",
-			SvTYPE(value));
+		snmp_log(LOG_ERR, "Non-string value passed to setValue with ASN_OCTET_STR/ASN_BIT_STR: type was %lu\n",
+			(unsigned long)SvTYPE(value));
 		RETVAL = 0;
 		break;
 	      }
@@ -949,8 +956,8 @@ nari_setValue(me, type, value)
 
 	      /* Check that we have been passed something with a string value (or a blessed scalar) */
 	      if (!SvPOKp(value) && (SvTYPE(value) != SVt_PVMG)) {
-		snmp_log(LOG_ERR, "Non-string value passed to setValue with ASN_IPADDRESS: type was %d\n",
-			SvTYPE(value));
+		snmp_log(LOG_ERR, "Non-string value passed to setValue with ASN_IPADDRESS: type was %lu\n",
+			(unsigned long)SvTYPE(value));
 		RETVAL = 0;
 		break;
 	      }
@@ -963,7 +970,7 @@ nari_setValue(me, type, value)
 
 	      # Sanity check on address length
 	      if ((stringlen != 4) && (stringlen != 16)) {
-	      		snmp_log(LOG_ERR, "IP address of %d bytes passed to setValue with ASN_IPADDRESS\n", stringlen);
+	      		snmp_log(LOG_ERR, "IP address of %" NETSNMP_PRIz "d bytes passed to setValue with ASN_IPADDRESS\n", stringlen);
 			RETVAL = 0;
 			break;
 	      }
@@ -976,8 +983,8 @@ nari_setValue(me, type, value)
           case ASN_OBJECT_ID:
 	      /* Check that we have been passed something with a string value (or a blessed scalar) */
 	      if (!SvPOKp(value) && (SvTYPE(value) != SVt_PVMG)) {
-		snmp_log(LOG_ERR, "Non-string value passed to setValue with ASN_OBJECT_ID: type was %d\n",
-			SvTYPE(value));
+		snmp_log(LOG_ERR, "Non-string value passed to setValue with ASN_OBJECT_ID: type was %lu\n",
+			(unsigned long)SvTYPE(value));
 		RETVAL = 0;
 		break;
 	      }
@@ -1036,8 +1043,6 @@ nari_setError(me, rinfo, ecode)
         SV *rinfo;
         int ecode;
     PREINIT:
-	oid myoid[MAX_OID_LEN];
-	size_t myoid_len = MAX_OID_LEN;
         netsnmp_request_info *request;
         netsnmp_agent_request_info *reqinfo;
     CODE:
@@ -1075,7 +1080,7 @@ narqi_getSourceIp(me)
         SV *me;
     PREINIT:
         netsnmp_agent_request_info *reqinfo;
-	struct netsnmp_udp_addr_pair_s *addr_pair;
+	netsnmp_udp_addr_pair *addr_pair;
 	struct sockaddr_in *from;
         SV *rarg;
 
@@ -1083,7 +1088,7 @@ narqi_getSourceIp(me)
         reqinfo = (netsnmp_agent_request_info *) SvIV(SvRV(me));
 
         /* XXX: transport-specific: UDP/IPv4 only! */
-	addr_pair = (struct netsnmp_udp_addr_pair_s *) (reqinfo->asp->pdu->transport_data);
+	addr_pair = (netsnmp_udp_addr_pair *) (reqinfo->asp->pdu->transport_data);
 	from = (struct sockaddr_in *) &(addr_pair->remote_addr);
         rarg = newSVpv((const char *)(&from->sin_addr.s_addr), sizeof(from->sin_addr.s_addr));
         RETVAL = rarg;
@@ -1096,7 +1101,7 @@ narqi_getDestIp(me)
         SV *me;
     PREINIT:
         netsnmp_agent_request_info *reqinfo;
-	struct netsnmp_udp_addr_pair_s *addr_pair;
+	netsnmp_udp_addr_pair *addr_pair;
 	struct in_addr *to;
         SV *rarg;
 
@@ -1104,7 +1109,7 @@ narqi_getDestIp(me)
         reqinfo = (netsnmp_agent_request_info *) SvIV(SvRV(me));
 
         /* XXX: transport-specific: UDP/IPv4 only! */
-	addr_pair = (struct netsnmp_udp_addr_pair_s *) (reqinfo->asp->pdu->transport_data);
+	addr_pair = (netsnmp_udp_addr_pair *) (reqinfo->asp->pdu->transport_data);
 	to = (struct in_addr *) &(addr_pair->local_addr);
         rarg = newSVpv((const char *)(&to->s_addr), sizeof(to->s_addr));
         RETVAL = rarg;

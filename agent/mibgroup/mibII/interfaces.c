@@ -37,9 +37,6 @@
 #include <sys/param.h>
 #endif
 #include <sys/types.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if defined(NETSNMP_IFNET_NEEDS_KERNEL) && !defined(_KERNEL) && defined(NETSNMP_IFNET_NEEDS_KERNEL_LATE)
 #define _KERNEL 1
 #define _I_DEFINED_KERNEL
@@ -57,11 +54,7 @@
 #endif
 
 #if TIME_WITH_SYS_TIME
-# if defined (WIN32) || defined (cygwin)
-#  include <sys/timeb.h>
-# else
 # include <sys/time.h>
-# endif
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -204,13 +197,13 @@
 #include "struct.h"
 #include "util_funcs/header_generic.h"
 
-/* if you want caching enabled for speed retrival purposes, set this to 5?*/
+/* if you want caching enabled for speed retrieval purposes, set this to 5?*/
 #define MINLOADFREQ 0                     /* min reload frequency in seconds */
 #ifdef linux
 static unsigned long LastLoad = 0;        /* ET in secs at last table load */
 #endif
 
-extern struct timeval starttime;
+#define starttime (*(const struct timeval*)netsnmp_get_agent_starttime())
 
 struct variable3 interfaces_variables[] = {
     {NETSNMP_IFNUMBER, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
@@ -824,7 +817,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case NETSNMP_IFPHYSADDRESS:
         Interface_Get_Ether_By_Index(interface, return_buf);
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
 	*var_len = 0;
 #else
         if ((return_buf[0] == 0) && (return_buf[1] == 0) &&
@@ -873,7 +866,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case NETSNMP_IFINOCTETS:
 #ifdef HAVE_STRUCT_IFNET_IF_IBYTES
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = (u_long) ifnet.if_ibytes & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_ibytes;
@@ -887,13 +880,13 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case NETSNMP_IFINUCASTPKTS:
         {
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
             long_return = (u_long) ifnet.if_ipackets & 0xffffffff;
 #else
             long_return = (u_long) ifnet.if_ipackets;
 #endif
 #if HAVE_STRUCT_IFNET_IF_IMCASTS
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
             long_return -= (u_long) ifnet.if_imcasts & 0xffffffff;
 #else
             long_return -= (u_long) ifnet.if_imcasts;
@@ -903,7 +896,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case NETSNMP_IFINNUCASTPKTS:
 #if HAVE_STRUCT_IFNET_IF_IMCASTS
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = (u_long) ifnet.if_imcasts & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_imcasts;
@@ -917,7 +910,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case NETSNMP_IFINDISCARDS:
 #if HAVE_STRUCT_IFNET_IF_IQDROPS
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = (u_long) ifnet.if_iqdrops & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_iqdrops;
@@ -930,7 +923,7 @@ var_ifEntry(struct variable *vp,
 #endif
         return (u_char *) & long_return;
     case NETSNMP_IFINERRORS:
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = (u_long) ifnet.if_ierrors & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_ierrors;
@@ -938,7 +931,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case NETSNMP_IFINUNKNOWNPROTOS:
 #if HAVE_STRUCT_IFNET_IF_NOPROTO
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = (u_long) ifnet.if_noproto & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_noproto;
@@ -952,7 +945,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case NETSNMP_IFOUTOCTETS:
 #ifdef HAVE_STRUCT_IFNET_IF_OBYTES
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = (u_long) ifnet.if_obytes & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_obytes;
@@ -966,13 +959,13 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case NETSNMP_IFOUTUCASTPKTS:
         {
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
             long_return = (u_long) ifnet.if_opackets & 0xffffffff;
 #else
             long_return = (u_long) ifnet.if_opackets;
 #endif
 #if HAVE_STRUCT_IFNET_IF_OMCASTS
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
             long_return -= (u_long) ifnet.if_omcasts & 0xffffffff;
 #else
             long_return -= (u_long) ifnet.if_omcasts;
@@ -982,7 +975,7 @@ var_ifEntry(struct variable *vp,
         return (u_char *) & long_return;
     case NETSNMP_IFOUTNUCASTPKTS:
 #if HAVE_STRUCT_IFNET_IF_OMCASTS
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = (u_long) ifnet.if_omcasts & 0xffffffff;
 #else
         long_return = (u_long) ifnet.if_omcasts;
@@ -995,21 +988,21 @@ var_ifEntry(struct variable *vp,
 #endif
         return (u_char *) & long_return;
     case NETSNMP_IFOUTDISCARDS:
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = ifnet.if_snd.ifq_drops & 0xffffffff;
 #else
         long_return = ifnet.if_snd.ifq_drops;
 #endif
         return (u_char *) & long_return;
     case NETSNMP_IFOUTERRORS:
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = ifnet.if_oerrors & 0xffffffff;
 #else
         long_return = ifnet.if_oerrors;
 #endif
         return (u_char *) & long_return;
     case NETSNMP_IFOUTQLEN:
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = ifnet.if_snd.ifq_len & 0xffffffff;
 #else
         long_return = ifnet.if_snd.ifq_len;
@@ -1446,16 +1439,17 @@ static int      saveIndex = 0;
 * Determines network interface speed. It is system specific. Only linux
 * realization is made. 
 */
-unsigned int getIfSpeed(int fd, struct ifreq ifr)
+unsigned int getIfSpeed(int fd, struct ifreq ifr, unsigned int defaultspeed)
 {
 #ifdef linux
     /** temporary expose internal until this module can be re-written */
     extern unsigned int
-        netsnmp_linux_interface_get_if_speed(int fd, const char *name);
+        netsnmp_linux_interface_get_if_speed(int fd, const char *name,
+                unsigned long long defaultspeed);
 
-    return netsnmp_linux_interface_get_if_speed(fd, ifr.ifr_name);
+    return netsnmp_linux_interface_get_if_speed(fd, ifr.ifr_name, defaultspeed);
 #else /*!linux*/			   
-    return 10000000;
+    return defaultspeed;
 #endif 
 }
 
@@ -1545,7 +1539,7 @@ Interface_Scan_Init(void)
      */
     if (!(devin = fopen("/proc/net/dev", "r"))) {
         close(fd);
-        snmp_log(LOG_ERR, "cannot open /proc/net/dev - continuing...\n");
+        NETSNMP_LOGONCE((LOG_ERR, "cannot open /proc/net/dev.\n"));
         return; /** exit (1); **/
     }
 
@@ -1780,11 +1774,30 @@ Interface_Scan_Init(void)
              * do only guess if_type from name, if we could not read
              * * it before from SIOCGIFHWADDR 
              */
+            unsigned int defaultspeed = NOMINAL_LINK_SPEED;
+                if (!(nnew->if_flags & IFF_RUNNING)) {
+                    /* 
+                     * use speed 0 if the if speed cannot be determined *and* the
+                     * interface is down
+                     */
+                    defaultspeed = 0;
+                }
+
             if (!nnew->if_type)
                 nnew->if_type = if_type_from_name(nnew->if_name);
-            nnew->if_speed = nnew->if_type == 6 ? getIfSpeed(fd, ifrq) :
-                nnew->if_type == 24 ? 10000000 :
-                nnew->if_type == 9 ? 4000000 : 0;
+            switch(nnew->if_type) {
+            case 6:
+                nnew->if_speed = getIfSpeed(fd, ifrq, defaultspeed);
+                break;
+            case 24:
+                nnew->if_speed = 10000000;
+                break;
+            case 9:
+                nnew->if_speed = 4000000;
+                break;
+            default:
+                nnew->if_speed = 0;
+            }
             /*Zero speed means link problem*/
             if(nnew->if_speed == 0 && nnew->if_flags & IFF_UP){
                 nnew->if_flags &= ~IFF_RUNNING;
@@ -2589,7 +2602,7 @@ var_ifEntry(struct variable * vp,
 #endif                          /* HAVE_NET_IF_MIB_H */
 #endif                          /* !USE_SYSCTL_IFLIST */
 
-#else                           /* WIN32 cygwin */
+#elif defined(HAVE_IPHLPAPI_H)  /* WIN32 cygwin */
 #include <iphlpapi.h>
 
 WriteMethod     writeIfEntry;
@@ -2607,7 +2620,6 @@ header_ifEntry(struct variable *vp,
     register int    ifIndex;
     int             result, count;
     DWORD           status = NO_ERROR;
-    DWORD           statusRetry = NO_ERROR;
     DWORD           dwActualSize = 0;
     PMIB_IFTABLE    pIfTable = NULL;
 
@@ -2649,7 +2661,7 @@ header_ifEntry(struct variable *vp,
         if ((exact && (result == 0)) || (!exact && (result < 0)))
             break;
     }
-    if (ifIndex > count) {
+    if (ifIndex >= count) {
         DEBUGMSGTL(("mibII/interfaces", "... index out of range\n"));
         return MATCH_FAILED;
     }
@@ -2684,7 +2696,8 @@ var_interfaces(struct variable * vp,
 
     switch (vp->magic) {
     case NETSNMP_IFNUMBER:
-        GetNumberOfInterfaces(&long_return);
+        netsnmp_assert(sizeof(DWORD) == sizeof(long_return));
+        GetNumberOfInterfaces((DWORD *) &long_return);
         return (u_char *) & long_return;
     default:
         DEBUGMSGTL(("snmpd", "unknown sub-id %d in var_interfaces\n",
@@ -2737,7 +2750,7 @@ var_ifEntry(struct variable * vp,
         return (u_char *) & long_return;
     case NETSNMP_IFSPEED:
         if (if_ptr)
-            long_return = if_ptr->speed;
+            long_return = (long) if_ptr->speed;
         else
         long_return = (long) ifRow.dwSpeed;
         return (u_char *) & long_return;
@@ -2862,7 +2875,7 @@ writeIfEntry(int action,
          */
         if (SetIfEntry(&ifEntryRow) != NO_ERROR) {
             snmp_log(LOG_ERR,
-                     "Error in writeIfEntry case COMMIT with index: %d & adminStatus %d\n",
+                     "Error in writeIfEntry case COMMIT with index: %lu & adminStatus %lu\n",
                      ifEntryRow.dwIndex, ifEntryRow.dwAdminStatus);
             return SNMP_ERR_COMMITFAILED;
         }

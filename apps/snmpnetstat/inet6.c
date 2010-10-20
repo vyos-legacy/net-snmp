@@ -46,8 +46,6 @@ static char sccsid[] = "@(#)inet.c	8.4 (Berkeley) 4/20/94";
 #include <unistd.h>
 #endif
 #if HAVE_WINSOCK_H
-#include <winsock2.h>
-#include <ws2tcpip.h>
 #include "winstub.h"
 #endif
 #if HAVE_SYS_SOCKET_H
@@ -73,7 +71,7 @@ static char sccsid[] = "@(#)inet.c	8.4 (Berkeley) 4/20/94";
 #include "netstat.h"
 
 struct stat_table {
-    int             entry;      /* entry number in table */
+    unsigned int entry;      /* entry number in table */
     /*
      * format string to printf(description, value) 
      * warning: the %d must be before the %s 
@@ -226,7 +224,7 @@ _dump_v6stats( const char *name, oid *oid_buf, size_t buf_len,
     netsnmp_variable_list *var, *vp;
     struct stat_table     *sp;
     oid   *stats, stat;
-    int    max_stat = 0;
+    unsigned int max_stat = 0;
     int    active   = 0;
 
     var = NULL;
@@ -415,7 +413,7 @@ inet6print(unsigned char *in6, int port, const char *proto, int local)
 
 	struct servent *sp = NULL;
 	char line[80], *cp;
-	int width;
+	unsigned width;
 	int len = sizeof line;
 
 	width = Aflag ? 12 : 16;
@@ -493,7 +491,7 @@ inet6name(const unsigned char *in6)
 		if (IN6_IS_ADDR_LINKLOCAL(in6p) ||
 		    IN6_IS_ADDR_MC_LINKLOCAL(in6p)) {
 			sin6.sin6_scope_id =
-			    ntohs(*(u_int16_t *)&in6p->s6_addr[2]);
+			    ntohs(*(uint16_t *)&in6p->s6_addr[2]);
 			sin6.sin6_addr.s6_addr[2] = 0;
 			sin6.sin6_addr.s6_addr[3] = 0;
 		}

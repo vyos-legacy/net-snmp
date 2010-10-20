@@ -450,13 +450,14 @@ write_exampleint(int action,
             return SNMP_ERR_WRONGTYPE;
         }
         if (var_val_len > sizeof(long)) {
-            DEBUGMSGTL(("example", "wrong length %x", var_val_len));
+            DEBUGMSGTL(("example", "wrong length %" NETSNMP_PRIz "u",
+                        var_val_len));
             return SNMP_ERR_WRONGLENGTH;
         }
 
         intval = *((long *) var_val);
         if (intval > MAX_EXAMPLE_INT) {
-            DEBUGMSGTL(("example", "wrong value %x", intval));
+            DEBUGMSGTL(("example", "wrong value %lx", intval));
             return SNMP_ERR_WRONGVALUE;
         }
         break;
@@ -535,13 +536,14 @@ write_exampletrap(int action,
             return SNMP_ERR_WRONGTYPE;
         }
         if (var_val_len > sizeof(long)) {
-            DEBUGMSGTL(("example", "wrong length %x", var_val_len));
+            DEBUGMSGTL(("example", "wrong length %" NETSNMP_PRIz "u",
+                        var_val_len));
             return SNMP_ERR_WRONGLENGTH;
         }
 
         intval = *((long *) var_val);
         if (intval != 1) {
-            DEBUGMSGTL(("example", "wrong value %x", intval));
+            DEBUGMSGTL(("example", "wrong value %lx", intval));
             return SNMP_ERR_WRONGVALUE;
         }
         break;
@@ -645,13 +647,14 @@ write_exampletrap2(int action,
             return SNMP_ERR_WRONGTYPE;
         }
         if (var_val_len > sizeof(long)) {
-            DEBUGMSGTL(("example", "wrong length %x", var_val_len));
+            DEBUGMSGTL(("example", "wrong length %" NETSNMP_PRIz "u",
+                        var_val_len));
             return SNMP_ERR_WRONGLENGTH;
         }
 
         intval = *((long *) var_val);
         if (intval != 1) {
-            DEBUGMSGTL(("example", "wrong value %x", intval));
+            DEBUGMSGTL(("example", "wrong value %lx", intval));
             return SNMP_ERR_WRONGVALUE;
         }
         break;
@@ -714,7 +717,7 @@ write_exampletrap2(int action,
         var_obj.name = example_string_oid;
         var_obj.name_length = sizeof(example_string_oid) / sizeof(oid); /* number of sub-ids */
         var_obj.type = ASN_OCTET_STR;   /* type of variable */
-        var_obj.val.string = example_str;       /* value */
+        var_obj.val.string = (unsigned char *) example_str;       /* value */
         var_obj.val_len = strlen(example_str);
         DEBUGMSGTL(("example", "write_exampletrap2 sending the v2 trap\n"));
         send_v2trap(&var_trap);

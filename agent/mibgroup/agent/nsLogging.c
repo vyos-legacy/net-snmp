@@ -283,7 +283,7 @@ handle_nsLoggingTable(netsnmp_mib_handler *handler,
                     }
                     idx = idx->next_variable;
 	            logh->type  = 0;
-	            logh->token = strdup(idx->val.string);
+	            logh->token = strdup((char *) idx->val.string);
                     netsnmp_insert_iterator_context(request, (void*)logh);
 	            break;
 
@@ -444,11 +444,11 @@ handle_nsLoggingTable(netsnmp_mib_handler *handler,
                 switch (*request->requestvb->val.integer) {
                     case RS_ACTIVE:
                     case RS_CREATEANDGO:
-                        logh->enabled = 1;
+                        netsnmp_enable_this_loghandler(logh);
                         break;
                     case RS_NOTINSERVICE:
                     case RS_CREATEANDWAIT:
-                        logh->enabled = 0;
+                        netsnmp_disable_this_loghandler(logh);
                         break;
 		    case RS_DESTROY:
 		        netsnmp_remove_loghandler( logh );

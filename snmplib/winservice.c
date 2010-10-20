@@ -6,6 +6,8 @@
 
 #ifdef WIN32
 
+#include <net-snmp/net-snmp-config.h>
+
 #include <windows.h>
 #include <tchar.h>
 
@@ -35,6 +37,15 @@ labelFIN: \
 #define CountOf(arr) ( sizeof(arr) / sizeof(arr[0]) )
 
 
+#if defined(WIN32) && defined(HAVE_WIN32_PLATFORM_SDK) && !defined(mingw32)
+#pragma comment(lib, "iphlpapi.lib")
+#ifdef USING_WINEXTDLL_MODULE
+#pragma comment(lib, "snmpapi.lib")
+#pragma comment(lib, "mgmtapi.lib")
+#endif
+#endif
+
+ 
     /*
      * External global variables used here
      */
@@ -89,6 +100,18 @@ static INT (*ServiceEntryPoint) (INT Argc, LPTSTR Argv[]) = 0L;
      * received from the SCM
      */
 static VOID (*StopFunction) (VOID) = 0L;
+
+
+    /*
+     * To update windows service status to SCM 
+     */
+static BOOL UpdateServiceStatus (DWORD dwStatus, DWORD dwErrorCode,
+				 DWORD dwWaitHint);
+
+    /*
+     * To Report current service status to SCM 
+     */
+static BOOL ReportCurrentServiceStatus (VOID);
 
 VOID
 ProcessError (WORD eventLogType, LPCTSTR pszMessage, int useGetLastError, int quiet);
@@ -440,7 +463,7 @@ VOID
 WriteToEventLog (WORD wType, LPCTSTR pszFormat, ...)
 {
   TCHAR szMessage[512];
-  LPTSTR LogStr[1];
+  LPCTSTR LogStr[1];
   va_list ArgList;
   HANDLE hEventSource = NULL;
   va_start (ArgList, pszFormat);
@@ -523,7 +546,6 @@ ParseCmdLineForServiceOption (int argc, TCHAR * argv[], int *quiet)
 VOID
 ProcessError (WORD eventLogType, LPCTSTR pszMessage, int useGetLastError, int quiet)
 {
-  LPTSTR pErrorMsgTemp = NULL;
   HANDLE hEventSource = NULL;
   TCHAR pszMessageFull[MAX_STR_SIZE]; /* Combined pszMessage and GetLastError */
 
@@ -532,6 +554,7 @@ ProcessError (WORD eventLogType, LPCTSTR pszMessage, int useGetLastError, int qu
    * pszMessageFull
    */
   if (useGetLastError) {
+  LPTSTR pErrorMsgTemp = NULL;
   FormatMessage (FORMAT_MESSAGE_ALLOCATE_BUFFER |
 		 FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError (),
 		 MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT),
@@ -549,7 +572,8 @@ ProcessError (WORD eventLogType, LPCTSTR pszMessage, int useGetLastError, int qu
   
   hEventSource = RegisterEventSource (NULL, app_name_long);
   if (hEventSource != NULL) {
-    pErrorMsgTemp = pszMessageFull;
+    LPCSTR LogStr[1];
+    LogStr[0] = pszMessageFull;
     
     if (ReportEvent (hEventSource, 
           eventLogType, 
@@ -558,10 +582,11 @@ ProcessError (WORD eventLogType, LPCTSTR pszMessage, int useGetLastError, int qu
           NULL, 
           1, 
           0, 
-          &pErrorMsgTemp, 
+          LogStr, 
           NULL)) {
     }
     else {
+      LPTSTR pErrorMsgTemp = NULL;
       FormatMessage (FORMAT_MESSAGE_ALLOCATE_BUFFER |
           FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError (),
           MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT),
@@ -594,8 +619,6 @@ ProcessError (WORD eventLogType, LPCTSTR pszMessage, int useGetLastError, int qu
         break;
       }
     }
-  
-  LocalFree (pErrorMsgTemp);  
 }
 
     /*

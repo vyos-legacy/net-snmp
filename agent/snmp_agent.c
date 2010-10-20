@@ -59,11 +59,7 @@ SOFTWARE.
 #include <string.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -79,9 +75,6 @@ SOFTWARE.
 #include <netinet/in.h>
 #endif
 #include <errno.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 
 #define SNMP_NEED_REQUEST_LIST
 #include <net-snmp/net-snmp-includes.h>
@@ -382,7 +375,7 @@ get_set_cache(netsnmp_agent_session *asp)
                 /*
                  * I don't think this case should ever happen. Please email
                  * the net-snmp-coders@lists.sourceforge.net if you have
-                 * a test case that hits this assert. -- rstory
+                 * a test case that hits this condition. -- rstory
                  */
 		int i;
                 netsnmp_assert(NULL == asp->requests); /* see note above */
@@ -405,7 +398,7 @@ get_set_cache(netsnmp_agent_session *asp)
 	    } else {
                 /*
                  * when would we not have saved variables? someone
-                 * let me know if they hit this assert. -- rstory
+                 * let me know if they hit this condition. -- rstory
                  */
                 netsnmp_assert(NULL != ptr->saved_vars);
             }
@@ -678,6 +671,11 @@ agent_check_and_process(int block)
             snmp_log(LOG_ERR, "select returned %d\n", count);
             return -1;
         }                       /* endif -- count>0 */
+
+    /*
+     * see if persistent store needs to be saved
+     */
+    snmp_store_if_needed();
 
     /*
      * Run requested alarms.  
@@ -1077,6 +1075,7 @@ netsnmp_register_agent_nsap(netsnmp_transport *t)
     agent_nsap     *a = NULL, *n = NULL, **prevNext = &agent_nsap_list;
     int             handle = 0;
     void           *isp = NULL;
+    int             rc;
 
     if (t == NULL) {
         return -1;
@@ -1106,6 +1105,27 @@ netsnmp_register_agent_nsap(netsnmp_transport *t)
     s->flags = netsnmp_ds_get_int(NETSNMP_DS_APPLICATION_ID, 
 				  NETSNMP_DS_AGENT_FLAGS);
     s->isAuthoritative = SNMP_SESS_AUTHORITATIVE;
+
+    /* Optional supplimental transport configuration information and
+       final call to actually open the transport */
+    if ((rc = netsnmp_sess_config_transport(s->transport_configuration, t))
+        != SNMPERR_SUCCESS) {
+        SNMP_FREE(s);
+        SNMP_FREE(n);
+        return -1;
+    }
+
+
+    if (t->f_open)
+        t = t->f_open(t);
+
+    if (NULL == t) {
+        SNMP_FREE(s);
+        SNMP_FREE(n);
+        return -1;
+    }
+
+    t->flags |= NETSNMP_TRANSPORT_FLAG_OPENED;
 
     sp = snmp_add(s, t, netsnmp_agent_check_packet,
                   netsnmp_agent_check_parse);
@@ -1309,6 +1329,7 @@ init_master_agent(void)
 			"NSAP\n", cptr));
         }
     } while(st && *st != '\0');
+    SNMP_FREE(buf);
 
 #ifdef USING_AGENTX_MASTER_MODULE
     if (netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
@@ -2092,7 +2113,7 @@ netsnmp_add_varbind_to_cache(netsnmp_agent_session *asp, int vbcount,
                 asp->treecache_len =
                     (asp->treecache_len + CACHE_GROW_SIZE);
                 asp->treecache =
-                    realloc(asp->treecache,
+                    (netsnmp_tree_cache *)realloc(asp->treecache,
                             sizeof(netsnmp_tree_cache) *
                             asp->treecache_len);
                 if (asp->treecache == NULL)
@@ -2220,7 +2241,7 @@ netsnmp_create_subtree_cache(netsnmp_agent_session *asp)
     if (asp->treecache == NULL && asp->treecache_len == 0) {
         asp->treecache_len = SNMP_MAX(1 + asp->vbcount / 4, 16);
         asp->treecache =
-            calloc(asp->treecache_len, sizeof(netsnmp_tree_cache));
+            (netsnmp_tree_cache *)calloc(asp->treecache_len, sizeof(netsnmp_tree_cache));
         if (asp->treecache == NULL)
             return SNMP_ERR_GENERR;
     }
@@ -2261,8 +2282,8 @@ netsnmp_create_subtree_cache(netsnmp_agent_session *asp)
              * result vector
              */
             if (maxresponses < 0 ||
-                maxresponses > INT_MAX / sizeof(struct varbind_list *))
-                maxresponses = INT_MAX / sizeof(struct varbind_list *);
+                maxresponses > (int)(INT_MAX / sizeof(struct varbind_list *)))
+                maxresponses = (int)(INT_MAX / sizeof(struct varbind_list *));
 
             /* ensure that the maximum number of repetitions will fit in the
              * result vector
@@ -3510,6 +3531,10 @@ _request_set_error(netsnmp_request_info *request, int mode, int error_value)
             return SNMPERR_VALUE;
              */
 
+        case SNMP_MSG_INTERNAL_SET_RESERVE1:
+            request->status = SNMP_ERR_NOCREATION;
+            break;
+
         default:
             request->status = SNMP_ERR_NOSUCHNAME;      /* WWW: correct? */
             break;
@@ -3613,8 +3638,6 @@ netsnmp_request_set_error_all( netsnmp_request_info *requests, int error)
     return result;
 }
 
-extern struct timeval starttime;
-
                 /*
                  * Return the value of 'sysUpTime' at the given marker 
                  */
@@ -3622,10 +3645,10 @@ u_long
 netsnmp_marker_uptime(marker_t pm)
 {
     u_long          res;
-    marker_t        start = (marker_t) & starttime;
+    const_marker_t  start = netsnmp_get_agent_starttime();
 
     res = uatime_hdiff(start, pm);
-    return res;                 /* atime_diff works in msec, not csec */
+    return res;
 }
 
                         /*
@@ -3637,6 +3660,33 @@ netsnmp_timeval_uptime(struct timeval * tv)
     return netsnmp_marker_uptime((marker_t) tv);
 }
 
+
+struct timeval  starttime;
+
+/**
+ * Return a pointer to the variable in which the Net-SNMP start time has
+ * been stored.
+ */
+const_marker_t        
+netsnmp_get_agent_starttime(void)
+{
+    return &starttime;
+}
+
+/**
+ * Set the time at which Net-SNMP started either to the current time
+ * (if s == NULL) or to *s (if s is not NULL).
+ */
+void            
+netsnmp_set_agent_starttime(marker_t s)
+{
+    if (s)
+        starttime = *(struct timeval*)s;
+    else
+        gettimeofday(&starttime, NULL);
+}
+
+
                 /*
                  * Return the current value of 'sysUpTime' 
                  */
@@ -3647,6 +3697,18 @@ netsnmp_get_agent_uptime(void)
     gettimeofday(&now, NULL);
 
     return netsnmp_timeval_uptime(&now);
+}
+
+void
+netsnmp_set_agent_uptime(u_long hsec)
+{
+    struct timeval  now;
+    struct timeval  new_uptime;
+
+    gettimeofday(&now, NULL);
+    new_uptime.tv_sec = hsec / 100;
+    new_uptime.tv_usec = (hsec - new_uptime.tv_sec * 100) * 10000L;
+    NETSNMP_TIMERSUB(&now, &new_uptime, &starttime);
 }
 
 

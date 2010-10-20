@@ -13,11 +13,7 @@
 #endif
 
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -25,10 +21,6 @@
 # else
 #  include <time.h>
 # endif
-#endif
-
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 
 #include <net-snmp/net-snmp-includes.h>
@@ -132,7 +124,7 @@ var_ucdDemoPublic(struct variable *vp,
 
     case UCDDEMOPUBLICSTRING:
         *write_method = write_ucdDemoPublicString;
-        *var_len = strlen(publicString);
+        *var_len = strlen((const char*)publicString);
         return (unsigned char *) publicString;
 
     case UCDDEMOUSERLIST:
@@ -222,8 +214,13 @@ write_ucdDemoPublicString(int action,
     }
     if (action == COMMIT) {
         if (var_val_len != 0) {
-            strcpy(publicString, var_val);
-            publicString[var_val_len] = '\0';
+            strncpy((char*)publicString, (const char*)var_val, sizeof(publicString)-1);
+            /* some sanity checks */
+            if (strlen((const char*)var_val) > sizeof(publicString)-1 ||
+                strlen((const char*)var_val) != var_val_len)
+                publicString[sizeof(publicString)-1] = '\0';
+            else
+                publicString[var_val_len] = '\0';
         } else
             publicString[0] = '\0';
     }

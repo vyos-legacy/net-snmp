@@ -1,5 +1,9 @@
 /* 
  * net-snmp configuration header file
+ *
+ * NOTE: DO NOT EDIT include/net-snmp/net-snmp-config.h.in as your changes
+ *       will be overwritten. This content is in acconfig.h and merged
+ *       into include/net-snmp/net-snmp-config.h.in by autoheader.
  */
 /* Portions of this file are subject to the following copyright(s).  See
  * the Net-SNMP's COPYING file for more details and other copyrights
@@ -40,7 +44,7 @@
 
 /* If you have openssl 0.9.7 or above, you likely have AES support. */
 #undef NETSNMP_USE_OPENSSL
-#if defined(NETSNMP_USE_OPENSSL) && defined(HAVE_OPENSSL_AES_H) && defined(HAVE_AES_CFB128_ENCRYPT)
+#if (defined(NETSNMP_USE_OPENSSL) && defined(HAVE_OPENSSL_AES_H) && defined(HAVE_AES_CFB128_ENCRYPT)) || defined(NETSNMP_USE_INTERNAL_CRYPTO)
 #define HAVE_AES 1
 #endif
 
@@ -252,7 +256,7 @@
 #ifdef WIN32
 #define NETSNMP_OSTYPE NETSNMP_WIN32ID
 #endif
-#if defined(aix3) || defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix3) || defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
 #define NETSNMP_OSTYPE NETSNMP_AIXID
 #endif
 #if defined(darwin) && (darwin >= 8)
@@ -382,7 +386,7 @@
 
 /*  This is defined if support for the TLS transport domain is
     available.   */
-#undef NETSNMP_TRANSPORT_TLS_DOMAIN
+#undef NETSNMP_TRANSPORT_TLSBASE_DOMAIN
 
 /*  This is defined if support for the Alias transport domain is
     available.   */
@@ -396,8 +400,15 @@
     available.   */
 #undef NETSNMP_TRANSPORT_DTLSUDP_DOMAIN
 
+/*  This is defined if support for the TLS/TCP transport domain is
+    available.   */
+#undef NETSNMP_TRANSPORT_TLSTCP_DOMAIN
+
 /*  This is defined if support for stdin/out transport domain is available.   */
 #undef NETSNMP_TRANSPORT_STD_DOMAIN
+
+/*  This is defined if support for the IPv4Base transport domain is available.   */
+#undef NETSNMP_TRANSPORT_IPV4BASE_DOMAIN
 
 /* define this if the USM security module is available */
 #undef NETSNMP_SECMOD_USM

@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: route_common.c 16612 2007-07-16 23:59:44Z hardaker $
+ * $Id: route_common.c 18993 2010-06-16 03:28:07Z rstory $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -47,8 +47,11 @@ netsnmp_access_route_container_load(netsnmp_container* container, u_int load_fla
 
     DEBUGMSGTL(("access:route:container", "load\n"));
 
-    if (NULL == container)
+    if (NULL == container) {
         container = netsnmp_container_find("access:_route:table_container");
+        if (container)
+            container->container_name = strdup("_route");
+    }
     if (NULL == container) {
         snmp_log(LOG_ERR, "no container specified/found for access_route\n");
         return NULL;

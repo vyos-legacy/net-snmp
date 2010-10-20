@@ -11,10 +11,6 @@
 #include <strings.h>
 #endif
 
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
-
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -1170,7 +1166,7 @@ write_usmUserPublic(int action,
                     "write to usmUserPublic not ASN_OCTET_STR\n"));
         return SNMP_ERR_WRONGTYPE;
     }
-    if (var_val_len < 0 || var_val_len > 32) {
+    if (var_val_len > 32) {
         DEBUGMSGTL(("usmUser", "write to usmUserPublic: bad length\n"));
         return SNMP_ERR_WRONGLENGTH;
     }

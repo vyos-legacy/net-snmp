@@ -15,9 +15,6 @@
 #endif
 #include <stdlib.h>
 #include <ctype.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
@@ -98,7 +95,7 @@ snmpTargetParamTable_addToList(struct targetParamTable_struct *newEntry,
     /*
      * if the list is empty, add the new entry to the top 
      */
-    if ((prev_struct = curr_struct = *listPtr) == 0) {
+    if ((prev_struct = curr_struct = *listPtr) == NULL) {
         *listPtr = newEntry;
         return;
     } else {
@@ -331,7 +328,7 @@ snmpTargetParams_addMPModel(struct targetParamTable_struct *entry,
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargetParamsEntry: no mp model in config string\n"));
         return (0);
-    } else if (!(isdigit(*cptr))) {
+    } else if (!(isdigit((unsigned char)(*cptr)))) {
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargeParamsEntry: mp model is not digit in config string\n"));
         return (0);
@@ -356,7 +353,7 @@ snmpTargetParams_addSecModel(struct targetParamTable_struct *entry,
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargetParamsEntry: no sec model in config string\n"));
         return (0);
-    } else if (!(isdigit(*cptr))) {
+    } else if (!(isdigit((unsigned char)(*cptr)))) {
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargeParamsEntry: security model is not digit in config string\n"));
         return (0);
@@ -401,7 +398,7 @@ snmpTargetParams_addSecLevel(struct targetParamTable_struct *entry,
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargetParamsEntry: no security level in config string\n"));
         return (0);
-    } else if (!(isdigit(*cptr))) {
+    } else if (!(isdigit((unsigned char)(*cptr)))) {
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargeParamsEntry: security level is not digit in config string\n"));
         return (0);
@@ -427,7 +424,7 @@ snmpTargetParams_addStorageType(struct targetParamTable_struct *entry,
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargetParamsEntry: no storage type in config string\n"));
         return (0);
-    } else if (!(isdigit(*cptr))) {
+    } else if (!(isdigit((unsigned char)(*cptr)))) {
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargeParamsEntry: storage type is not digit in config string\n"));
         return (0);
@@ -465,7 +462,7 @@ snmpTargetParams_addRowStatus(struct targetParamTable_struct *entry,
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargetParamsEntry: no row status in config string\n"));
         return (0);
-    } else if (!(isdigit(*cptr))) {
+    } else if (!(isdigit((unsigned char)(*cptr)))) {
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargeParamsEntry: row status is not digit in config string\n"));
         return (0);
@@ -1120,7 +1117,7 @@ write_snmpTargetParamsSecName(int action,
                         "write to snmpTargetParamsSecName: not ASN_OCTET_STR\n"));
             return SNMP_ERR_WRONGTYPE;
         }
-        if (var_val_len > 255 || var_val_len < 0) {
+        if (var_val_len > 255) {
             DEBUGMSGTL(("snmpTargetParamsEntry",
                         "write to snmpTargetParamsSecName: bad length\n"));
             return SNMP_ERR_WRONGLENGTH;

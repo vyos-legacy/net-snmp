@@ -15,11 +15,7 @@
                          * For 'timeval' 
                          */
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -33,26 +29,39 @@
 #include <inttypes.h>
 #endif
 #include <sys/types.h>
-#ifdef HAVE_WINSOCK_H
-#include <winsock.h>
+#if ! defined(_WINSOCKAPI_) && ! defined(_WINSOCK_H)
+/*
+ * If neither the Microsoft winsock header file nor the MinGW winsock header
+ * file has already been included, do this now.
+ */
+# if defined(HAVE_WINSOCK2_H) && defined(HAVE_WS2TCPIP_H)
+#  if !defined(HAVE_WIN32_PLATFORM_SDK) && _MSC_VER -0 <= 1200 \
+    && _WIN32_WINNT -0 >= 0x0400
+    /*
+     * When using the MSVC 6 header files, including <winsock2.h> when
+     * _WIN32_WINNT >= 0x0400 results in a compilation error. Hence include
+     * <windows.h> instead, because <winsock2.h> is included from inside
+     * <windows.h> when _WIN32_WINNT >= 0x0400. The SDK version of <windows.h>
+     * does not include <winsock2.h> however.
+     */
+#   include <windows.h>
+#  else
+#   include <winsock2.h>
+#  endif
+#   include <ws2tcpip.h>
+# elif defined(HAVE_WINSOCK_H)
+#  include <winsock.h>
+# endif
 #endif
 
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>		/* For definition of in_addr_t */
 #endif
 
+#include <net-snmp/library/oid.h>
+
 #ifdef __cplusplus
 extern "C" {
-#endif
-
-#ifndef MAX_SUBID               /* temporary - duplicate definition protection */
-#ifndef EIGHTBIT_SUBIDS
-typedef u_long  oid;
-#define MAX_SUBID   0xFFFFFFFF
-#else
-typedef u_char  oid;
-#define MAX_SUBID   0xFF
-#endif
 #endif
 
 #ifndef HAVE_SOCKLEN_T
@@ -60,7 +69,11 @@ typedef u_int socklen_t;
 #endif
 
 #ifndef HAVE_IN_ADDR_T
-typedef u_int in_addr_t;
+  /*
+   * The type in_addr_t must match the type of sockaddr_in::sin_addr.
+   * For MSVC and MinGW32, this is u_long.
+   */
+typedef u_long in_addr_t;
 #endif
 
 #ifndef HAVE_SSIZE_T
@@ -122,7 +135,7 @@ typedef struct variable_list {
     netsnmp_vardata val;
    /** the length of the value to be copied into buf */
    size_t          val_len;
-   /** 90 percentile < 24. */
+   /** buffer to hold the OID */
    oid             name_loc[MAX_OID_LEN];  
    /** 90 percentile < 40. */
    u_char          buf[40];
@@ -254,6 +267,9 @@ typedef int        (*snmp_callback) (int, netsnmp_session *, int,
                                           netsnmp_pdu *, void *);
 typedef int     (*netsnmp_callback) (int, netsnmp_session *, int,
                                           netsnmp_pdu *, void *);
+
+struct netsnmp_container_s;
+
 /** @struct snmp_session
  * The snmp session structure.
  */
@@ -371,6 +387,11 @@ struct snmp_session {
      * security module specific 
      */
     void           *securityInfo;
+
+    /**
+     * transport specific configuration 
+     */
+   struct netsnmp_container_s *transport_configuration;
 
     /**
      * use as you want data 

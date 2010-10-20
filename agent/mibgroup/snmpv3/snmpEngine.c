@@ -3,11 +3,6 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
-
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
-
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/sysORTable.h>
@@ -66,8 +61,6 @@ init_snmpEngine(void)
     REGISTER_SYSOR_ENTRY(reg, "The SNMP Management Architecture MIB.");
     register_snmpEngine_scalars();
 }
-
-extern struct timeval starttime;
 
 #ifdef NETSNMP_ENABLE_TESTING_CODE
 int             write_engineBoots(int, u_char *, u_char, size_t, u_char *,

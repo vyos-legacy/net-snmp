@@ -7,7 +7,7 @@
 #     modify it under the same terms as Perl itself.
 
 package SNMP;
-$VERSION = '5.05';   # current release version number
+$VERSION = '5.06';   # current release version number
 
 use strict;
 use warnings;
@@ -484,6 +484,11 @@ sub new {
        $this->{DestHost} = $this->{DestHost} . ":" . $this->{RemotePort};
    }
 
+   if ($this->{DestHost} =~ /^(dtls|tls|ssh)/) {
+       # only works with version 3
+       $this->{Version} = 3;
+   }
+
    if ($this->{Version} eq '1' or $this->{Version} eq '2'
        or $this->{Version} eq '2c') {
        $this->{SessPtr} = SNMP::_new_session($this->{Version},
@@ -511,51 +516,84 @@ sub new {
        $this->{Context} ||= 
 	   NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
 		         NetSNMP::default_store::NETSNMP_DS_LIB_CONTEXT()) || '';
-       $this->{AuthProto} ||= 'DEFAULT'; # use the library's default
-       $this->{AuthPass} ||=
-       NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
-		     NetSNMP::default_store::NETSNMP_DS_LIB_AUTHPASSPHRASE()) ||
-       NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
-		     NetSNMP::default_store::NETSNMP_DS_LIB_PASSPHRASE()) || '';
 
-       $this->{AuthMasterKey} ||= '';
-       $this->{PrivMasterKey} ||= '';
-       $this->{AuthLocalizedKey} ||= '';
-       $this->{PrivLocalizedKey} ||= '';
+       if ($this->{DestHost} =~ /^(dtls|tls|ssh)/) {
+	   # this is a tunneled protocol
 
-       $this->{PrivProto} ||= 'DEFAULT';  # use the library's default
-       $this->{PrivPass} ||=
-       NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
-		     NetSNMP::default_store::NETSNMP_DS_LIB_PRIVPASSPHRASE()) ||
-       NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
-		     NetSNMP::default_store::NETSNMP_DS_LIB_PASSPHRASE()) || '';
-       $this->{EngineBoots} = 0 if not defined $this->{EngineBoots};
-       $this->{EngineTime} = 0 if not defined $this->{EngineTime};
+	   $this->{'OurIdentity'} ||= '';
+	   $this->{'TheirIdentity'} ||= '';
+	   $this->{'TheirHostname'} ||= '';
+	   $this->{'TrustCert'} ||= '';
 
-       $this->{SessPtr} = SNMP::_new_v3_session($this->{Version},
-						$this->{DestHost},
-						$this->{Retries},
-						$this->{Timeout},
-						$this->{SecName},
-						$this->{SecLevel},
-						$this->{SecEngineId},
-						$this->{ContextEngineId},
-						$this->{Context},
-						$this->{AuthProto},
-						$this->{AuthPass},
-						$this->{PrivProto},
-						$this->{PrivPass},
-						$this->{EngineBoots},
-						$this->{EngineTime},
-						$this->{AuthMasterKey},
-						length($this->{AuthMasterKey}),
-						$this->{PrivMasterKey},
-						length($this->{PrivMasterKey}),
-						$this->{AuthLocalizedKey},
-						length($this->{AuthLocalizedKey}),
-						$this->{PrivLocalizedKey},
-						length($this->{PrivLocalizedKey}),
-					       );
+	   $this->{'SecLevel'} = $SNMP::V3_SEC_LEVEL_MAP{'authPriv'};
+
+	   $this->{SessPtr} =
+	     SNMP::_new_tunneled_session($this->{Version},
+					 $this->{DestHost},
+					 $this->{Retries},
+					 $this->{Timeout},
+					 $this->{SecName},
+					 $this->{SecLevel},
+					 $this->{ContextEngineId},
+					 $this->{Context},
+					 $this->{'OurIdentity'},
+					 $this->{'TheirIdentity'},
+					 $this->{'TheirHostname'},
+					 $this->{'TrustCert'},
+					);
+
+
+       } else {
+	   # USM or some other internal security protocol
+
+	   # USM specific parameters:
+	   $this->{AuthProto} ||= 'DEFAULT'; # use the library's default
+	   $this->{AuthPass} ||=
+	     NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
+							   NetSNMP::default_store::NETSNMP_DS_LIB_AUTHPASSPHRASE()) ||
+							       NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
+													     NetSNMP::default_store::NETSNMP_DS_LIB_PASSPHRASE()) || '';
+
+	   $this->{AuthMasterKey} ||= '';
+	   $this->{PrivMasterKey} ||= '';
+	   $this->{AuthLocalizedKey} ||= '';
+	   $this->{PrivLocalizedKey} ||= '';
+
+	   $this->{PrivProto} ||= 'DEFAULT'; # use the library's default
+	   $this->{PrivPass} ||=
+	     NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
+							   NetSNMP::default_store::NETSNMP_DS_LIB_PRIVPASSPHRASE()) ||
+							       NetSNMP::default_store::netsnmp_ds_get_string(NetSNMP::default_store::NETSNMP_DS_LIBRARY_ID(), 
+													     NetSNMP::default_store::NETSNMP_DS_LIB_PASSPHRASE()) || '';
+	   $this->{EngineBoots} = 0 if not defined $this->{EngineBoots};
+	   $this->{EngineTime} = 0 if not defined $this->{EngineTime};
+
+	   $this->{SessPtr} =
+	     SNMP::_new_v3_session($this->{Version},
+				   $this->{DestHost},
+				   $this->{Retries},
+				   $this->{Timeout},
+				   $this->{SecName},
+				   $this->{SecLevel},
+				   $this->{SecEngineId},
+				   $this->{ContextEngineId},
+				   $this->{Context},
+				   $this->{AuthProto},
+				   $this->{AuthPass},
+				   $this->{PrivProto},
+				   $this->{PrivPass},
+				   $this->{EngineBoots},
+				   $this->{EngineTime},
+				   $this->{AuthMasterKey},
+				   length($this->{AuthMasterKey}),
+				   $this->{PrivMasterKey},
+				   length($this->{PrivMasterKey}),
+				   $this->{AuthLocalizedKey},
+				   length($this->{AuthLocalizedKey}),
+				   $this->{PrivLocalizedKey},
+				   length($this->{PrivLocalizedKey}),
+				  );
+       }
    }
    unless ($this->{SessPtr}) {
        warn("unable to create session") if $SNMP::verbose;
@@ -1498,76 +1536,147 @@ $sess = new SNMP::Session(DestHost => 'host', ...)
 
 The following arguments may be passed to new as a hash.
 
+=head2 Basic Options
+
 =over 4
 
 =item DestHost
 
-default 'localhost', hostname or ip addr of SNMP agent
+Hostname or IP address of the SNMP agent you want to talk to.
+Specified in Net-SNMP formatted agent addresses.  These addresses
+typically look like one of the following:
 
-=item Community
+  localhost
+  tcp:localhost
+  tls:localhost
+  tls:localhost:9876
+  udp6:[::1]:9876
+  unix:/some/path/to/file/socket
 
-default 'public', SNMP community string (used for both R/W)
+Defaults to 'localhost'.
 
 =item Version
 
-default taken from library configuration - probably 3 [1, 2 (same as 2c), 2c, 3]
+SNMP version to use.
 
-=item RemotePort
-
-default '161', allow remote UDP port to be overriden
+The default is taken from library configuration - probably 3 [1, 2
+(same as 2c), 2c, 3].
 
 =item Timeout
 
-default '1000000', micro-seconds before retry
+The number of micro-seconds to wait before resending a request.
+
+The default is '1000000'
 
 =item Retries
 
-default '5', retries before failure
+The number of times to retry a request.
+
+The default is '5'
 
 =item RetryNoSuch
 
-default '0', if enabled NOSUCH errors in 'get' pdus will
+If enabled NOSUCH errors in 'get' pdus will
 be repaired, removing the varbind in error, and resent -
 undef will be returned for all NOSUCH varbinds, when set
 to '0' this feature is disabled and the entire get request
 will fail on any NOSUCH error (applies to v1 only)
 
+The default is '0'.
+
+=back
+
+=head2 SNMPv3/TLS Options
+
+=over
+
+=item OurIdentity
+
+Our X.509 identity to use, which should either be a fingerprint or the
+filename that holds the certificate.
+
+=item TheirIdentity
+
+The remote server's identity to connect to, specified as eihter a
+fingerprint or a file name.  Either this must be specified, or the
+hostname below along with a trust anchor.
+
+=item TheirHostname
+
+The remote server's hostname that is expected.  If their certificate
+was signed by a CA then their hostname presented in the certificate
+must match this value or the connection fails to be established (to
+avoid man-in-the-middle attacks).
+
+=item TrustCert
+
+A trusted certificate to use a trust anchor (like a CA certificate)
+for verifying a remote server's certificate.  If a CA certificate is
+used to validate a certificate then the TheirHostname parameter must
+also be specified to ensure their presente hostname in the certificate
+matches.
+
+=back
+
+=head2 SNMPv3/USM Options
+
+=over
+
 =item SecName
 
-default 'initial', security name (v3)
+The SNMPv3 security name to use (most for SNMPv3 with USM).
+
+The default is 'initial'.
 
 =item SecLevel
 
-default 'noAuthNoPriv', security level [noAuthNoPriv,
-authNoPriv, authPriv] (v3)
+The SNMPv3 security level to use [noAuthNoPriv, authNoPriv, authPriv] (v3)
+
+The default is 'noAuthNoPriv'.
 
 =item SecEngineId
 
-default <none>, security engineID, will be probed if not
+The SNMPv3 security engineID to use (if the snmpv3 security model
+needs it; for example USM).
+
+The default is <none>, security engineID and it will be probed if not
 supplied (v3)
 
 =item ContextEngineId
 
-default <SecEngineId>, context engineID, will be
-probed if not supplied (v3)
+The SNMPv3 context engineID to use.
+
+The default is the <none> and will be set either to the SecEngineId
+value if set or discovered or will be discovered in other ways if
+using TLS (RFC5343 based discovery).
 
 =item Context
 
-default '', context name (v3)
+The SNMPv3 context name to use.
+
+The default is '' (an empty string)
 
 =item AuthProto
 
-default 'MD5', authentication protocol [MD5, SHA] (v3)
+The SNMPv3/USM authentication protocol to use [MD5, SHA].
+
+The default is 'MD5'.
 
 =item AuthPass
+
+The SNMPv3/USM authentication passphrase to use.
 
 default <none>, authentication passphrase
 
 =item PrivProto
 
-default 'DES', privacy protocol [DES, AES] (v3)
+The SNMPv3/USM privacy protocol to use [DES, AES].
+
+The default is 'DES'.
 
 =item PrivPass
+
+The SNMPv3/USM privacy passphrase to use.
 
 default <none>, privacy passphrase (v3)
 
@@ -1581,6 +1690,20 @@ default <none>, privacy passphrase (v3)
 
 Directly specified SNMPv3 USM user keys (used if you want to specify
 the keys instead of deriving them from a password as above).
+
+=back
+
+=head2 SNMPv1 and SNMPv2c Options
+
+=item Community
+
+For SNMPv1 and SNMPv2c, the clear-text community name to use.
+
+The default is 'public'.
+
+=head2 Other Configuration Options
+
+=over
 
 =item VarFormats
 
@@ -1674,6 +1797,11 @@ internal field used to hold the translated DestHost field
 =item SessPtr
 
 internal field used to cache a created session structure
+
+=item RemotePort
+
+Obsolete.  Please use the DestHost specifier to indicate the hostname
+and port combination instead of this paramet.
 
 =back
 

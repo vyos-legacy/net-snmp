@@ -118,11 +118,7 @@
 #include <netinet/in.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -130,9 +126,6 @@
 # else
 #  include <time.h>
 # endif
-#endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 
 #include <net-snmp/net-snmp-includes.h>
@@ -154,6 +147,7 @@
 static void       disk_free_config(void);
 static void       disk_parse_config(const char *, char *);
 static void       disk_parse_config_all(const char *, char *);
+#if HAVE_FSTAB_H || HAVE_GETMNTENT || HAVE_STATFS
 static void       find_and_add_allDisks(int minpercent);
 static void       add_device(char *path, char *device,
 	                     int minspace, int minpercent, int override);
@@ -161,6 +155,7 @@ static void       modify_disk_parameters(int index, int minspace,
 	                                 int minpercent);
 static int        disk_exists(char *path);
 static char      *find_device(char *path);
+#endif
 
 struct diskpart {
     char            device[STRMAX];
@@ -266,7 +261,7 @@ disk_parse_config(const char *token, char *cptr)
   if (numdisks == maxdisks) {
       if (maxdisks == 0) {
           maxdisks = 50;
-          disks = malloc(maxdisks * sizeof(struct diskpart));
+          disks = (struct diskpart *)malloc(maxdisks * sizeof(struct diskpart));
           if (!disks) {
               config_perror("malloc failed for new disk allocation.");
 	      netsnmp_config_error("\tignoring:  %s", cptr);
@@ -275,7 +270,7 @@ disk_parse_config(const char *token, char *cptr)
           memset(disks, 0, maxdisks * sizeof(struct diskpart));
       } else {
           maxdisks *= 2;
-          disks = realloc(disks, maxdisks * sizeof(struct diskpart));
+          disks = (struct diskpart *)realloc(disks, maxdisks * sizeof(struct diskpart));
           if (!disks) {
               config_perror("malloc failed for new disk allocation.");
 	      netsnmp_config_error("\tignoring:  %s", cptr);
@@ -326,7 +321,7 @@ disk_parse_config_all(const char *token, char *cptr)
   if (numdisks == maxdisks) {
       if (maxdisks == 0) {
           maxdisks = 50;
-          disks = malloc(maxdisks * sizeof(struct diskpart));
+          disks = (struct diskpart *)malloc(maxdisks * sizeof(struct diskpart));
           if (!disks) {
               config_perror("malloc failed for new disk allocation.");
 	      netsnmp_config_error("\tignoring:  %s", cptr);
@@ -335,7 +330,7 @@ disk_parse_config_all(const char *token, char *cptr)
           memset(disks, 0, maxdisks * sizeof(struct diskpart));
       } else {
           maxdisks *= 2;
-          disks = realloc(disks, maxdisks * sizeof(struct diskpart));
+          disks = (struct diskpart *)realloc(disks, maxdisks * sizeof(struct diskpart));
           if (!disks) {
               config_perror("malloc failed for new disk allocation.");
 	      netsnmp_config_error("\tignoring:  %s", cptr);
@@ -370,6 +365,7 @@ disk_parse_config_all(const char *token, char *cptr)
 }
 
 
+#if HAVE_FSTAB_H || HAVE_GETMNTENT || HAVE_STATFS
 static void
 add_device(char *path, char *device, int minspace, int minpercent, int override) 
 {
@@ -382,7 +378,7 @@ add_device(char *path, char *device, int minspace, int minpercent, int override)
   if (numdisks == maxdisks) {
       if (maxdisks == 0) {
           maxdisks = 50;
-          disks = malloc(maxdisks * sizeof(struct diskpart));
+          disks = (struct diskpart *)malloc(maxdisks * sizeof(struct diskpart));
           if (!disks) {
 	      netsnmp_config_error("\tignoring:  %s", device);
               return;
@@ -390,7 +386,7 @@ add_device(char *path, char *device, int minspace, int minpercent, int override)
           memset(disks, 0, maxdisks * sizeof(struct diskpart));
       } else {
           maxdisks *= 2;
-          disks = realloc(disks, maxdisks * sizeof(struct diskpart));
+          disks = (struct diskpart *)realloc(disks, maxdisks * sizeof(struct diskpart));
           if (!disks) {
               config_perror("malloc failed for new disk allocation.");
 	      netsnmp_config_error("\tignoring:  %s", device);
@@ -462,7 +458,9 @@ find_and_add_allDisks(int minpercent)
   int             i;
 #endif
 
+#if defined(HAVE_GETMNTENT) || defined(HAVE_FSTAB_H)
   int dummy = 0;
+#endif
 
   /* 
    * find the device for the path and copy the device into the
@@ -640,6 +638,7 @@ find_device(char *path)
 #endif                   /* HAVE_FSTAB_H || HAVE_GETMNTENT || HAVE_STATFS */  
   return device;
 }
+#endif
 
 /*
  * Part of UCD-SNMP-MIB::dskEntry, which is so hard to fill 
@@ -662,8 +661,10 @@ struct dsk_entry {
 static int
 fill_dsk_entry(int disknum, struct dsk_entry *entry)
 {
+#if defined(HAVE_STATVFS) || defined(HAVE_STATFS)
     float           multiplier;
-#if !defined(HAVE_SYS_STATVFS_H) && !defined(HAVE_STATFS)
+#endif
+#if defined(HAVE_FSTAB_H) && !defined(HAVE_SYS_STATVFS_H) && !defined(HAVE_STATFS)
     double          totalblks, free, used, avail, availblks;
 #endif
 
@@ -783,8 +784,8 @@ fill_dsk_entry(int disknum, struct dsk_entry *entry)
 
     entry->dskErrorFlag =
         (disks[disknum].minimumspace >= 0
-            ? entry->dskAvail < disks[disknum].minimumspace
-            : 100 - entry->dskPercent <= disks[disknum].minpercent) ? 1 : 0;
+            ? entry->dskAvail < (unsigned long long)disks[disknum].minimumspace
+            : 100 - entry->dskPercent <= (unsigned int)disks[disknum].minpercent) ? 1 : 0;
 
     return 0;
 }
@@ -887,11 +888,8 @@ tryAgain:
         return ((u_char *) (&long_ret));
 
     case DISKPERCENTNODE:
-        if (entry.dskPercentInode >= 0) {
-            long_ret = entry.dskPercentInode;
-            return ((u_char *) (&long_ret));
-        } else
-            return NULL;
+        long_ret = entry.dskPercentInode;
+        return ((u_char *) (&long_ret));
 
     case ERRORFLAG:
         long_ret = entry.dskErrorFlag;

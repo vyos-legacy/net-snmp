@@ -29,11 +29,7 @@
 #include <netinet/in.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -44,9 +40,6 @@
 #endif
 #if HAVE_KVM_H
 #include <kvm.h>
-#endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 
 #include <net-snmp/net-snmp-includes.h>
@@ -216,8 +209,12 @@ proc_parse_config(const char *token, char *cptr)
         else
             (*procp)->min = 0;
     } else {
+        /* Default to asssume that we require at least one
+         *  such process to be running, but no upper limit */
         (*procp)->max = 0;
-        (*procp)->min = 0;
+        (*procp)->min = 1;
+        /* This frees "proc <procname> 0 0" to monitor
+         * processes that should _not_ be running. */
     }
 #ifdef NETSNMP_PROCFIXCMD
     sprintf((*procp)->fixcmd, NETSNMP_PROCFIXCMD, (*procp)->name);
@@ -267,9 +264,12 @@ var_extensible_proc(struct variable *vp,
         case ERRORFLAG:
             long_ret = sh_count_procs(proc->name);
             if (long_ret >= 0 &&
+                   /* Too few processes running */
                 ((proc->min && long_ret < proc->min) ||
+                   /* Too many processes running */
                  (proc->max && long_ret > proc->max) ||
-                 (proc->min == 0 && proc->max == 0 && long_ret < 1))) {
+                   /* Processes running that shouldn't be */
+                 (proc->min == 0 && proc->max == 0 && long_ret > 0))) {
                 long_ret = 1;
             } else {
                 long_ret = 0;
@@ -280,16 +280,20 @@ var_extensible_proc(struct variable *vp,
             if (long_ret < 0) {
                 errmsg[0] = 0;  /* catch out of mem errors return 0 count */
             } else if (proc->min && long_ret < proc->min) {
-                snprintf(errmsg, sizeof(errmsg),
+                if ( long_ret > 0 )
+                    snprintf(errmsg, sizeof(errmsg),
                         "Too few %s running (# = %d)",
                         proc->name, (int) long_ret);
+                else
+                    snprintf(errmsg, sizeof(errmsg),
+                        "No %s process running", proc->name);
             } else if (proc->max && long_ret > proc->max) {
                 snprintf(errmsg, sizeof(errmsg),
                         "Too many %s running (# = %d)",
                         proc->name, (int) long_ret);
-            } else if (proc->min == 0 && proc->max == 0 && long_ret < 1) {
+            } else if (proc->min == 0 && proc->max == 0 && long_ret > 0) {
                 snprintf(errmsg, sizeof(errmsg),
-                        "No %s process running.", proc->name);
+                        "%s process should not be running.", proc->name);
             } else {
                 errmsg[0] = 0;
             }
@@ -413,7 +417,7 @@ sh_count_procs(char *procname)
     return ret;
 }
 
-#elif defined(aix4) || defined(aix5) || defined(aix6)
+#elif defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
 #include <procinfo.h>
 #include <sys/types.h>
 
@@ -472,6 +476,7 @@ sh_count_procs(char *procname)
       if(len <= 0) continue;
       cmdline[len] = 0;
       while(--len && !cmdline[len]);
+      if(len <= 0) continue;
       while(--len) if(!cmdline[len]) cmdline[len] = ' ';
       if(!strncmp(cmdline,procname,plen)) total++;
 #else

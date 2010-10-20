@@ -18,10 +18,6 @@
 #endif
 #include <ctype.h>
 
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
-
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -34,7 +30,7 @@
 #include "dlmod.h"
 
 static struct dlmod *dlmods = NULL;
-static int      dlmod_next_index = 1;
+static unsigned int dlmod_next_index = 1;
 static char     dlmod_path[1024];
 
 static void     dlmod_parse_config(const char *, char *);
@@ -113,7 +109,7 @@ dlmod_create_module(void)
     if (dlm == NULL)
         return NULL;
 
-    dlm->index = dlmod_next_index++;
+    dlm->index = (int)dlmod_next_index++;
     dlm->status = DLMOD_UNLOADED;
 
     for (pdlmod = &dlmods; *pdlmod != NULL; pdlmod = &((*pdlmod)->next));
@@ -359,7 +355,7 @@ var_dlmod(struct variable * vp,
 
     if (header_dlmod(vp, name, length, exact,
                      var_len, write_method) == MATCH_FAILED)
-        return 0;
+        return NULL;
 
     /*
      * this is where we do the value assignments for the mib results. 
@@ -372,7 +368,7 @@ var_dlmod(struct variable * vp,
         DEBUGMSGTL(("dlmod", "unknown sub-id %d in var_dlmod\n",
                     vp->magic));
     }
-    return 0;
+    return NULL;
 }
 
 
@@ -398,8 +394,8 @@ header_dlmodEntry(struct variable *vp,
 #define DLMODENTRY_NAME_LENGTH 12
     oid             newname[MAX_OID_LEN];
     int             result;
-    struct dlmod   *dlm = 0;
-    int             dlmod_index;
+    struct dlmod   *dlm = NULL;
+    unsigned int    dlmod_index;
 
     memcpy((char *) newname, (char *) vp->name,
            (int) vp->namelen * sizeof(oid));
@@ -453,7 +449,7 @@ var_dlmodEntry(struct variable * vp,
     dlm =
         header_dlmodEntry(vp, name, length, exact, var_len, write_method);
     if (dlm == NULL)
-        return 0;
+        return NULL;
 
     /*
      * this is where we do the value assignments for the mib results. 
@@ -478,7 +474,7 @@ var_dlmodEntry(struct variable * vp,
         DEBUGMSGTL(("dlmod", "unknown sub-id %d in var_dlmodEntry\n",
                     vp->magic));
     }
-    return 0;
+    return NULL;
 }
 
 int

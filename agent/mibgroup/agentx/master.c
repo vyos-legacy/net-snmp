@@ -31,9 +31,6 @@
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
@@ -503,7 +500,7 @@ agentx_master_handler(netsnmp_mib_handler *handler,
     pdu->transid = reqinfo->asp->pdu->transid;
     pdu->sessid = ax_session->subsession->sessid;
     if (reginfo->contextName) {
-        pdu->community = strdup(reginfo->contextName);
+        pdu->community = (u_char *) strdup(reginfo->contextName);
         pdu->community_len = strlen(reginfo->contextName);
         pdu->flags |= AGENTX_MSG_FLAG_NON_DEFAULT_CONTEXT;
     }

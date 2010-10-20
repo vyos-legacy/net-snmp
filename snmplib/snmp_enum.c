@@ -20,6 +20,7 @@
 
 #include <net-snmp/library/snmp_enum.h>
 #include <net-snmp/library/tools.h>
+#include <net-snmp/library/snmp_assert.h>
 
 struct snmp_enum_list_str {
     char           *name;
@@ -27,19 +28,21 @@ struct snmp_enum_list_str {
     struct snmp_enum_list_str *next;
 };
 
-static struct snmp_enum_list ***snmp_enum_lists;
+static struct snmp_enum_list ***snmp_enum_lists = NULL;
 unsigned int    current_maj_num;
 unsigned int    current_min_num;
-struct snmp_enum_list_str *sliststorage;
+static struct snmp_enum_list_str *sliststorage = NULL;
 
 int
 init_snmp_enum(const char *type)
 {
     int             i;
 
-    if (!snmp_enum_lists)
-        snmp_enum_lists = (struct snmp_enum_list ***)
-            calloc(1, sizeof(struct snmp_enum_list **) * SE_MAX_IDS);
+    if (NULL != snmp_enum_lists)
+        return SE_OK;
+
+    snmp_enum_lists = (struct snmp_enum_list ***)
+        calloc(1, sizeof(struct snmp_enum_list **) * SE_MAX_IDS);
     if (!snmp_enum_lists)
         return SE_NOMEM;
     current_maj_num = SE_MAX_IDS;
@@ -52,9 +55,6 @@ init_snmp_enum(const char *type)
             return SE_NOMEM;
     }
     current_min_num = SE_MAX_SUBIDS;
-
-    if (!sliststorage)
-        sliststorage = NULL;
 
     register_config_handler(type, "enum", se_read_conf, NULL, NULL);
     return SE_OK;
@@ -72,7 +72,7 @@ se_store_in_list(struct snmp_enum_list *new_list,
          */
         return SE_NOMEM;
     }
-
+    netsnmp_assert(NULL != snmp_enum_lists);
 
     if (snmp_enum_lists[major][minor] != NULL)
         ret = SE_ALREADY_THERE;
@@ -195,6 +195,7 @@ se_find_list(unsigned int major, unsigned int minor)
 {
     if (major > current_maj_num || minor > current_min_num)
         return NULL;
+    netsnmp_assert(NULL != snmp_enum_lists);
 
     return snmp_enum_lists[major][minor];
 }
@@ -282,16 +283,17 @@ se_find_label(unsigned int major, unsigned int minor, int value)
 int
 se_add_pair_to_list(struct snmp_enum_list **list, char *label, int value)
 {
-    struct snmp_enum_list *lastnode = NULL;
+    struct snmp_enum_list *lastnode = NULL, *tmp;
 
     if (!list)
         return SE_DNE;
 
-    while (*list) {
-        if ((*list)->value == value)
+    tmp = *list;
+    while (tmp) {
+        if (tmp->value == value)
             return (SE_ALREADY_THERE);
-        lastnode = (*list);
-        (*list) = (*list)->next;
+        lastnode = tmp;
+        tmp = tmp->next;
     }
 
     if (lastnode) {
@@ -484,7 +486,7 @@ main()
     printf("2: %s\n", se_find_label(1, 1, 2));
 
     se_add_pair_to_slist("testing", "life, and everything", 42);
-    se_add_pair_to_slist("testing", "resturant at the end of the universe",
+    se_add_pair_to_slist("testing", "restaurant at the end of the universe",
                          2);
 
     printf("life, and everything: %d\n",

@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: ipaddress_linux.c 17255 2008-10-14 09:44:26Z jsafranek $
+ * $Id: ipaddress_linux.c 18009 2010-01-21 14:55:34Z jsafranek $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -247,7 +247,7 @@ _load_v6(netsnmp_container *container, int idx_offset)
          * F: flags (see include/linux/rtnetlink.h, net/ipv6/addrconf.c)
          * I: interface
          */
-        rc = sscanf(line, "%39s %04x %02x %02x %02x %" SNMP_MACRO_VAL_TO_STR(IFNAMSIZ) "s\n",
+        rc = sscanf(line, "%39s %08x %08x %04x %02x %" SNMP_MACRO_VAL_TO_STR(IFNAMSIZ) "s\n",
                     addr, &if_index, &pfx_len, &scope, &flags, if_name);
         if( 6 != rc ) {
             snmp_log(LOG_ERR, PROCFILE " data format error (%d!=6), line ==|%s|\n",
@@ -478,11 +478,11 @@ netsnmp_access_other_info_get(int index, int family)
         if(index == rtmp->ifa_index){
            for (; RTA_OK(rtatp, rtattrlen); rtatp = RTA_NEXT(rtatp, rtattrlen)) {
                 if(rtatp->rta_type == IFA_BROADCAST){
-                   addr.inp = (struct in_addr *)RTA_DATA(rtatp);
+                   addr.addr = ((struct in_addr *)RTA_DATA(rtatp))->s_addr;
                    addr.bcastflg = 1;
                 }
                 if(rtatp->rta_type == IFA_ANYCAST){
-                   addr.inp = (struct in_addr *)RTA_DATA(rtatp);
+                   addr.addr = ((struct in_addr *)RTA_DATA(rtatp))->s_addr;
                    addr.anycastflg = 1;
                 }
            }

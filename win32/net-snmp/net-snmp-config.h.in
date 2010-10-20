@@ -12,6 +12,11 @@
    1200 = 6.0
 */
 
+#ifdef _MSC_VER
+/* Disable warning 4018: signed/unsigned mismatch. */
+#pragma warning (disable: 4018)
+#endif
+
 /* Automatically set by Windows perl Configure script.
  * When compiling with the MSVC workspace, this must be set manually.
  * See the PACKAGE_VERSION variable in Unix /configure script
@@ -22,8 +27,6 @@
  * Microsoft Visual Studio MSVC 6.0 and the Platform SDK (PSDK)
  * Microsoft Visual Studio.Net 2002
  * Microsoft Visual Studio.Net 2003
- * Cygwin
- * MinGW 
  */
 /* #undef HAVE_WIN32_PLATFORM_SDK */
 
@@ -228,14 +231,14 @@
 /* Define to 1 if you have the <asm/page.h> header file. */
 /* #undef HAVE_ASM_PAGE_H */
 
-/* Define to 1 if you have the `bcopy' function. */
-/* #undef HAVE_BCOPY */
-
 /* Define to 1 if you have the `cgetnext' function. */
 /* #undef HAVE_CGETNEXT */
 
+/* Define to 1 if you have the <crtdbg.h> header file. */
+#define HAVE_CRTDBG_H 1
+
 /* Define to 1 if you have the <direct.h> header file. */
-/* #undef HAVE_DIRECT_H */
+#define HAVE_DIRECT_H 1
 
 /* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'.
    */
@@ -313,11 +316,13 @@
 /* Define to 1 if you have the `if_nameindex' function. */
 /* #undef HAVE_IF_NAMEINDEX */
 
-/* Define to 1 if you have the `index' function. */
-/* #undef HAVE_INDEX */
-
 /* Define to 1 if you have the <inet/mib2.h> header file. */
 /* #undef HAVE_INET_MIB2_H */
+
+#ifdef HAVE_WIN32_PLATFORM_SDK
+/* Define to 1 if you have the <iphlpapi.h> header file. */
+#define HAVE_IPHLPAPI_H
+#endif
 
 /* Define to 1 if the system has the type `int32_t'. */
 #define HAVE_INT32_T 1
@@ -423,12 +428,6 @@
 
 /* Define to 1 if you have the <malloc.h> header file. */
 #define HAVE_MALLOC_H 1
-
-/* Define to 1 if you have the `memcpy' function. */
-#define HAVE_MEMCPY 1
-
-/* Define to 1 if you have the `memmove' function. */
-#define HAVE_MEMMOVE 1
 
 /* Define to 1 if you have the <memory.h> header file. */
 #define HAVE_MEMORY_H 1
@@ -685,9 +684,6 @@
 /* Define to 1 if you have the `strcasestr' function. */
 /* #undef HAVE_STRCASESTR */
 
-/* Define to 1 if you have the `strchr' function. */
-#define HAVE_STRCHR 1
-
 /* Define to 1 if you have the `strdup' function. */
 #define HAVE_STRDUP 1
 
@@ -831,6 +827,9 @@
 /* Define to 1 if you have the <sys/time.h> header file. */
 /* #undef HAVE_SYS_TIME_H */
 
+/* Define to 1 if you have the <sys/timeb.h> header file. */
+#define HAVE_SYS_TIMEB_H 1
+
 /* Define to 1 if you have the <sys/types.h> header file. */
 #define HAVE_SYS_TYPES_H 1
 
@@ -924,6 +923,12 @@
 /* Define to 1 if you have the <winsock.h> header file. */
 #define HAVE_WINSOCK_H 1
 
+/* Define to 1 if you have the <winsock2.h> header file. */
+#define HAVE_WINSOCK2_H 1
+
+/* Define to 1 if you have the <ws2tcpip.h> header file. */
+#define HAVE_WS2TCPIP_H 1
+
 /* Define to 1 if you have the <xti.h> header file. */
 /* #undef HAVE_XTI_H */
 
@@ -969,7 +974,7 @@
 #define STDC_HEADERS 1
 
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
-#define TIME_WITH_SYS_TIME 1
+/* #undef TIME_WITH_SYS_TIME */
 
 /* Define to 1 if your processor stores words with the most significant byte
    first (like Motorola and SPARC, unlike Intel and VAX). */
@@ -1326,44 +1331,6 @@
 /* got ssize_t? */
 /* #undef HAVE_SSIZE_T */
 
-#ifndef HAVE_STRCHR
-#ifdef HAVE_INDEX
-# define strchr(a,b) index(a,b)
-# define strrchr(a,b) rindex(a,b)
-#endif
-#endif
-
-#ifndef HAVE_INDEX
-#ifdef HAVE_STRCHR
-# define index(a,b) strchr(a,b)
-# define rindex(a,b) strrchr(a,b)
-#endif
-#endif
-
-#ifndef HAVE_MEMCPY
-#ifdef HAVE_BCOPY
-# define memcpy(d, s, n) bcopy ((s), (d), (n))
-# define memmove(d, s, n) bcopy ((s), (d), (n))
-# define memcmp bcmp
-#endif
-#endif
-
-#ifndef HAVE_MEMMOVE
-#ifdef HAVE_MEMCPY
-# define memmove memcpy
-#endif
-#endif
-
-#if notused /* dont step on other defns of bcopy,bzero, and bcmp */
-#ifndef HAVE_BCOPY
-#ifdef HAVE_MEMCPY
-# define bcopy(s, d, n) memcpy ((d), (s), (n))
-# define bzero(p,n) memset((p),(0),(n))
-# define bcmp memcmp
-#endif
-#endif
-#endif
-
 /* If you have openssl 0.9.7 or above, you likely have AES support. */
 /* #undef NETSNMP_USE_OPENSSL */
 
@@ -1463,6 +1430,32 @@
     available.  */
 /* #undef NETSNMP_TRANSPORT_TCPIPV6_DOMAIN */
 
+/*  This is defined if support for the TLS transport domain is
+    available.   */
+/* #undef NETSNMP_TRANSPORT_TLSBASE_DOMAIN */
+
+/*  This is defined if support for the Alias transport domain is
+    available.   */
+/* #undef NETSNMP_TRANSPORT_ALIAS_DOMAIN */
+
+/*  This is defined if support for the SSH transport domain is
+    available.   */
+/* #undef NETSNMP_TRANSPORT_SSH_DOMAIN */
+
+/*  This is defined if support for the DTLS/UDP transport domain is
+    available.   */
+/* #undef NETSNMP_TRANSPORT_DTLSUDP_DOMAIN */
+
+/*  This is defined if support for the TLS/TCP transport domain is
+    available.   */
+/* #undef NETSNMP_TRANSPORT_TLSTCP_DOMAIN */
+
+/*  This is defined if support for stdin/out transport domain is available.   */
+/* #undef NETSNMP_TRANSPORT_STD_DOMAIN */
+
+/*  This is defined if support for the IPv4Base transport domain is available.   */
+#define NETSNMP_TRANSPORT_IPV4BASE_DOMAIN 1
+
 /* define this if the USM security module is available */
 #define NETSNMP_SECMOD_USM 1
 
@@ -1482,13 +1475,14 @@
 #define config_require(x)
 #define config_version_require(x)
 #define config_warning(x)
+#define config_error(x)
 #define config_exclude(x)
 #define config_arch_require(x,y)
 #define config_parse_dot_conf(w,x,y,z)
 #define config_add_mib(x)
 #define config_belongs_in(x)
 
-#if defined (WIN32) || defined (mingw32) || defined (cygwin)
+#if defined (WIN32)
 #define ENV_SEPARATOR ";"
 #define ENV_SEPARATOR_CHAR ';'
 #else
@@ -1552,6 +1546,10 @@
 #ifdef WIN32
 
 typedef unsigned short mode_t;
+typedef unsigned char uint8_t;
+typedef char int8_t;
+typedef unsigned short uint16_t;
+typedef short int16_t;
 typedef unsigned __int32 uint32_t;
 typedef long int32_t;
 typedef unsigned __int64 uint64_t;
@@ -1593,17 +1591,9 @@ typedef unsigned int   uintptr_t;
 /* Define NETSNMP_USE_DLL when building or using netsnmp.DLL */
 /* #undef NETSNMP_USE_DLL */
 
-#ifdef NETSNMP_USE_DLL
-  #ifdef NETSNMP_DLL
-    #if defined(_MSC_VER)
-      #define NETSNMP_IMPORT __declspec(dllexport)
-    #endif
-  #else
-    #if defined(_MSC_VER)
-      #define NETSNMP_IMPORT __declspec(dllimport)
-    #endif
-  #endif   /* NETSNMP_DLL */
-#endif     /* NETSNMP_USE_DLL */
+#if defined(NETSNMP_DLL) && !defined(NETSNMP_USE_DLL)
+#error NETSNMP_USE_DLL must be defined when building libsnmp as a DLL.
+#endif
 
 /*
  * DLL decoration, if used at all, must be consistent.
@@ -1616,20 +1606,36 @@ typedef unsigned int   uintptr_t;
  *  the NETSNMP_IMPORT definitions harmless.
  */
 
-
-  #ifdef NETSNMP_USE_DLL
-    #ifndef NETSNMP_TOOLS_C
-
-  /* wrap alloc functions to use DLL's memory heap */
-  /* This is not done in tools.c, where these wrappers are defined */
-
-      #define strdup    netsnmp_strdup
-      #define calloc    netsnmp_calloc
-      #define malloc    netsnmp_malloc
-      #define realloc   netsnmp_realloc
-      #define free      netsnmp_free
+#ifdef NETSNMP_USE_DLL
+  #ifdef NETSNMP_DLL
+    #if defined(_MSC_VER)
+      #define NETSNMP_IMPORT __declspec(dllexport)
     #endif
-  #endif
+  #else
+    #if defined(_MSC_VER)
+      #define NETSNMP_IMPORT __declspec(dllimport)
+    #endif
+  #endif   /* NETSNMP_DLL */
+#endif     /* NETSNMP_USE_DLL */
+
+/* MSVC OpenSSL linker settings. */
+#if defined(WIN32) && !defined(mingw32)
+#  if defined(NETSNMP_USE_OPENSSL)
+#    ifdef NETSNMP_USE_DLL
+#      ifdef _DEBUG
+#        pragma comment(lib, "libeay32MDd.lib")
+#      else
+#        pragma comment(lib, "libeay32MD.lib")
+#      endif
+#    else
+#      ifdef _DEBUG
+#        pragma comment(lib, "libeay32MTd.lib")
+#      else
+#        pragma comment(lib, "libeay32MT.lib")
+#      endif
+#    endif
+#  endif
+#endif
 
 #endif       /* WIN32 */
 
@@ -1665,7 +1671,7 @@ typedef unsigned int   uintptr_t;
 #undef HAVE_INET_PTON
 
 /* IPv6 transports */
-#if NETSNMP_ENABLE_IPV6
+#ifdef NETSNMP_ENABLE_IPV6
   #ifndef IPPROTO_IPV6
     /* Only defined in Windows XP or higher, so we need it here */
     #define IPPROTO_IPV6 41
@@ -1677,17 +1683,19 @@ typedef unsigned int   uintptr_t;
   #undef NETSNMP_TRANSPORT_UDPIPV6_DOMAIN
 #endif
 
+/*
+ * Although if_nametoindex() is available on Windows Vista, Windows Server
+ * 2008 and later in iphlpapi.dll, do not link with if_nametoindex() such
+ * that the Net-SNMP executable can be started on earlier Windows versions.
+ */
+#undef HAVE_IF_NAMETOINDEX
+
 #ifndef NI_MAXHOST
 #define NI_MAXHOST	1025
 #endif
 
 /* Define to 1 if you have the `strtoull' function. */
-#if defined(_MSC_VER) && _MSC_VER < 1300
-#undef HAVE_STRTOULL
-#else
-#define HAVE_STRTOULL 1
-#define strtoull _strtoui64
-#endif
+/* #undef HAVE_STRTOULL */
 
 /*
  * Module configuration and control starts here.
@@ -1733,6 +1741,15 @@ typedef unsigned int   uintptr_t;
 
 #ifdef HAVE_WIN32_PLATFORM_SDK
 #define HAVE_STRUCT_SOCKADDR_STORAGE_SS_FAMILY 1
+#endif
+
+/* Size prefix to use to printf a uint32_t */
+#define NETSNMP_PRI32 ""
+
+#ifdef _WIN64
+#define NETSNMP_PRIz "I64"
+#else
+#define NETSNMP_PRIz ""
 #endif
 
 #endif /* NET_SNMP_CONFIG_H */

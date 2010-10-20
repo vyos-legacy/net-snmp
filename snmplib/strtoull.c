@@ -20,14 +20,15 @@
 
 #include <net-snmp/net-snmp-config.h>
 
-#if !HAVE_STRTOULL || defined(STRTOULL_UNIT_TEST)
-
 #include <errno.h>
 #include <ctype.h>
 #include <limits.h>
 #ifdef HAVE_INTTYPES_H
 #include <inttypes.h>
 #endif
+
+#include <net-snmp/types.h>
+#include <net-snmp/library/system.h>
 
 /*
  * UINT64_C: C99 macro for the suffix for uint64_t constants. 
@@ -163,7 +164,6 @@ strtoull(const char *nptr, char **endptr, int base)
 
 #if defined(STRTOULL_UNIT_TEST)
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -273,8 +273,6 @@ main(void)
 }
 
 #endif /* defined(STRTOULL_UNIT_TEST) */
-
-#endif /* !HAVE_STRTOULL || defined(STRTOULL_UNIT_TEST) */
 
 /*
  * Local variables:

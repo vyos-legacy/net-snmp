@@ -1,7 +1,7 @@
 /*
  * systemstats data access header
  *
- * $Id: systemstats.h 17260 2008-10-15 12:57:09Z jsafranek $
+ * $Id: systemstats.h 18483 2010-04-08 10:55:42Z jsafranek $
  */
 #ifndef NETSNMP_ACCESS_SYSTEMSTATS_H
 #define NETSNMP_ACCESS_SYSTEMSTATS_H
@@ -36,6 +36,11 @@ typedef struct netsnmp_systemstats_s {
     */
    netsnmp_ipstats stats;
 
+   /*
+    * for logging
+    */
+   const char* tableName;
+   
    /** old_stats is used in netsnmp_access_interface_entry_update_stats */
    netsnmp_ipstats *old_stats;
 
@@ -46,6 +51,11 @@ typedef struct netsnmp_systemstats_s {
 /*
  * ACCESS function prototypes
  */
+/*
+ * init
+ */
+void netsnmp_access_systemstats_init(void);
+
 /*
  * init
  */
@@ -74,7 +84,8 @@ void netsnmp_access_systemstats_container_free(netsnmp_container *container,
  * create/free an entry
  */
 netsnmp_systemstats_entry *
-netsnmp_access_systemstats_entry_create(int version, int if_index);
+netsnmp_access_systemstats_entry_create(int version, int if_index,
+            const char* tableName);
 
 void netsnmp_access_systemstats_entry_free(netsnmp_systemstats_entry * entry);
 

@@ -210,8 +210,8 @@ void init_extend( void )
     snmpd_register_config_handler("exec", extend_parse_config, NULL, NULL);
     snmpd_register_config_handler("sh",   extend_parse_config, NULL, NULL);
     snmpd_register_config_handler("execFix", extend_parse_config, NULL, NULL);
-    compatability_entries = calloc( max_compatability_entries,
-                                    sizeof(netsnmp_old_extend));
+    compatability_entries = (netsnmp_old_extend *)
+        calloc( max_compatability_entries, sizeof(netsnmp_old_extend));
     REGISTER_MIB("ucd-extensible", old_extensible_variables,
                  variable2, old_extensible_variables_oid);
 #endif
@@ -231,6 +231,10 @@ void init_extend( void )
 int
 extend_load_cache(netsnmp_cache *cache, void *magic)
 {
+#ifndef USING_UTILITIES_EXECUTE_MODULE
+    NETSNMP_LOGONCE((LOG_WARNING,"support for run_exec_command not available\n"));
+    return -1;
+#else
     int  out_len = 1024*100;
     char out_buf[ 1024*100 ];
     int  cmd_len = 255*2 + 2;	/* 2 * DisplayStrings */
@@ -270,7 +274,7 @@ extend_load_cache(netsnmp_cache *cache, void *magic)
             }
         }
         if ( extension->numlines > 1 ) {
-            extension->lines = calloc( sizeof(char *), extension->numlines );
+            extension->lines = (char**)calloc( sizeof(char *), extension->numlines );
             memcpy( extension->lines, line_buf,
                                        sizeof(char *) * extension->numlines );
         } else {
@@ -279,6 +283,7 @@ extend_load_cache(netsnmp_cache *cache, void *magic)
     }
     extension->result = ret;
     return ret;
+#endif /* !defined(USING_UTILITIES_EXECUTE_MODULE) */
 }
 
 void
@@ -416,6 +421,7 @@ extend_parse_config(const char *token, char *cptr)
 {
     netsnmp_extend *extension;
     char exec_name[STRMAX];
+    char exec_name2[STRMAX];     /* For use with UCD execFix directive */
     char exec_command[STRMAX];
     oid  oid_buf[MAX_OID_LEN];
     size_t oid_len;
@@ -449,6 +455,7 @@ extend_parse_config(const char *token, char *cptr)
     if (!strcmp( token, "execFix"   ) ||
         !strcmp( token, "extendfix" ) ||
         !strcmp( token, "execFix2" )) {
+        strcpy( exec_name2, exec_name );
         strcat( exec_name, "Fix" );
         flags |= NS_EXTEND_FLAGS_WRITEABLE;
         /* XXX - Check for shell... */
@@ -472,7 +479,7 @@ extend_parse_config(const char *token, char *cptr)
     if (!strcmp( token, "execFix"  )) {
         int  i;
         for ( i=0; i < num_compatability_entries; i++ ) {
-            if (!strcmp( exec_name,
+            if (!strcmp( exec_name2,
                     compatability_entries[i].exec_entry->token))
                 break;
         }
@@ -789,7 +796,7 @@ handle_nsExtendConfigTable(netsnmp_mib_handler          *handler,
                 case RS_CREATEANDWAIT:
                     eptr = _find_extension_block( request->requestvb->name,
                                                   request->requestvb->name_length );
-                    extension = _new_extension( table_info->indexes->val.string,
+                    extension = _new_extension( (char *) table_info->indexes->val.string,
                                                 0, eptr );
                     if (!extension) {  /* failed */
                         netsnmp_set_request_error(reqinfo, request,
@@ -1095,8 +1102,8 @@ _extend_find_entry( netsnmp_request_info       *request,
     oid oid_buf[MAX_OID_LEN];
     int oid_len;
     int i;
-    char *token;
-    int   token_len;
+    char  *token;
+    size_t token_len;
 
     if (!request || !table_info || !table_info->indexes
                  || !table_info->indexes->next_variable) {
@@ -1115,7 +1122,7 @@ _extend_find_entry( netsnmp_request_info       *request,
                       table_info->indexes->val.string,
                      *table_info->indexes->next_variable->val.integer));
         for ( eptr = ereg->ehead; eptr; eptr = eptr->next ) {
-            if ( !strcmp( eptr->token, table_info->indexes->val.string ))
+            if ( !strcmp( eptr->token, (char *) table_info->indexes->val.string ))
                 break;
         }
 
@@ -1154,7 +1161,7 @@ _extend_find_entry( netsnmp_request_info       *request,
                 }
             }
         } else {
-            token     =  table_info->indexes->val.string;
+            token     =  (char *) table_info->indexes->val.string;
             token_len =  table_info->indexes->val_len;
             line_idx  = *table_info->indexes->next_variable->val.integer;
             DEBUGMSGTL(( "nsExtendTable:output2", "GETNEXT: %s / %d\n ",

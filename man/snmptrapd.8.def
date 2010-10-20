@@ -1,3 +1,7 @@
+.\" -*- nroff -*-
+.\" Portions of this file are subject to the following copyright.  See
+.\" the Net-SNMP COPYING file for more details and other copyrights
+.\" that may apply:
 .\" /***********************************************************
 .\" 	Copyright 1989 by Carnegie Mellon University
 .\" 
@@ -19,8 +23,7 @@
 .\" ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
 .\" SOFTWARE.
 .\" ******************************************************************/
-.TH SNMPTRAPD 8 "15 Jan 2004" VVERSIONINFO "Net-SNMP"
-.UC 4
+.TH SNMPTRAPD 8 "20 Jul 2010" VVERSIONINFO "Net-SNMP"
 .SH NAME
 snmptrapd - Receive and log SNMP trap messages.
 .SH SYNOPSIS
@@ -58,7 +61,7 @@ option.
 .B -d
 Dump (in hexadecimal) the sent and received SNMP packets.
 .TP
-.BI -D " TOKEN[,...]"
+.BI -D[TOKEN[,...]]
 Turn on debugging output for the given
 .IR "TOKEN" "(s)."
 Try

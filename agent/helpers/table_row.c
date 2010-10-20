@@ -3,7 +3,7 @@
  *
  * Helper for registering single row slices of a shared table
  *
- * $Id: table_row.c 17308 2008-11-20 22:30:37Z magfr $
+ * $Id: table_row.c 17839 2009-11-27 08:54:26Z jsafranek $
  */
 #define TABLE_ROW_DATA  "table_row"
 

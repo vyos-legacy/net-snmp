@@ -124,8 +124,10 @@ ipIfStatsTable_container_init(netsnmp_container ** container_ptr_ptr,
      */
     *container_ptr_ptr =
         netsnmp_container_find("ipIfStatsTable:table_container");
-    if (NULL != *container_ptr_ptr)
+    if (NULL != *container_ptr_ptr) {
+        (*container_ptr_ptr)->container_name = strdup("ipIfStatsTable");
         ipIfStatsTable_container_load(*container_ptr_ptr);
+    }
     if (NULL == cache) {
         snmp_log(LOG_ERR,
                  "bad cache param to ipIfStatsTable_container_init\n");
@@ -160,7 +162,7 @@ _check_for_updates(ipIfStatsTable_rowreq_ctx * rowreq_ctx,
     /*
      * check for matching entry. works because indexes are the same.
      */
-    ifstats_entry = CONTAINER_FIND(stats, rowreq_ctx->data);
+    ifstats_entry = (netsnmp_systemstats_entry*)CONTAINER_FIND(stats, rowreq_ctx->data);
     if (NULL == ifstats_entry) {
         DEBUGMSGTL(("ipIfStatsTable:access",
                     "updating missing entry\n"));

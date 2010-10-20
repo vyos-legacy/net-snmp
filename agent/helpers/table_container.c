@@ -1,6 +1,6 @@
 /*
  * table_container.c
- * $Id: table_container.c 16867 2008-03-26 07:16:29Z magfr $
+ * $Id: table_container.c 19204 2010-07-12 10:08:54Z bvassche $
  */
 
 #include <net-snmp/net-snmp-config.h>
@@ -180,7 +180,7 @@ netsnmp_tcontainer_create_table( const char *name,
     }
 
     if (flags)
-        table->key_type = flags & 0x03;  /* Use lowest two bits */
+        table->key_type = (char)(flags & 0x03);  /* Use lowest two bits */
     else
         table->key_type = TABLE_CONTAINER_KEY_NETSNMP_INDEX;
 
@@ -433,6 +433,73 @@ netsnmp_container_table_row_insert(netsnmp_request_info *request,
     }
 }
 
+/** removes a table_container entry from a request list */
+void
+netsnmp_container_table_row_remove(netsnmp_request_info *request,
+                                   netsnmp_index        *row)
+{
+    netsnmp_request_info       *req;
+    netsnmp_table_request_info *table_info = NULL;
+    netsnmp_variable_list      *this_index = NULL;
+    netsnmp_variable_list      *that_index = NULL;
+    oid      base_oid[] = {0, 0};	/* Make sure index OIDs are legal! */
+    oid      this_oid[MAX_OID_LEN];
+    oid      that_oid[MAX_OID_LEN];
+    size_t   this_oid_len, that_oid_len;
+
+    if (!request)
+        return;
+
+    /*
+     * We'll add the new row information to any request
+     * structure with the same index values as the request
+     * passed in (which includes that one!).
+     *
+     * So construct an OID based on these index values.
+     */
+
+    table_info = netsnmp_extract_table_info(request);
+    this_index = table_info->indexes;
+    build_oid_noalloc(this_oid, MAX_OID_LEN, &this_oid_len,
+                      base_oid, 2, this_index);
+
+    /*
+     * We need to look through the whole of the request list
+     * (as received by the current handler), as there's no
+     * guarantee that this routine will be called by the first
+     * varbind that refers to this row.
+     *   In particular, a RowStatus controlled row creation
+     * may easily occur later in the variable list.
+     *
+     * So first, we rewind to the head of the list....
+     */
+    for (req=request; req->prev; req=req->prev)
+        ;
+
+    /*
+     * ... and then start looking for matching indexes
+     * (by constructing OIDs from these index values)
+     */
+    for (; req; req=req->next) {
+        if (req->processed) 
+            continue;
+        
+        table_info = netsnmp_extract_table_info(req);
+        that_index = table_info->indexes;
+        build_oid_noalloc(that_oid, MAX_OID_LEN, &that_oid_len,
+                          base_oid, 2, that_index);
+      
+        /*
+         * This request has the same index values,
+         * so add the newly-created row information.
+         */
+        if (snmp_oid_compare(this_oid, this_oid_len,
+                             that_oid, that_oid_len) == 0) {
+            netsnmp_request_remove_list_data(req, TABLE_CONTAINER_ROW);
+        }
+    }
+}
+
 /** @cond */
 /**********************************************************************
  **********************************************************************
@@ -501,7 +568,7 @@ _data_lookup(netsnmp_handler_registration *reginfo,
          * column, if necessary.
          */
         _set_key( tad, request, tblreq_info, &key, &index );
-        row = _find_next_row(tad->table, tblreq_info, key);
+        row = (netsnmp_index*)_find_next_row(tad->table, tblreq_info, key);
         if (row) {
             /*
              * update indexes in tblreq_info (index & varbind),
@@ -537,7 +604,7 @@ _data_lookup(netsnmp_handler_registration *reginfo,
     else {
 
         _set_key( tad, request, tblreq_info, &key, &index );
-        row = CONTAINER_FIND(tad->table, key);
+        row = (netsnmp_index*)CONTAINER_FIND(tad->table, key);
         if (NULL == row) {
             /*
              * not results found. For a get, that is an error
@@ -740,7 +807,7 @@ netsnmp_index *
 netsnmp_table_index_find_next_row(netsnmp_container *c,
                                   netsnmp_table_request_info *tblreq)
 {
-    return _find_next_row(c, tblreq, NULL );
+    return (netsnmp_index*)_find_next_row(c, tblreq, NULL );
 }
 
 /* ==================================

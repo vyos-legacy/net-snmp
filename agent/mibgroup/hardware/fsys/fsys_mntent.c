@@ -7,11 +7,54 @@
 #if HAVE_MNTENT_H
 #include <mntent.h>
 #endif
+#if HAVE_SYS_MNTTAB_H
+#include <sys/mnttab.h>
+#endif
 #if HAVE_SYS_VFS_H
 #include <sys/vfs.h>
 #endif
+#if HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
+#if HAVE_SYS_MOUNT_H
+#include <sys/mount.h>
+#endif
 #if HAVE_SYS_STATFS_H
 #include <sys/statfs.h>
+#endif
+#if HAVE_SYS_STATVFS_H
+#include <sys/statvfs.h>
+#endif
+
+#ifdef solaris2
+#define _NETSNMP_GETMNTENT_TWO_ARGS 1
+#else
+#undef  _NETSNMP_GETMNTENT_TWO_ARGS 
+#endif
+
+    /*
+     * Handle naming differences between getmntent() APIs
+     */
+#ifdef _NETSNMP_GETMNTENT_TWO_ARGS
+    /* Two-argument form (Solaris) */
+#define NSFS_MNTENT   struct mnttab
+#define NSFS_PATH     mnt_mountp
+#define NSFS_DEV      mnt_special
+#define NSFS_TYPE     mnt_fstype
+
+#define NSFS_STATFS   statvfs
+#define NSFS_SIZE     f_frsize
+
+#else
+    /* One-argument form (everything else?) */
+#define NSFS_MNTENT   struct mntent
+#define NSFS_PATH     mnt_dir
+#define NSFS_DEV      mnt_fsname
+#define NSFS_TYPE     mnt_type
+
+#define NSFS_STATFS   statfs
+#define NSFS_SIZE     f_bsize
+
 #endif
 
 int
@@ -58,7 +101,9 @@ _fsys_type( char *typename )
        return NETSNMP_FS_TYPE_ROCKRIDGE;
     else if ( !strcmp(typename, MNTTYPE_NFS)  ||
               !strcmp(typename, MNTTYPE_NFS3) ||
-              !strcmp(typename, MNTTYPE_SMBFS) /* ?? */ )
+              !strcmp(typename, MNTTYPE_NFS4) ||
+              !strcmp(typename, MNTTYPE_CIFS) ||  /* i.e. SMB - ?? */
+              !strcmp(typename, MNTTYPE_SMBFS)    /* ?? */ )
        return NETSNMP_FS_TYPE_NFS;
     else if ( !strcmp(typename, MNTTYPE_NCPFS) )
        return NETSNMP_FS_TYPE_NETWARE;
@@ -66,34 +111,36 @@ _fsys_type( char *typename )
        return NETSNMP_FS_TYPE_AFS;
     else if ( !strcmp(typename, MNTTYPE_EXT2) ||
               !strcmp(typename, MNTTYPE_EXT3) ||
+              !strcmp(typename, MNTTYPE_EXT4) ||
               !strcmp(typename, MNTTYPE_EXT2FS) ||
-              !strcmp(typename, MNTTYPE_EXT3FS) )
+              !strcmp(typename, MNTTYPE_EXT3FS) ||
+              !strcmp(typename, MNTTYPE_EXT4FS) )
        return NETSNMP_FS_TYPE_EXT2;
     else if ( !strcmp(typename, MNTTYPE_FAT32) ||
               !strcmp(typename, MNTTYPE_VFAT) )
        return NETSNMP_FS_TYPE_FAT32;
 
     /*
-     *  The following code maps these filesystems into
-     *    distinct types - all of which are then skipped.
-     *  An alternative approach would be to map them all
-     *    into the single type N_FS_TYPE_IGNORE
-     */
-    else if ( !strcmp(typename, MNTTYPE_IGNORE) )
-       return NETSNMP_FS_TYPE_IGNORE;
-    else if ( !strcmp(typename, MNTTYPE_PROC) )
-       return NETSNMP_FS_TYPE_PROC;
-    else if ( !strcmp(typename, MNTTYPE_DEVPTS) )
-       return NETSNMP_FS_TYPE_DEVPTS;
-    else if ( !strcmp(typename, MNTTYPE_SYSFS) )
-       return NETSNMP_FS_TYPE_SYSFS;
-    else if ( !strcmp(typename, MNTTYPE_TMPFS) )
-       return NETSNMP_FS_TYPE_TMPFS;
-    else if ( !strcmp(typename, MNTTYPE_USBFS) )
-       return NETSNMP_FS_TYPE_USBFS;
-
-    else
+     *  The following code covers selected filesystems
+     *    which are not covered by the HR-TYPES enumerations,
+     *    but should still be monitored.
+     *  These are all mapped into type "other"
+     *
+     *    (The systems listed are not fixed in stone,
+     *     but are simply here to illustrate the principle!)
+     */    
+    else if ( !strcmp(typename, MNTTYPE_MVFS) ||
+              !strcmp(typename, MNTTYPE_TMPFS) ||
+              !strcmp(typename, MNTTYPE_GFS) ||
+              !strcmp(typename, MNTTYPE_GFS2) ||
+              !strcmp(typename, MNTTYPE_LOFS))
        return NETSNMP_FS_TYPE_OTHER;
+
+    /*    
+     *  All other types are silently skipped
+     */
+    else
+       return NETSNMP_FS_TYPE_IGNORE;
 }
 
 void
@@ -106,8 +153,13 @@ void
 netsnmp_fsys_arch_load( void )
 {
     FILE              *fp=NULL;
+#ifdef _NETSNMP_GETMNTENT_TWO_ARGS
+    struct mnttab      mtmp;
+    struct mnttab     *m = &mtmp;
+#else
     struct mntent     *m;
-    struct statfs      stat_buf;
+#endif
+    struct NSFS_STATFS stat_buf;
     netsnmp_fsys_info *entry;
     char               tmpbuf[1024];
 
@@ -124,15 +176,23 @@ netsnmp_fsys_arch_load( void )
     /*
      * ... and insert this into the filesystem container.
      */
-    while ((m = getmntent(fp)) != NULL ) {
-        entry = netsnmp_fsys_by_path( m->mnt_dir, NETSNMP_FS_FIND_CREATE );
+    while 
+#ifdef _NETSNMP_GETMNTENT_TWO_ARGS
+          ((getmntent(fp, m)) == 0 )
+#else
+          ((m = getmntent(fp)) != NULL )
+#endif
+    {
+        entry = netsnmp_fsys_by_path( m->NSFS_PATH, NETSNMP_FS_FIND_CREATE );
         if (!entry) {
             continue;
         }
 
-        strncpy( entry->path,   m->mnt_dir,    sizeof( entry->path   ));
-        strncpy( entry->device, m->mnt_fsname, sizeof( entry->device ));
-        entry->type   = _fsys_type(  m->mnt_type );
+        strncpy( entry->path,   m->NSFS_PATH,    sizeof( entry->path   ));
+        entry->path[sizeof(entry->path)-1] = '\0';
+        strncpy( entry->device, m->NSFS_DEV,     sizeof( entry->device ));
+        entry->device[sizeof(entry->device)-1] = '\0';
+        entry->type   = _fsys_type(  m->NSFS_TYPE );
         if (!(entry->type & _NETSNMP_FS_TYPE_SKIP_BIT))
             entry->flags |= NETSNMP_FS_FLAG_ACTIVE;
 
@@ -152,6 +212,9 @@ netsnmp_fsys_arch_load( void )
             (entry->path[1] == '\0'))
             entry->flags |= NETSNMP_FS_FLAG_BOOTABLE;
 
+        /*
+         *  XXX - identify removeable disks
+         */
 
         /*
          *  Optionally skip retrieving statistics for remote mounts
@@ -161,12 +224,12 @@ netsnmp_fsys_arch_load( void )
                                    NETSNMP_DS_AGENT_SKIPNFSINHOSTRESOURCES))
             continue;
 
-        if ( statfs( entry->path, &stat_buf ) < 0 ) {
+        if ( NSFS_STATFS( entry->path, &stat_buf ) < 0 ) {
             snprintf( tmpbuf, sizeof(tmpbuf), "Cannot statfs %s\n", entry->path );
             snmp_log_perror( tmpbuf );
             continue;
         }
-        entry->units =  stat_buf.f_bsize;
+        entry->units =  stat_buf.NSFS_SIZE;
         entry->size  =  stat_buf.f_blocks;
         entry->used  = (stat_buf.f_blocks - stat_buf.f_bfree);
         entry->avail =  stat_buf.f_bavail;

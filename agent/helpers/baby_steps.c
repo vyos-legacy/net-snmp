@@ -1,6 +1,6 @@
 /*
  * baby_steps.c
- * $Id: baby_steps.c 14169 2006-01-25 16:28:12Z dts12 $
+ * $Id: baby_steps.c 18976 2010-06-12 10:26:13Z dts12 $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -99,7 +99,7 @@ _baby_steps_helper(netsnmp_mib_handler *handler,
     DEBUGMSGTL(("baby_steps", "Got request, mode %s\n",
                 se_find_label_in_slist("agent_mode",reqinfo->mode)));
 
-    bs_modes = handler->myvoid;
+    bs_modes = (netsnmp_baby_steps_modes*)handler->myvoid;
     netsnmp_assert(NULL != bs_modes);
 
     switch (reqinfo->mode) {

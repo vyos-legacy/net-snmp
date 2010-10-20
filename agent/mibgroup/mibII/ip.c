@@ -33,7 +33,10 @@
 #define IP_STATS_CACHE_TIMEOUT	MIB_STATS_CACHE_TIMEOUT
 #endif
 
-#if defined(HAVE_LIBPERFSTAT_H) && (defined(aix4) || defined(aix5) || defined(aix6)) && !defined(FIRST_PROTOCOL)
+#if defined(HAVE_LIBPERFSTAT_H) && (defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)) && !defined(FIRST_PROTOCOL)
+#ifdef HAVE_SYS_PROTOSW_H
+#include <sys/protosw.h>
+#endif
 #include <libperfstat.h>
 #ifdef FIRST_PROTOCOL
 perfstat_protocol_t ps_proto;
@@ -225,7 +228,7 @@ init_ip(void)
 #define	USES_SNMP_DESIGNED_IPSTAT
 #endif
 
-#if defined (WIN32) || defined (cygwin)
+#ifdef HAVE_IPHLPAPI_H
 #include <iphlpapi.h>
 #define IP_STAT_STRUCTURE MIB_IPSTATS
 long            ipForwarding;
@@ -309,7 +312,7 @@ ip_handler(netsnmp_mib_handler          *handler,
         type = ASN_INTEGER;
         break;
     case IPINRECEIVES:
-        ret_value = ipstat.ipInReceives;
+        ret_value = ipstat.ipInReceives & 0xffffffff;
         break;
     case IPINHDRERRORS:
         ret_value = ipstat.ipInHdrErrors;
@@ -327,10 +330,10 @@ ip_handler(netsnmp_mib_handler          *handler,
         ret_value = ipstat.ipInDiscards;
         break;
     case IPINDELIVERS:
-        ret_value = ipstat.ipInDelivers;
+        ret_value = ipstat.ipInDelivers & 0xffffffff;
         break;
     case IPOUTREQUESTS:
-        ret_value = ipstat.ipOutRequests;
+        ret_value = ipstat.ipOutRequests & 0xffffffff;
         break;
     case IPOUTDISCARDS:
         ret_value = ipstat.ipOutDiscards;
@@ -385,7 +388,7 @@ ip_handler(netsnmp_mib_handler          *handler,
         type = ASN_INTEGER;
         break;
     case IPINRECEIVES:
-        ret_value = ipstat.ips_total;
+        ret_value = ipstat.ips_total & 0xffffffff;
         break;
     case IPINHDRERRORS:
         ret_value = ipstat.ips_badsum
@@ -416,7 +419,7 @@ ip_handler(netsnmp_mib_handler          *handler,
 #endif
     case IPINDELIVERS:
 #if HAVE_STRUCT_IPSTAT_IPS_DELIVERED
-        ret_value = ipstat.ips_delivered;
+        ret_value = ipstat.ips_delivered & 0xffffffff;
         break;
 #else
         netsnmp_set_request_error(reqinfo, request, SNMP_NOSUCHOBJECT);
@@ -424,7 +427,7 @@ ip_handler(netsnmp_mib_handler          *handler,
 #endif
     case IPOUTREQUESTS:
 #if HAVE_STRUCT_IPSTAT_IPS_LOCALOUT
-        ret_value = ipstat.ips_localout;
+        ret_value = ipstat.ips_localout & 0xffffffff;
         break;
 #else
         netsnmp_set_request_error(reqinfo, request, SNMP_NOSUCHOBJECT);

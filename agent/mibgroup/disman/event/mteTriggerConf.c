@@ -24,13 +24,16 @@ init_mteTriggerConf(void)
     /*
      * Register config handler for user-level (fixed) triggers ...
      */
-    snmpd_register_config_handler("monitor",
-                                   parse_mteMonitor,  NULL,
-                                  "triggername [-I] [-i OID | -o OID]* [-e event] expression ");
-    snmpd_register_config_handler("defaultMonitors",
-                                   parse_default_mteMonitors, NULL, "yes|no");
-    snmpd_register_config_handler("linkUpDownNotifications",
-                                   parse_linkUpDown_traps,    NULL, "yes|no");
+    snmpd_register_const_config_handler("monitor",
+                                        parse_mteMonitor,
+                                        NULL,
+                                        "triggername [-I] [-i OID | -o OID]* [-e event] expression ");
+    snmpd_register_const_config_handler("defaultMonitors",
+                                        parse_default_mteMonitors,
+                                        NULL, "yes|no");
+    snmpd_register_const_config_handler("linkUpDownNotifications",
+                                        parse_linkUpDown_traps,
+                                        NULL, "yes|no");
 
     /*
      * ... for persistent storage of various event table entries ...
@@ -140,11 +143,11 @@ _mteTrigger_callback_enable( int   majorID,    int   minorID,
 
 
 void
-parse_mteMonitor(const char *token, char *line)
+parse_mteMonitor(const char *token, const char *line)
 {
     char   buf[  SPRINT_MAX_LEN];
     char   tname[MTE_STR1_LEN+1];
-    char  *cp;
+    const char  *cp;
     long   test = 0;
 
     char   ename[MTE_STR1_LEN+1];
@@ -163,7 +166,7 @@ parse_mteMonitor(const char *token, char *line)
     char   oid_name_buf[SPRINT_MAX_LEN];
     oid    name_buf[MAX_OID_LEN];
     size_t name_buf_len;
-    long   op    = 0;
+    u_char op    = 0;
     long   value = 0;
 
     struct mteObject  *object;
@@ -183,9 +186,9 @@ parse_mteMonitor(const char *token, char *line)
     memset( buf,   0, sizeof(buf));
     memset( tname, 0, sizeof(tname));
     memset( ename, 0, sizeof(ename));
-    for (cp = copy_nword(line, buf, SPRINT_MAX_LEN);
+    for (cp = copy_nword_const(line, buf, SPRINT_MAX_LEN);
          ;
-         cp = copy_nword(cp,   buf, SPRINT_MAX_LEN)) {
+         cp = copy_nword_const(cp,   buf, SPRINT_MAX_LEN)) {
 
         if ( buf[0] == '-' ) {
             switch (buf[1]) {
@@ -198,7 +201,7 @@ parse_mteMonitor(const char *token, char *line)
             case 'r':
             case 'u':
                 /* skip option parameter */
-                cp = skip_token( cp );
+                cp = skip_token_const( cp );
                 break;
             case 'D':
             case 'I':
@@ -212,7 +215,7 @@ parse_mteMonitor(const char *token, char *line)
                  *      Handle either case.
                  */
                 if (cp && *cp != '-')
-                    cp = skip_token( cp );
+                    cp = skip_token_const( cp );
                 break;
             case '0':
             case '1':
@@ -276,7 +279,7 @@ parse_mteMonitor(const char *token, char *line)
         * Otherwise the first token is the OID to be monitored.
         *   Skip it and look at the next token (if any).
         */
-        cp = copy_nword(cp,   buf, SPRINT_MAX_LEN);
+        cp = copy_nword_const(cp,   buf, SPRINT_MAX_LEN);
         if (cp) {
             /*
              * If this is a numeric value, then it'll be the MIN
@@ -284,7 +287,7 @@ parse_mteMonitor(const char *token, char *line)
              * Otherwise it'll be the operation field of a
              *   boolean test (the third form)
              */
-            if ( isdigit(buf[0]) || buf[0] == '-' )
+            if ( isdigit((unsigned char)(buf[0])) || buf[0] == '-' )
                 test = MTE_TRIGGER_THRESHOLD;
             else
                 test = MTE_TRIGGER_BOOLEAN;
@@ -315,9 +318,9 @@ parse_mteMonitor(const char *token, char *line)
      * Now start parsing again at the beginning of the directive,
      *   extracting the various options...
      */
-    for (cp = copy_nword(line, buf, SPRINT_MAX_LEN);
+    for (cp = copy_nword_const(line, buf, SPRINT_MAX_LEN);
          ;
-         cp = copy_nword(cp,   buf, SPRINT_MAX_LEN)) {
+         cp = copy_nword_const(cp,   buf, SPRINT_MAX_LEN)) {
 
         if (buf[0] == '-' ) {
             switch (buf[1]) {
@@ -332,7 +335,7 @@ parse_mteMonitor(const char *token, char *line)
                 memset( oid_name_buf, 0, sizeof(oid_name_buf));
                 memset(     name_buf, 0, sizeof(    name_buf));
                 name_buf_len = MAX_OID_LEN;
-                cp = copy_nword(cp, oid_name_buf, MTE_STR1_LEN);
+                cp = copy_nword_const(cp, oid_name_buf, MTE_STR1_LEN);
                 if (!snmp_parse_oid(oid_name_buf, name_buf, &name_buf_len)) {
                     snmp_log(LOG_ERR, "discontinuity OID: %s\n", oid_name_buf);
                     config_perror("unknown discontinuity OID");
@@ -346,7 +349,7 @@ parse_mteMonitor(const char *token, char *line)
                 break;
     
             case 'e':   /*  event */
-                cp     = copy_nword(cp, ename, MTE_STR1_LEN);
+                cp     = copy_nword_const(cp, ename, MTE_STR1_LEN);
                 break;
     
             case 'I':   /* value instance */
@@ -367,7 +370,7 @@ parse_mteMonitor(const char *token, char *line)
                     continue;
                 }
                 idx++;
-                cp     = copy_nword(cp, buf, SPRINT_MAX_LEN);
+                cp     = copy_nword_const(cp, buf, SPRINT_MAX_LEN);
                 object = mteObjects_addOID( "snmpd.conf", tname, idx, buf, 0 );
                 if (!object) {
                     snmp_log(LOG_ERR, "Unknown payload OID: %s\n", buf);
@@ -379,7 +382,7 @@ parse_mteMonitor(const char *token, char *line)
     
             case 'o':   /*  object  */
                 idx++;
-                cp     = copy_nword(cp, buf, SPRINT_MAX_LEN);
+                cp     = copy_nword_const(cp, buf, SPRINT_MAX_LEN);
                 object = mteObjects_addOID( "snmpd.conf", tname, idx, buf, 1 );
                 if (!object) {
                     snmp_log(LOG_ERR, "Unknown payload OID: %s\n", buf);
@@ -390,7 +393,7 @@ parse_mteMonitor(const char *token, char *line)
                 break;
     
             case 'r':   /*  repeat frequency */
-                cp     = copy_nword(cp, buf, SPRINT_MAX_LEN);
+                cp     = copy_nword_const(cp, buf, SPRINT_MAX_LEN);
                 repeat = strtoul(buf, NULL, 0);
                 break;
     
@@ -406,7 +409,7 @@ parse_mteMonitor(const char *token, char *line)
                 break;
     
             case 'u':   /*  user */
-                cp     = copy_nword(cp, buf, SPRINT_MAX_LEN);
+                cp     = copy_nword_const(cp, buf, SPRINT_MAX_LEN);
                 sess   = netsnmp_iquery_user_session(buf);
                 if (NULL == sess) {
                     snmp_log(LOG_ERR, "user name %s not found\n", buf);
@@ -447,7 +450,7 @@ parse_mteMonitor(const char *token, char *line)
                        } else {
                            op = MTE_EXIST_ABSENT;
                        }
-                       cp = copy_nword(cp, buf, SPRINT_MAX_LEN);
+                       cp = copy_nword_const(cp, buf, SPRINT_MAX_LEN);
                     }
                     /*
                      * ... then extract the monitored OID.
@@ -455,7 +458,7 @@ parse_mteMonitor(const char *token, char *line)
                      */
                     memcpy(oid_name_buf, buf, SPRINT_MAX_LEN);
                     cp = NULL;  /* To terminate the processing loop */
-                    DEBUGMSGTL(("disman:event:conf", "%s: Exist (%s, %ld)\n",
+                    DEBUGMSGTL(("disman:event:conf", "%s: Exist (%s, %d)\n",
                                                      tname, oid_name_buf, op));
                     break;
     
@@ -465,7 +468,7 @@ parse_mteMonitor(const char *token, char *line)
                      *   identify the boolean operator ...
                      */
                     memcpy(oid_name_buf, buf, SPRINT_MAX_LEN);
-                    cp = copy_nword(cp, buf, SPRINT_MAX_LEN);
+                    cp = copy_nword_const(cp, buf, SPRINT_MAX_LEN);
                     if (buf[0] == '!') {
                        op = MTE_BOOL_UNEQUAL;
                     } else if (buf[0] == '=') {
@@ -487,10 +490,10 @@ parse_mteMonitor(const char *token, char *line)
                      * ... then extract the comparison value.
                      *     (ignoring anything that remains)
                      */
-                    cp    = copy_nword(cp, buf, SPRINT_MAX_LEN);
+                    cp    = copy_nword_const(cp, buf, SPRINT_MAX_LEN);
                     value = strtol(buf, NULL, 0);
                     cp = NULL;  /* To terminate the processing loop */
-                    DEBUGMSGTL(("disman:event:conf", "%s: Bool (%s, %ld, %ld)\n",
+                    DEBUGMSGTL(("disman:event:conf", "%s: Bool (%s, %d, %ld)\n",
                                               tname, oid_name_buf, op, value));
                     break;
     
@@ -501,7 +504,7 @@ parse_mteMonitor(const char *token, char *line)
                      */
                     memcpy(oid_name_buf, buf, SPRINT_MAX_LEN);
                     memset(         buf,   0, SPRINT_MAX_LEN);
-                    cp  = copy_nword(cp, buf, SPRINT_MAX_LEN);
+                    cp  = copy_nword_const(cp, buf, SPRINT_MAX_LEN);
                         value = strtol(buf, NULL, 0);
     
                     /*
@@ -689,7 +692,7 @@ parse_mteMonitor(const char *token, char *line)
             }
             value = strtol(cp, NULL, 0);
             entry->mteTThDFallValue  = value;
-            cp = skip_token(cp);
+            cp = skip_token_const(cp);
             value = strtol(cp, NULL, 0);
             entry->mteTThDRiseValue  = value;
             /*
@@ -729,7 +732,7 @@ parse_mteMonitor(const char *token, char *line)
 }
 
 void
-parse_linkUpDown_traps(const char *token, char *line)
+parse_linkUpDown_traps(const char *token, const char *line)
 {
     /*
      * XXX - This isn't strictly correct according to the
@@ -748,7 +751,7 @@ parse_linkUpDown_traps(const char *token, char *line)
 
 
 void
-parse_default_mteMonitors(const char *token, char *line)
+parse_default_mteMonitors(const char *token, const char *line)
 {
     if (strncmp( line, "yes", 3) == 0) {
         DEBUGMSGTL(("disman:event:conf", "Registering default monitors\n"));
@@ -1268,7 +1271,7 @@ int
 store_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
 {
     char            line[SNMP_MAXBUF];
-    char           *cptr;
+    char           *cptr, *cp;
     void           *vp;
     size_t          tint;
     netsnmp_tdata_row *row;
@@ -1298,12 +1301,12 @@ store_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
         strcat(line, "_mteTTable ");
         cptr = line + strlen(line);
 
-        vp   = entry->mteOwner;          tint = strlen( vp );
-        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
-        vp   = entry->mteTName;          tint = strlen( vp );
-        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
-        vp   = entry->mteTriggerComment; tint = strlen( vp );
-        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
+        cp   = entry->mteOwner;          tint = strlen( cp );
+        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
+        cp   = entry->mteTName;          tint = strlen( cp );
+        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
+        cp   = entry->mteTriggerComment; tint = strlen( cp );
+        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
         /*
          * ... (but skip the mteTriggerTest and
          *      assorted boolean flag fields)...
@@ -1311,16 +1314,16 @@ store_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
         vp   = entry->mteTriggerValueID;
         tint = entry->mteTriggerValueID_len;
         cptr = read_config_store_data(   ASN_OBJECT_ID, cptr, &vp,  &tint );
-        vp   = entry->mteTriggerTarget;  tint = strlen( vp );
-        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
-        vp   = entry->mteTriggerContext; tint = strlen( vp );
-        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
+        cp   = entry->mteTriggerTarget;  tint = strlen( cp );
+        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
+        cp   = entry->mteTriggerContext; tint = strlen( cp );
+        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
         tint = entry->mteTriggerFrequency;
         cptr = read_config_store_data(   ASN_UNSIGNED,  cptr, &tint, NULL );
-        vp   = entry->mteTriggerOOwner;  tint = strlen( vp );
-        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
-        vp   = entry->mteTriggerObjects; tint = strlen( vp );
-        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
+        cp   = entry->mteTriggerOOwner;  tint = strlen( cp );
+        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
+        cp   = entry->mteTriggerObjects; tint = strlen( cp );
+        cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
         tint = entry->flags &
                   (MTE_TRIGGER_FLAG_VWILD  |MTE_TRIGGER_FLAG_CWILD|
                    MTE_TRIGGER_FLAG_ENABLED|MTE_TRIGGER_FLAG_ACTIVE);
@@ -1337,10 +1340,10 @@ store_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
             strcat(line, "_mteTDTable ");
             cptr = line + strlen(line);
 
-            vp   = entry->mteOwner;          tint = strlen( vp );
-            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTName;          tint = strlen( vp );
-            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteOwner;          tint = strlen( cp );
+            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTName;          tint = strlen( cp );
+            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
 
             vp   = entry->mteDeltaDiscontID;
             tint = entry->mteDeltaDiscontID_len;
@@ -1362,24 +1365,24 @@ store_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
             strcat(line, "_mteTExTable ");
             cptr = line + strlen(line);
 
-            vp   = entry->mteOwner;          tint = strlen( vp );
-            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTName;          tint = strlen( vp );
-            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteOwner;          tint = strlen( cp );
+            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTName;          tint = strlen( cp );
+            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
 
             tint = (entry->mteTExTest    & 0xff) << 8;
             tint|= (entry->mteTExStartup & 0xff);
             cptr = read_config_store_data(   ASN_UNSIGNED,  cptr, &tint, NULL );
 
-            vp   = entry->mteTExObjOwner;  tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTExObjects;   tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteTExObjOwner;  tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTExObjects;   tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
 
-            vp   = entry->mteTExEvOwner;   tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTExEvent;     tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteTExEvOwner;   tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTExEvent;     tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
 
             snmpd_store_config(line);
         }
@@ -1388,10 +1391,10 @@ store_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
             strcat(line, "_mteTBlTable ");
             cptr = line + strlen(line);
 
-            vp   = entry->mteOwner;          tint = strlen( vp );
-            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTName;          tint = strlen( vp );
-            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteOwner;          tint = strlen( cp );
+            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTName;          tint = strlen( cp );
+            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
 
             tint =  entry->mteTBoolComparison;
             tint |= (entry->flags & MTE_TRIGGER_FLAG_BSTART);
@@ -1399,15 +1402,15 @@ store_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
             tint =  entry->mteTBoolValue;
             cptr = read_config_store_data(   ASN_INTEGER,   cptr, &tint, NULL );
 
-            vp   = entry->mteTBoolObjOwner; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTBoolObjects; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteTBoolObjOwner; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTBoolObjects; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
 
-            vp   = entry->mteTBoolEvOwner; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTBoolEvent;   tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteTBoolEvOwner; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTBoolEvent;   tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
 
             snmpd_store_config(line);
         }
@@ -1416,10 +1419,10 @@ store_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
             strcat(line, "_mteTThTable ");
             cptr = line + strlen(line);
 
-            vp   = entry->mteOwner;          tint = strlen( vp );
-            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTName;          tint = strlen( vp );
-            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteOwner;          tint = strlen( cp );
+            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTName;          tint = strlen( cp );
+            cptr = read_config_store_data(   ASN_OCTET_STR, cptr, &cp,  &tint );
 
             cptr = read_config_store_data(ASN_UNSIGNED, cptr,
                                          &entry->mteTThStartup,    NULL );
@@ -1432,28 +1435,28 @@ store_mteTTable(int majorID, int minorID, void *serverarg, void *clientarg)
             cptr = read_config_store_data(ASN_INTEGER,  cptr,
                                          &entry->mteTThDFallValue, NULL );
 
-            vp   = entry->mteTThObjOwner; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTThObjects; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteTThObjOwner; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTThObjects; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
 
-            vp   = entry->mteTThRiseOwner; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTThRiseEvent; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTThFallOwner; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTThFallEvent; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteTThRiseOwner; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTThRiseEvent; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTThFallOwner; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTThFallEvent; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
 
-            vp   = entry->mteTThDRiseOwner; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTThDRiseEvent; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTThDFallOwner; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
-            vp   = entry->mteTThDFallEvent; tint = strlen( vp );
-            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &vp,  &tint );
+            cp   = entry->mteTThDRiseOwner; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTThDRiseEvent; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTThDFallOwner; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
+            cp   = entry->mteTThDFallEvent; tint = strlen( cp );
+            cptr = read_config_store_data( ASN_OCTET_STR, cptr, &cp,  &tint );
 
             snmpd_store_config(line);
         }

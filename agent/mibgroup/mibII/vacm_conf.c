@@ -40,9 +40,6 @@
 #if HAVE_NETDB_H
 #include <netdb.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
@@ -69,28 +66,31 @@ init_vacm_config_tokens(void) {
                                   "name context model level prefix viewname viewval");
     snmpd_register_config_handler("view", vacm_parse_view, vacm_free_view,
                                   "name type subtree [mask]");
-    snmpd_register_config_handler("vacmView", vacm_parse_config_view, NULL,
-                                  NULL);
-    snmpd_register_config_handler("vacmGroup", vacm_parse_config_group,
-                                  NULL, NULL);
-    snmpd_register_config_handler("vacmAccess", vacm_parse_config_access,
-                                  NULL, NULL);
-    snmpd_register_config_handler("vacmAuthAccess", vacm_parse_config_auth_access,
-                                  NULL, NULL);
+    snmpd_register_const_config_handler("vacmView",
+                                        vacm_parse_config_view, NULL, NULL);
+    snmpd_register_const_config_handler("vacmGroup",
+                                        vacm_parse_config_group,
+                                        NULL, NULL);
+    snmpd_register_const_config_handler("vacmAccess",
+                                        vacm_parse_config_access,
+                                        NULL, NULL);
+    snmpd_register_const_config_handler("vacmAuthAccess",
+                                        vacm_parse_config_auth_access,
+                                        NULL, NULL);
 
     /* easy community auth handler */
     snmpd_register_config_handler("authcommunity",
                                   vacm_parse_authcommunity,
-                                  NULL, "authtype1,authtype2 community [default|hostname|network/bits [oid|-V view]]");
+                                  NULL, "authtype1,authtype2 community [default|hostname|network/bits [oid|-V view [context]]]");
 
     /* easy user auth handler */
     snmpd_register_config_handler("authuser",
                                   vacm_parse_authuser,
-                                  NULL, "authtype1,authtype2 [-s secmodel] user [noauth|auth|priv [oid|-V view]]");
+                                  NULL, "authtype1,authtype2 [-s secmodel] user [noauth|auth|priv [oid|-V view [context]]]");
     /* easy group auth handler */
     snmpd_register_config_handler("authgroup",
                                   vacm_parse_authuser,
-                                  NULL, "authtype1,authtype2 [-s secmodel] group [noauth|auth|priv [oid|-V view]]");
+                                  NULL, "authtype1,authtype2 [-s secmodel] group [noauth|auth|priv [oid|-V view [context]]]");
 
     snmpd_register_config_handler("authaccess", vacm_parse_authaccess,
                                   vacm_free_access,
@@ -629,7 +629,7 @@ vacm_parse_view(const char *token, char *param)
     size_t          suboid_len = 0;
     size_t          mask_len = 0;
     u_char          viewMask[VACMSTRINGLEN];
-    int             i;
+    size_t          i;
     char            *st;
 
     name = strtok_r(param, " \t\n", &st);
@@ -666,7 +666,7 @@ vacm_parse_view(const char *token, char *param)
         return;
     }
     if (mask) {
-        int             val;
+        unsigned int val;
         i = 0;
         for (mask = strtok_r(mask, " .:", &st); mask; mask = strtok_r(NULL, " .:", &st)) {
             if (i >= sizeof(viewMask)) {
@@ -943,6 +943,7 @@ vacm_create_simple(const char *token, char *confline,
     commcount++;
 
 #if !defined(NETSNMP_DISABLE_SNMPV1) || !defined(NETSNMP_DISABLE_SNMPV2C)
+#ifdef NETSNMP_TRANSPORT_UDP_DOMAIN
     if (parsetype == VACM_CREATE_SIMPLE_COMIPV4 ||
         parsetype == VACM_CREATE_SIMPLE_COM) {
         vacm_gen_com2sec(commcount, community, addressname,
@@ -950,7 +951,8 @@ vacm_create_simple(const char *token, char *confline,
                          secname, sizeof(secname),
                          view_ptr, sizeof(viewname), commversion);
     }
-    
+#endif
+
 #ifdef NETSNMP_TRANSPORT_UNIX_DOMAIN
     if (parsetype == VACM_CREATE_SIMPLE_COMUNIX ||
         parsetype == VACM_CREATE_SIMPLE_COM) {
@@ -993,7 +995,7 @@ vacm_create_simple(const char *token, char *confline,
              */
             snprintf(grpname, sizeof(grpname), "grp%.28s", secname);
             for (tmp=grpname; *tmp; tmp++)
-                if (!isalnum(*tmp))
+                if (!isalnum((unsigned char)(*tmp)))
                     *tmp = '_';
             snprintf(line, sizeof(line),
                      "%s %s \"%s\"", grpname, model, secname);
@@ -1004,7 +1006,7 @@ vacm_create_simple(const char *token, char *confline,
     } else {
         snprintf(grpname, sizeof(grpname), "grp%.28s", secname);
         for (tmp=grpname; *tmp; tmp++)
-            if (!isalnum(*tmp))
+            if (!isalnum((unsigned char)(*tmp)))
                 *tmp = '_';
     }
 
@@ -1111,10 +1113,12 @@ vacm_warn_if_not_configured(int majorID, int minorID, void *serverarg,
          */
         if ((MASTER_AGENT == agent_mode) && (strcmp(name, "snmptrapd") != 0)) {
             snmp_log(LOG_WARNING,
-                 "Warning: no access control information configured.\n  It's "
-                 "unlikely this agent can serve any useful purpose in this "
-                 "state.\n  Run \"snmpconf -g basic_setup\" to help you "
-                 "configure the %s.conf file for this agent.\n", name );
+                 "Warning: no access control information configured.\n"
+                 "  (Config search path: %s)\n"
+                 "  It's unlikely this agent can serve any useful purpose in this state.\n"
+                 "  Run \"snmpconf -g basic_setup\" to help you "
+                 "configure the %s.conf file for this agent.\n",
+                 get_configuration_directory(), name);
         }
 
         /*
@@ -1134,7 +1138,9 @@ vacm_warn_if_not_configured(int majorID, int minorID, void *serverarg,
                                     NETSNMP_DS_APP_NO_AUTHORIZATION)) {
             snmp_log(LOG_WARNING,
                  "Warning: no access control information configured.\n"
-                 "This receiver will *NOT* accept any incoming notifications.\n");
+                 "  (Config search path: %s)\n"
+                 "This receiver will *NOT* accept any incoming notifications.\n",
+                 get_configuration_directory());
         }
     }
     return SNMP_ERR_NOERROR;
@@ -1249,8 +1255,8 @@ vacm_check_view_contents(netsnmp_pdu *pdu, oid * name, size_t namelen,
     struct vacm_groupEntry *gp;
     struct vacm_viewEntry *vp;
     char            vacm_default_context[1] = "";
-    char           *contextName = vacm_default_context;
-    char           *sn = NULL;
+    const char     *contextName = vacm_default_context;
+    const char     *sn = NULL;
     char           *vn;
     const char     *pdu_community;
 
@@ -1271,7 +1277,7 @@ vacm_check_view_contents(netsnmp_pdu *pdu, oid * name, size_t namelen,
 #endif
 #endif
     {
-        pdu_community = pdu->community;
+        pdu_community = (const char *) pdu->community;
         if (!pdu_community)
             pdu_community = "";
         if (snmp_get_do_debugging()) {
@@ -1297,7 +1303,9 @@ vacm_check_view_contents(netsnmp_pdu *pdu, oid * name, size_t namelen,
          * community string to a security name for us.  
          */
 
-        if (pdu->tDomain == netsnmpUDPDomain
+        if (0) {
+#ifdef NETSNMP_TRANSPORT_UDP_DOMAIN
+        } else if (pdu->tDomain == netsnmpUDPDomain
 #ifdef NETSNMP_TRANSPORT_TCP_DOMAIN
             || pdu->tDomain == netsnmp_snmpTCPDomain
 #endif
@@ -1316,6 +1324,7 @@ vacm_check_view_contents(netsnmp_pdu *pdu, oid * name, size_t namelen,
             SNMP_FREE(pdu->contextName);
             pdu->contextName = strdup(contextName);
             pdu->contextNameLen = strlen(contextName);
+#endif
 #ifdef NETSNMP_TRANSPORT_UDPIPV6_DOMAIN
         } else if (pdu->tDomain == netsnmp_UDPIPv6Domain
 #ifdef NETSNMP_TRANSPORT_TCPIPV6_DOMAIN

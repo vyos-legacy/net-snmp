@@ -62,7 +62,10 @@
 #define TCP_STATS_CACHE_TIMEOUT	MIB_STATS_CACHE_TIMEOUT
 #endif
 
-#if defined(HAVE_LIBPERFSTAT_H) && (defined(aix4) || defined(aix5) || defined(aix6)) && !defined(FIRST_PROTOCOL)
+#if defined(HAVE_LIBPERFSTAT_H) && (defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)) && !defined(FIRST_PROTOCOL)
+#ifdef HAVE_SYS_PROTOSW_H
+#include <sys/protosw.h>
+#endif
 #include <libperfstat.h>
 #ifdef FIRST_PROTOCOL
 perfstat_protocol_t ps_proto;
@@ -167,7 +170,7 @@ init_tcp(void)
 #define USES_SNMP_DESIGNED_TCPSTAT
 #endif
 
-#if defined (WIN32) || defined (cygwin)
+#ifdef HAVE_IPHLPAPI_H
 #include <iphlpapi.h>
 #define TCP_STAT_STRUCTURE     MIB_TCPSTATS
 #endif
@@ -272,10 +275,10 @@ tcp_handler(netsnmp_mib_handler          *handler,
         type = ASN_GAUGE;
         break;
     case TCPINSEGS:
-        ret_value = tcpstat.tcpInSegs;
+        ret_value = tcpstat.tcpInSegs & 0xffffffff;
         break;
     case TCPOUTSEGS:
-        ret_value = tcpstat.tcpOutSegs;
+        ret_value = tcpstat.tcpOutSegs & 0xffffffff;
         break;
     case TCPRETRANSSEGS:
         ret_value = tcpstat.tcpRetransSegs;
@@ -366,14 +369,14 @@ tcp_handler(netsnmp_mib_handler          *handler,
         type = ASN_GAUGE;
         break;
     case TCPINSEGS:
-        ret_value = tcpstat.tcps_rcvtotal;
+        ret_value = tcpstat.tcps_rcvtotal & 0xffffffff;
         break;
     case TCPOUTSEGS:
         /*
          * RFC 1213 defines this as the number of segments sent
          * "excluding those containing only retransmitted octets"
          */
-        ret_value = tcpstat.tcps_sndtotal - tcpstat.tcps_sndrexmitpack;
+        ret_value = (tcpstat.tcps_sndtotal - tcpstat.tcps_sndrexmitpack) & 0xffffffff;
         break;
     case TCPRETRANSSEGS:
         ret_value = tcpstat.tcps_sndrexmitpack;

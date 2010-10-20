@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: interface_openbsd.c 16552 2007-06-20 21:34:24Z tanders $
+ * $Id: interface_openbsd.c 18978 2010-06-13 21:02:03Z dts12 $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -27,7 +27,7 @@
 #include <net/if_types.h>
 #include <net/if_media.h>
 
-extern struct timeval starttime;
+#define starttime (*(const struct timeval*)netsnmp_get_agent_starttime())
 
 int
 netsnmp_openbsd_interface_get_if_speed(char *name, u_int *speed, u_int *speed_high);
@@ -92,7 +92,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
         return -2;
     }
 
-    if_list = malloc(if_list_size);
+    if_list = (u_char*)malloc(if_list_size);
     if (if_list == NULL) {
         snmp_log(LOG_ERR, "could not allocate memory for interface info (%u bytes)\n", if_list_size);
         return -3;
@@ -148,7 +148,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
         /* get physical address */
         if (adl != NULL && adl->sdl_alen > 0) {
             entry->paddr_len = adl->sdl_alen;
-            entry->paddr = malloc(entry->paddr_len);
+            entry->paddr = (char*)malloc(entry->paddr_len);
             memcpy(entry->paddr, adl->sdl_data + adl->sdl_nlen, adl->sdl_alen);
             DEBUGMSGTL(("access:interface:container:arch",
                         "%s: paddr_len=%d, entry->paddr=%x:%x:%x:%x:%x:%x\n",
@@ -156,7 +156,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
                         entry->paddr[0], entry->paddr[1], entry->paddr[2],
                         entry->paddr[3], entry->paddr[4], entry->paddr[5]));
         } else {
-            entry->paddr = malloc(6);
+            entry->paddr = (char*)malloc(6);
             entry->paddr_len = 6;
             memset(entry->paddr, 0, 6);
         }

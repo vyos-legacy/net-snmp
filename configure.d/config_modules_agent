@@ -46,7 +46,7 @@ new_module_list="$new_with_mib_modules default_modules"
 if test "x$enable_agent" = "xno"; then
    # minimum mib module list for snmptrapd
    new_module_list="mibII/vacm_vars mibII/vacm_conf utilities/execute $new_with_mib_modules"
-   default_mibs=SNMPv2-MIB:RFC1213-MIB
+   default_mibs=SNMPv2-MIB:IF-MIB:IP-MIB:TCP-MIB:UDP-MIB
    default_mibs_install=" "
 elif test "x$mini_agent" = "xyes"; then
    # define the mini agent flag to reduce our load list from default_mibs.h
@@ -173,6 +173,7 @@ while test "x$new_module_list" != "x"; do
     #---------------------
     # build a pseudo include header that includes current config and
     # system symbols:
+    rm -f conftest.$ac_ext module_tmp_header.h
     AC_LANG_CONFTEST(AC_LANG_SOURCE([[
 #include NETSNMP_SYSTEM_INCLUDE_FILE
 #include "$srcdir/$mibdir/$i.h"]]))
@@ -670,7 +671,7 @@ EOFOCFIN
 done
 
 # cleanup
-rm -f module_tmp_header.h
+rm -f conftest.$ac_ext module_tmp_header.h
 
 #-------------------
 # build module lists for Makefiles
@@ -703,7 +704,7 @@ for i in module_list_o module_list_c module_list_lo mib_module_list_o mib_module
 	# hpux make (at least) doesn't like a trailing \ on the last
 	# line even when the next line contains nothing but
 	# whitespace.
-	lasttoken=`tail -1 mk/$i.mk | awk '{print $1}'`
+	lasttoken=`awk '{lasttoken=$1}END{print lasttoken}' mk/$i.mk`
 	$SED "s#$lasttoken \\\\#$lasttoken#" < mk/$i.mk > mk/$i.mk.tmp
 	mv mk/$i.mk.tmp mk/$i.mk
 
@@ -777,3 +778,20 @@ AC_SUBST(ENV_SEPARATOR)
 AC_DEFINE_UNQUOTED(NETSNMP_DEFAULT_MIBS,"$NETSNMP_DEFAULT_MIBS")
 AC_SUBST(NETSNMP_DEFAULT_MIBS)
 AC_MSG_RESULT($NETSNMP_DEFAULT_MIBS)
+
+#-------------------
+# Define symbols for conditional compilation in makefiles
+#
+
+if echo " $agent_module_list " | \
+   fgrep ' agentx/agentx_config ' | \
+   fgrep ' agentx/client ' | \
+   fgrep ' agentx/protocol ' > /dev/null ; then
+   NETSNMP_HAVE_AGENTX_LIBS_TRUE=''
+   NETSNMP_HAVE_AGENTX_LIBS_FALSE='#'
+else
+   NETSNMP_HAVE_AGENTX_LIBS_TRUE='#'
+   NETSNMP_HAVE_AGENTX_LIBS_FALSE=''
+fi
+AC_SUBST([NETSNMP_HAVE_AGENTX_LIBS_TRUE])
+AC_SUBST([NETSNMP_HAVE_AGENTX_LIBS_FALSE])

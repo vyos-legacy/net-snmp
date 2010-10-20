@@ -35,8 +35,9 @@ fi
 
 ME=`$WHOAMI`
 if test -f /etc/resolv.conf; then
-  LOC=`cat /etc/resolv.conf | $GREP '^domain' | tail -1 | awk '{print $NF}'`
-else
+  LOC=`awk '/^domain/{loc=$NF}END{print loc}' /etc/resolv.conf`
+fi
+if test "x$LOC" = x; then
   LOC="@no.where"
 fi
 

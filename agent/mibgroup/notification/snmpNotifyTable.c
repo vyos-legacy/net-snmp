@@ -10,9 +10,6 @@
 #include <net-snmp/net-snmp-config.h>
 
 #include <sys/types.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -103,8 +100,8 @@ _checkFilter(const char* paramName, netsnmp_pdu *pdu)
     size_t                 profileNameLen;
     struct vacm_viewEntry *vp, *head;
     int                    vb_oid_excluded = 0;
-    extern oid             snmptrap_oid[];
-    extern size_t          snmptrap_oid_len;
+    extern const oid       snmptrap_oid[];
+    extern const size_t    snmptrap_oid_len;
 
     netsnmp_assert(NULL != paramName);
     netsnmp_assert(NULL != pdu);
@@ -546,12 +543,14 @@ parse_snmpNotifyTable(const char *token, char *line)
     line =
         read_config_read_data(ASN_INTEGER, line,
                               &StorageTmp->snmpNotifyStorageType, &tmpint);
+    if (!StorageTmp->snmpNotifyStorageType)
+        StorageTmp->snmpNotifyStorageType = ST_READONLY;
 
     line =
         read_config_read_data(ASN_INTEGER, line,
                               &StorageTmp->snmpNotifyRowStatus, &tmpint);
-
-
+    if (!StorageTmp->snmpNotifyRowStatus)
+        StorageTmp->snmpNotifyRowStatus = RS_ACTIVE;
 
 
     snmpNotifyTable_add(StorageTmp);
@@ -757,10 +756,10 @@ write_snmpNotifyTag(int action,
         if (var_val_type != ASN_OCTET_STR) {
             return SNMP_ERR_WRONGTYPE;
         }
-        if (var_val_len < 0 || var_val_len > 255) {
+        if (var_val_len > 255) {
             return SNMP_ERR_WRONGLENGTH;
         }
-        if (!snmpTagValid(var_val, var_val_len)) {
+        if (!snmpTagValid((char *) var_val, var_val_len)) {
             return SNMP_ERR_WRONGVALUE;
         }
         break;
@@ -772,7 +771,7 @@ write_snmpNotifyTag(int action,
          */
         tmpvar = StorageTmp->snmpNotifyTag;
         tmplen = StorageTmp->snmpNotifyTagLen;
-        StorageTmp->snmpNotifyTag = calloc(1, var_val_len + 1);
+        StorageTmp->snmpNotifyTag = (char*)calloc(1, var_val_len + 1);
         if (NULL == StorageTmp->snmpNotifyTag)
             return SNMP_ERR_RESOURCEUNAVAILABLE;
         break;
@@ -808,6 +807,7 @@ write_snmpNotifyTag(int action,
          * permanently.  Make sure that anything done here can't fail! 
          */
         SNMP_FREE(tmpvar);
+        snmp_store_needed(NULL);
         break;
     }
 
@@ -1028,7 +1028,7 @@ write_snmpNotifyRowStatus(int action,
             if (StorageNew == NULL) {
                 return SNMP_ERR_RESOURCEUNAVAILABLE;
             }
-            StorageNew->snmpNotifyName = calloc( 1, vp->val_len + 1 );
+            StorageNew->snmpNotifyName = (char*)calloc( 1, vp->val_len + 1 );
             if (StorageNew->snmpNotifyName == NULL) {
                 return SNMP_ERR_RESOURCEUNAVAILABLE;
             }
@@ -1143,6 +1143,7 @@ write_snmpNotifyRowStatus(int action,
             StorageTmp->snmpNotifyRowStatus = RS_NOTINSERVICE;
             StorageNew = NULL;
         }
+        snmp_store_needed(NULL);
         break;
     }
     return SNMP_ERR_NOERROR;

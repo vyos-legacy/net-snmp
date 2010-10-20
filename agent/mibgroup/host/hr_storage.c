@@ -19,13 +19,7 @@
 #include <unistd.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <windows.h>
-#  include <errno.h>
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -112,7 +106,11 @@
 #endif                          /* if HAVE_SYS_SYSCTL_H */
 #endif                          /* ifndef dynix */
 
-#if (defined(aix4) || defined(aix5) || defined(aix6)) && HAVE_LIBPERFSTAT_H
+#if (defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)) && HAVE_LI
+BPERFSTAT_H
+#ifdef HAVE_SYS_PROTOSW_H
+#include <sys/protosw.h>
+#endif
 #include <libperfstat.h>
 #endif
 
@@ -159,6 +157,9 @@
 #include <string.h>
 #else
 #include <strings.h>
+#endif
+#if HAVE_NBUTIL_H
+#include <nbutil.h>
 #endif
 
 #include <net-snmp/utilities.h>
@@ -214,6 +215,14 @@ extern int      fscount;
 #define HRFS_statfs	statvfs
 #define HRFS_mount	mnt_dir
 #define HRFS_HAS_FRSIZE HAVE_STRUCT_STATVFS_F_FRSIZE
+
+#elif defined(HAVE_GETFSSTAT) && !defined(HAVE_STATFS) && defined(HAVE_STATVFS)
+
+extern struct statfs *HRFS_entry;
+extern int      fscount;
+#define HRFS_statfs	statvfs
+#define HRFS_mount	f_mntonname
+#define HRFS_HAS_FRSIZE STRUCT_STATVFS_HAS_F_FRSIZE
 
 #elif defined(HAVE_GETFSSTAT)
 
@@ -561,7 +570,7 @@ really_try_next:
         if (store_idx > NETSNMP_MEM_TYPE_MAX)
             if (storageUseNFS && Check_HR_FileSys_NFS())
                 storage_type_id[storage_type_len - 1] = 10;     /* Network Disk */
-#if HAVE_HASMNTOPT && !(defined(aix4) || defined(aix5) || defined(aix6))
+#if HAVE_HASMNTOPT && !(defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7))
             /* 
              * hasmntopt takes "const struct mntent*", but HRFS_entry has been
              * defined differently for AIX, so skip this for AIX

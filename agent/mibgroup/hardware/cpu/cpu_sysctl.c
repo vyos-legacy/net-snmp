@@ -189,13 +189,14 @@ int netsnmp_cpu_arch_load( netsnmp_cache *cache, void *magic ) {
 #endif
 
 #ifdef NETSNMP_KERN_MCPU
-    mcpu_stats = malloc(cpu_num*sizeof(NETSNMP_KERN_MCPU_TYPE));
+    mcpu_stats = (NETSNMP_KERN_MCPU_TYPE *)malloc(cpu_num*sizeof(NETSNMP_KERN_MCPU_TYPE));
     sysctl(mcpu_mib, 2, mcpu_stats,
            cpu_num*sizeof(NETSNMP_KERN_MCPU_TYPE), NULL, 0);
     for ( i = 0; i < cpu_num; i++ ) {
         cpu = netsnmp_cpu_get_byIdx( i, 0 );
         /* XXX - per-CPU statistics - mcpu_mib[i].??? */
     }
+    free(mcpu_stats);
 #else
         /* Copy "overall" figures to cpu0 entry */
     _cpu_copy_stats( cpu );

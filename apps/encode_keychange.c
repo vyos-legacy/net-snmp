@@ -38,10 +38,6 @@
 #include <netinet/in.h>
 #endif
 
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
-
 #include <net-snmp/net-snmp-includes.h>
 
 #include <stdlib.h>
@@ -351,11 +347,11 @@ main(int argc, char **argv)
     SNMP_ZERO(oldpass, strlen(oldpass));
     SNMP_ZERO(newpass, strlen(newpass));
 
-    SNMP_ZERO(oldKu, oldKu_len);
-    SNMP_ZERO(newKu, newKu_len);
+    memset(oldKu, 0, oldKu_len);
+    memset(newKu, 0, newKu_len);
 
-    SNMP_ZERO(oldkul, oldkul_len);
-    SNMP_ZERO(newkul, newkul_len);
+    memset(oldkul, 0, oldkul_len);
+    memset(newkul, 0, newkul_len);
 
     SNMP_ZERO(s, strlen(s));
 
@@ -393,22 +389,22 @@ usage_to_file(FILE * ofp)
 
     usage_synopsis(ofp);
 
-    fprintf(ofp, "\n\
-    Only -t is mandatory.  The transform is used to convert P=>Ku, convert\n\
-    Ku=>Kul, and to hash the old Kul with the random bits.\n\
-\n\
-    Passphrase will be taken from the first successful source as follows:\n\
+    fprintf(ofp, "\n%s\
 	a) Commandline options,\n\
 	b) The file \"%s/%s\",\n\
-	c) stdin  -or-  User input from the terminal.\n\
+	c) stdin  -or-  User input from the terminal.\n\n%s\
+		" NL,
+   "Only -t is mandatory.  The transform is used to convert P=>Ku, convert\n\
+    Ku=>Kul, and to hash the old Kul with the random bits.\n\
 \n\
-    -f will require reading from the stdin/terminal, ignoring a) and b).\n\
+    Passphrase will be taken from the first successful source as follows:\n",
+    (s = getenv("HOME")) ? s : "$HOME", local_passphrase_filename,
+   "-f will require reading from the stdin/terminal, ignoring a) and b).\n\
     -P will prevent prompts for passphrases to stdout from being printed.\n\
 \n\
     <engineID> is interpreted as a hex string when preceeded by \"0x\",\n\
     otherwise it is created to contain \"text\".  If nothing is given,\n\
-    <engineID> is constructed from the first IP address for the local host.\n\
-		" NL, (s = getenv("HOME")) ? s : "$HOME", local_passphrase_filename);
+    <engineID> is constructed from the first IP address for the local host.\n");
 
 
     /*
@@ -613,7 +609,7 @@ get_user_passphrases(void)
 
 
   get_user_passphrases_quit:
-    SNMP_ZERO(buf, SNMP_MAXBUF);
+    memset(buf, 0, SNMP_MAXBUF);
 
     if (obuf != oldpass) {
         SNMP_ZERO(obuf, strlen(obuf));
@@ -762,7 +758,7 @@ snmp_getpassphrase(const char *prompt, int bvisible)
     if (bufp)
         memcpy(bufp, buffer, len + 1);
 
-    SNMP_ZERO(buffer, SNMP_MAXBUF);
+    memset(buffer, 0, SNMP_MAXBUF);
 
 
     return bufp;

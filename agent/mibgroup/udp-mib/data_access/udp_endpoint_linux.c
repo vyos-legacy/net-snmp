@@ -1,7 +1,7 @@
 /*
  *  udpEndpointTable MIB architecture support
  *
- * $Id: udp_endpoint_linux.c 17723 2009-08-05 20:07:38Z dts12 $
+ * $Id: udp_endpoint_linux.c 18284 2010-03-14 13:39:15Z bvassche $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -227,8 +227,8 @@ _process_line_udp_ep(netsnmp_line_info *line_info, void *mem,
      */
     ep->pid = netsnmp_get_pid_from_inode(inode);
 
-    ep->index = (u_int)(lpi->user_context);
-    lpi->user_context = (void*)((u_int)(lpi->user_context) + 1);
+    ep->index = (uintptr_t)(lpi->user_context);
+    lpi->user_context = (void*)((char*)(lpi->user_context) + 1);
 
     ep->oid_index.oids = &ep->index;
     ep->oid_index.len = 1;

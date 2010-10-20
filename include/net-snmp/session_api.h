@@ -12,6 +12,7 @@
 extern          "C" {
 #endif
 
+    NETSNMP_IMPORT
     void            snmp_sess_init(netsnmp_session *);
 
     /*
@@ -24,6 +25,7 @@ extern          "C" {
      * the pointer passed to snmp_open()).  On any error, NULL is returned
      * and snmp_errno is set to the appropriate error code.
      */
+    NETSNMP_IMPORT
     netsnmp_session *snmp_open(netsnmp_session *);
 
     /*
@@ -36,7 +38,9 @@ extern          "C" {
      *
      * snmp_close_sessions() does the same thing for all open sessions
      */
+    NETSNMP_IMPORT
     int             snmp_close(netsnmp_session *);
+    NETSNMP_IMPORT
     int             snmp_close_sessions(void);
 
 
@@ -53,6 +57,7 @@ extern          "C" {
      * On any error, 0 is returned.
      * The pdu is freed by snmp_send() unless a failure occured.
      */
+    NETSNMP_IMPORT
     int             snmp_send(netsnmp_session *, netsnmp_pdu *);
 
     /*
@@ -71,6 +76,7 @@ extern          "C" {
      * On any error, 0 is returned.
      * The pdu is freed by snmp_send() unless a failure occured.
      */
+    NETSNMP_IMPORT
     int             snmp_async_send(netsnmp_session *, netsnmp_pdu *,
                                     netsnmp_callback, void *);
 
@@ -85,6 +91,7 @@ extern          "C" {
      * is passed to the callback routine for that session.  If the callback
      * routine returns successfully, the pdu and it's request are deleted.
      */
+    NETSNMP_IMPORT
     void            snmp_read(fd_set *);
 
     /*
@@ -92,9 +99,11 @@ extern          "C" {
      * large file descriptor set instead of a pointer to a regular file
      * descriptor set.
      */
+    NETSNMP_IMPORT
     void            snmp_read2(netsnmp_large_fd_set *);
 
 
+    NETSNMP_IMPORT
     int             snmp_synch_response(netsnmp_session *, netsnmp_pdu *,
                                         netsnmp_pdu **);
 
@@ -125,6 +134,7 @@ extern          "C" {
      * snmp_select_info returns the number of open sockets.  (i.e. The number
      * of sessions open)
      */
+    NETSNMP_IMPORT
     int             snmp_select_info(int *, fd_set *, struct timeval *,
                                      int *);
 
@@ -133,9 +143,24 @@ extern          "C" {
      * pointer to a large file descriptor set instead of a pointer to a
      * regular file descriptor set.
      */
+    NETSNMP_IMPORT
     int             snmp_select_info2(int *, netsnmp_large_fd_set *,
                                       struct timeval *, int *);
 
+    /*
+     * snmp_sess_select_info_flags() and
+     * snmp_sess_select_info2_flags() is similar to
+     * snmp_sess_select_info() and snmp_sess_select_info2(), but
+     * accepts a list of flags to control aspects of its behavior.
+     */
+#define NETSNMP_SELECT_NOFLAGS  0x00
+#define NETSNMP_SELECT_NOALARMS 0x01
+    NETSNMP_IMPORT
+    int             snmp_sess_select_info_flags(void *, int *, fd_set *,
+                                                struct timeval *, int *, int);
+    int             snmp_sess_select_info2_flags(void *, int *,
+                                                 netsnmp_large_fd_set *,
+                                                 struct timeval *, int *, int);
 
     /*
      * void snmp_timeout();
@@ -149,14 +174,8 @@ extern          "C" {
      * callback for the session is used to alert the user of the timeout.
      */
 
+    NETSNMP_IMPORT
     void            snmp_timeout(void);
-
-    /*
-     * snmp_error - return error data
-     * Inputs :  address of errno, address of snmp_errno, address of string
-     * Caller must free the string returned after use.
-     */
-    void            snmp_error(netsnmp_session *, int *, int *, char **);
 
     /*
      * single session API.
@@ -196,8 +215,11 @@ extern          "C" {
      *  4. Replace snmp_send(ss,pdu) with snmp_sess_send(sessp,pdu)
      */
 
+    NETSNMP_IMPORT
     void           *snmp_sess_open(netsnmp_session *);
+    NETSNMP_IMPORT
     void           *snmp_sess_pointer(netsnmp_session *);
+    NETSNMP_IMPORT
     netsnmp_session *snmp_sess_session(void *);
 
 
@@ -205,27 +227,36 @@ extern          "C" {
      * use return value from snmp_sess_open as void * parameter 
      */
 
+    NETSNMP_IMPORT
     int             snmp_sess_send(void *, netsnmp_pdu *);
+    NETSNMP_IMPORT
     int             snmp_sess_async_send(void *, netsnmp_pdu *,
                                          netsnmp_callback, void *);
+    NETSNMP_IMPORT
     int             snmp_sess_select_info(void *, int *, fd_set *,
                                           struct timeval *, int *);
+    NETSNMP_IMPORT
     int             snmp_sess_select_info2(void *, int *,
 					   netsnmp_large_fd_set *,
                                            struct timeval *, int *);
     /*
      * Returns 0 if success, -1 if fail.
      */
+    NETSNMP_IMPORT
     int             snmp_sess_read(void *, fd_set *);
     /*
      * Similar to snmp_sess_read(), but accepts a pointer to a large file
      * descriptor set instead of a pointer to a file descriptor set.
      */
+    NETSNMP_IMPORT
     int             snmp_sess_read2(void *,
                                     netsnmp_large_fd_set *);
+    NETSNMP_IMPORT
     void            snmp_sess_timeout(void *);
+    NETSNMP_IMPORT
     int             snmp_sess_close(void *);
 
+    NETSNMP_IMPORT
     int             snmp_sess_synch_response(void *, netsnmp_pdu *,
                                              netsnmp_pdu **);
 
@@ -235,13 +266,18 @@ extern          "C" {
 
 
     /*
-     *  For the initial release, this will just refer to the
-     *  relevant UCD header files.
-     *    In due course, the routines relevant to this area of the
-     *  API will be identified, and listed here directly.
+     *    Having extracted the main ("public API") calls relevant
+     *  to this area of the Net-SNMP project, the next step is to
+     *  identify the related "public internal API" routines.
      *
-     *  But for the time being, this header file is a placeholder,
-     *  to allow application writers to adopt the new header file names.
+     *    In due course, these should probably be gathered
+     *  together into a companion 'library/session_api.h' header file.
+     *  [Or some suitable name]
+     *
+     *    But for the time being, the expectation is that the
+     *  traditional headers that provided the above definitions
+     *  will probably also cover the relevant internal API calls.
+     *  Hence they are listed here:
      */
 
 #include <net-snmp/library/snmp_api.h>

@@ -58,8 +58,7 @@
 .\" Use is subject to license terms specified in the COPYING file
 .\" distributed with the Net-SNMP package.
 .\" ******************************************************************/
-.TH SNMPNETSTAT 1 "16 Nov 2006" VVERSIONINFO "Net-SNMP"
-.UC 5
+.TH SNMPNETSTAT 1 "20 Jan 2010" VVERSIONINFO "Net-SNMP"
 .SH NAME
 snmpnetstat \- display networking status and configuration information from a network entity via SNMP
 .SH SYNOPSIS
@@ -73,7 +72,7 @@ snmpnetstat \- display networking status and configuration information from a ne
 [common options] [-Ci] [-Cn] [-CI interface] AGENT [interval]
 .br
 .B snmpnetstat
-[common options] [-Ca] [-Cn] [-Cs] [-CP protocol] AGENT
+[common options] [-Ca] [-Cn] [-Cs] [-Cp protocol] AGENT
 .SH DESCRIPTION
 The
 .B snmpnetstat 
@@ -146,7 +145,7 @@ interprets addresses and attempts to display them
 symbolically).
 This option may be used with any of the display formats.
 .PP
-.BI \-CP " protocol"
+.BI \-Cp " protocol"
 Show statistics about 
 .IR protocol,
 which is either a well-known name for a protocol or an alias for it.  Some
@@ -247,7 +246,7 @@ values accumulated over the preceding interval.
 .I Single Protocol
 .PP
 When a protocol is specified with the
-.B \-CP
+.B \-Cp
 option, the
 information displayed is similar to that in the
 default display for active sockets, except the
@@ -290,7 +289,7 @@ lo0     8232 127        localhost      7530982       0  7530982     0    0
 Example of using snmpnetstat to show statistics about a specific protocol:
 .PP
 .nf
-% snmpnetstat -v 2c -c public -CP tcp testhost
+% snmpnetstat -v 2c -c public -Cp tcp testhost
 
 Active Internet (tcp) Connections
 Proto Local Address                Foreign Address                 (state)

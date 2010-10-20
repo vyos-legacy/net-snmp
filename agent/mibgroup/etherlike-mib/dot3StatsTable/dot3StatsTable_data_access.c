@@ -260,6 +260,7 @@ dot3StatsTable_container_load(netsnmp_container * container)
     if (!list_head) {
         snmp_log (LOG_ERR, "access:dot3StatsTable, error getting the interface names present in the system\n");
         DEBUGMSGTL(("access:dot3StatsTable", "error getting the interface names present in the system"));
+        close(fd);
         return MFD_ERROR;
     }
     
@@ -288,6 +289,7 @@ dot3StatsTable_container_load(netsnmp_container * container)
         rowreq_ctx = dot3StatsTable_allocate_rowreq_ctx(NULL);
         if (NULL == rowreq_ctx) {
             snmp_log(LOG_ERR, "memory allocation for dot3StatsTable failed\n");
+            close(fd);
             return MFD_RESOURCE_UNAVAILABLE;
         }
         
@@ -317,7 +319,7 @@ dot3StatsTable_container_load(netsnmp_container * container)
             dot3StatsTable_release_rowreq_ctx(rowreq_ctx);
             continue;
         }
-        
+
         rc = interface_ioctl_dot3stats_duplex_get(rowreq_ctx, fd, p->name);
         if (rc < 0) {
             DEBUGMSGTL(("access:dot3StatsTable", "error getting the duplex status for |%s| "
@@ -326,12 +328,24 @@ dot3StatsTable_container_load(netsnmp_container * container)
             continue;
         }
 
+	interface_sysclassnet_dot3stats_get(rowreq_ctx, p->name);
+
+	interface_dot3stats_get_errorcounters(rowreq_ctx, p->name);
+
         /*
          * insert into table container
          */
-        CONTAINER_INSERT(container, rowreq_ctx);
+        rc = CONTAINER_INSERT(container, rowreq_ctx);
+        if (rc < 0) {
+            DEBUGMSGTL(("access:dot3StatsTable", "error inserting |%s|", p->name));
+            dot3StatsTable_release_rowreq_ctx(rowreq_ctx);
+            continue;
+        }
+
         ++count;
     }
+
+    close(fd);
 
     /*
      * free the interface names list 
@@ -345,7 +359,7 @@ dot3StatsTable_container_load(netsnmp_container * container)
 #endif
 
     DEBUGMSGT(("verbose:dot3StatsTable:dot3StatsTable_container_load",
-               "inserted %d records\n", count));
+               "inserted %" NETSNMP_PRIz "d records\n", count));
 
     return MFD_SUCCESS;
 }                               /* dot3StatsTable_container_load */

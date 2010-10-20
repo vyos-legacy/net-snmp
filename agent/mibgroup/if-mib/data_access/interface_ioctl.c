@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: interface_ioctl.c 15638 2006-12-06 14:34:11Z rstory $
+ * $Id: interface_ioctl.c 19018 2010-06-16 21:34:42Z dts12 $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -108,7 +108,7 @@ netsnmp_access_interface_ioctl_physaddr_get(int fd,
         SNMP_FREE(ifentry->paddr);
     }
     if(NULL == ifentry->paddr) 
-        ifentry->paddr = malloc(IFHWADDRLEN);
+        ifentry->paddr = (char*)malloc(IFHWADDRLEN);
 
     if(NULL == ifentry->paddr) {
             rc = -4;
@@ -471,8 +471,7 @@ netsnmp_access_interface_ioctl_has_ipv4(int sd, const char *if_name,
             if (NULL != ptr)
                 *ptr = 0;
             
-            if (if_index !=
-                netsnmp_access_interface_ioctl_ifindex_get(sd, ifrp->ifr_name))
+            if (if_index != (int)netsnmp_access_interface_ioctl_ifindex_get(sd, ifrp->ifr_name))
                 continue;
         }
 

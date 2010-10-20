@@ -4,16 +4,13 @@
  */
 /*
  * Portions of this file are copyrighted by:
- * Copyright @ 2003 Sun Microsystems, Inc. All rights reserved.
+ * Copyright @ 2009 Sun Microsystems, Inc. All rights reserved.
  * Use is subject to license terms specified in the COPYING file
  * distributed with the Net-SNMP package.
  */
 #include <net-snmp/net-snmp-config.h>
 
 #include <sys/types.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_STRING_H
 #include <string.h>
 #endif
@@ -105,7 +102,9 @@ proxy_parse_config(const char *token, char *line)
 
     DEBUGMSGTL(("proxy_config", "parsing args: %d\n", argn));
     /* Call special parse_args that allows for no specified community string */
-    arg = snmp_parse_args(argn, argv, &session, "C:", proxyOptProc);
+    arg = netsnmp_parse_args(argn, argv, &session, "C:", proxyOptProc,
+                             NETSNMP_PARSE_ARGS_NOLOGGING |
+                             NETSNMP_PARSE_ARGS_NOZERO);
 
     /* reset this in case we modified it */
     netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID,
@@ -283,10 +282,10 @@ proxy_fill_in_session(netsnmp_mib_handler *handler,
             }
 
             *configured = malloc(strlen("-c") + 1);
-            strcpy(*configured, "-c");
+            strcpy((char*)*configured, "-c");
             DEBUGMSGTL(("proxy", "pdu has community string\n"));
             session->community_len = reqinfo->asp->pdu->community_len;
-            session->community = malloc(session->community_len + 1);
+            session->community = (u_char*)malloc(session->community_len + 1);
             strncpy((char *)session->community,
                     (const char *)reqinfo->asp->pdu->community,
                     session->community_len);
@@ -408,6 +407,8 @@ proxy_handler(netsnmp_mib_handler *handler,
                 /*
                  * too large 
                  */
+                if (pdu)
+                    snmp_free_pdu(pdu);
                 snmp_log(LOG_ERR,
                          "proxy oid request length is too long\n");
                 return SNMP_ERR_NOERROR;
@@ -417,7 +418,7 @@ proxy_handler(netsnmp_mib_handler *handler,
              */
             DEBUGMSGTL(("proxy", "length=%d, base_len=%d, name_len=%d\n",
                         (int)ourlength, (int)sp->base_len, (int)sp->name_len));
-            if (ourlength > (int) sp->name_len)
+            if (ourlength > sp->name_len)
                 memcpy(&(sp->base[sp->base_len]), &(ourname[sp->name_len]),
                        sizeof(oid) * (ourlength - sp->name_len));
             ourlength = ourlength - sp->name_len + sp->base_len;
@@ -437,6 +438,8 @@ proxy_handler(netsnmp_mib_handler *handler,
      */
     if (!proxy_fill_in_session(handler, reqinfo, (void **)&configured)) {
         netsnmp_set_request_error(reqinfo, requests, SNMP_ERR_GENERR);
+        if (pdu)
+            snmp_free_pdu(pdu);
         return SNMP_ERR_NOERROR;
     }
 

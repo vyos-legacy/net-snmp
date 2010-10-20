@@ -17,7 +17,13 @@ top_builddir=..
 # Things to install
 #
 
-SSHINSTALLBINPROGS = @SSHINSTALLBINPROGS@
+@NETSNMP_BUILD_SSH_PROG_TRUE@SSHINSTALLBINPROG = sshtosnmp$(EXEEXT)
+@NETSNMP_BUILD_SSH_PROG_FALSE@SSHINSTALLBINPROG =
+@NETSNMP_BUILD_TLS_PROG_TRUE@TLSINSTALLBINPROG = snmptls$(EXEEXT)
+@NETSNMP_BUILD_TLS_PROG_FALSE@TLSINSTALLBINPROG =
+
+@NETSNMP_HAVE_AGENTX_LIBS_TRUE@AGENTXTRAP = agentxtrap$(EXEEXT)
+@NETSNMP_HAVE_AGENTX_LIBS_FALSE@AGENTXTRAP =
 
 INSTALLBINPROGS	= snmpget$(EXEEXT) 			\
 		snmpgetnext$(EXEEXT) 			\
@@ -34,8 +40,9 @@ INSTALLBINPROGS	= snmpget$(EXEEXT) 			\
 		snmptest$(EXEEXT)			\
 		encode_keychange$(EXEEXT) 		\
 		snmpdf$(EXEEXT) 			\
+		$(AGENTXTRAP)				\
 		snmpvacm$(EXEEXT)                       \
-                $(SSHINSTALLBINPROGS)
+                $(SSHINSTALLBINPROG) $(TLSINSTALLBINPROG)
 
 INSTALLSBINPROGS = snmptrapd$(EXEEXT)
 
@@ -49,16 +56,15 @@ SUBDIRS		= snmpnetstat
 
 # USELIBS/USEAGENTLIBS are for dependencies
 USELIBS		= ../snmplib/libnetsnmp.$(LIB_EXTENSION)$(LIB_VERSION) 
-HELPERLIB       = ../agent/helpers/libnetsnmphelpers.$(LIB_EXTENSION)$(LIB_VERSION)
 AGENTLIB        = ../agent/libnetsnmpagent.$(LIB_EXTENSION)$(LIB_VERSION)
 MIBLIB          = ../agent/libnetsnmpmibs.$(LIB_EXTENSION)$(LIB_VERSION)
-USEAGENTLIBS	= $(MIBLIB) $(AGENTLIB) $(HELPERLIB) $(USELIBS)
+USEAGENTLIBS	= $(MIBLIB) $(AGENTLIB) $(USELIBS)
 MYSQL_LIBS	= @MYSQL_LIBS@
 MYSQL_INCLUDES	= @MYSQL_INCLUDES@
 
 #
 # link path in src dir
-LOCAL_LIBS	= -L../snmplib/.libs -L../snmplib -L../agent/.libs -L../agent -L../agent/helpers/.libs -L../agent/helpers
+LOCAL_LIBS	= -L../snmplib/.libs -L../snmplib -L../agent/.libs -L../agent
 LIBS		= $(USELIBS) @LIBS@
 PERLLDOPTS_FOR_APPS = @PERLLDOPTS_FOR_APPS@
 PERLLDOPTS_FOR_LIBS = @PERLLDOPTS_FOR_LIBS@
@@ -139,6 +145,12 @@ snmpusm$(EXEEXT):    snmpusm.$(OSUFFIX) $(USELIBS)
 snmpvacm$(EXEEXT):    snmpvacm.$(OSUFFIX) $(USELIBS)
 	$(LINK) ${CFLAGS} -o $@ snmpvacm.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
 
+snmptls$(EXEEXT):    snmptls.$(OSUFFIX) $(USELIBS)
+	$(LINK) ${CFLAGS} -o $@ snmptls.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+
+agentxtrap$(EXEEXT):    agentxtrap.$(OSUFFIX) $(USEAGENTLIBS)
+	$(LINK) ${CFLAGS} -o $@ agentxtrap.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} $(USEAGENTLIBS) $(PERLLDOPTS_FOR_APPS) ${LIBS}
+
 snmpgetnext$(EXEEXT):    snmpgetnext.$(OSUFFIX) $(USELIBS)
 	$(LINK) ${CFLAGS} -o $@ snmpgetnext.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
 
@@ -167,7 +179,7 @@ snmptrapdperluninstall: installdirs
 	  @rm -f $(INSTALL_PREFIX)$(snmplibdir)/snmp_perl_trapd.pl
 	  @echo "removed snmp_perl_trapd.pl from $(INSTALL_PREFIX)$(snmplibdir)"
 
-sshtosnmp: sshtosnmp.$(OSUFFIX)
+sshtosnmp$(EXEEXT): sshtosnmp.$(OSUFFIX)
 	$(LINK) ${CFLAGS} -o $@ sshtosnmp.$(OSUFFIX)
 
 

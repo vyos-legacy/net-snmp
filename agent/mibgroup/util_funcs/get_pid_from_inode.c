@@ -33,8 +33,13 @@ netsnmp_get_pid_from_inode(ino64_t inode)
     pid_t           pid = 0;
     ino64_t         temp_inode;
 
+    if (inode == 0) {
+        /* an inode set to zero means it is not associated with a process. */
+        return 0;
+    }
+
     if (!(procdirs = opendir(PROC_PATH))) {
-        snmp_log(LOG_ERR, "snmpd: cannot open /proc\n");
+        NETSNMP_LOGONCE((LOG_ERR, "snmpd: cannot open /proc\n"));
         return 0;
     }
 
@@ -52,8 +57,6 @@ netsnmp_get_pid_from_inode(ino64_t inode)
                            PROC_PATH "/%s/fd/", procinfo->d_name);
         if (filelen <= 0 || PATH_MAX < filelen)
             continue;
-
-        pid = strtoul(procinfo->d_name, NULL, 0);
 
         if (!(piddirs = opendir(path_name)))
             continue;
@@ -77,6 +80,7 @@ netsnmp_get_pid_from_inode(ino64_t inode)
             } else
 		temp_inode = 0;
             if (inode == temp_inode) {
+                pid = strtoul(procinfo->d_name, NULL, 0);
                 iflag = 1;
                 break;
             }

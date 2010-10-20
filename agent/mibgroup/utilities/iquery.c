@@ -71,7 +71,7 @@ _tweak_default_iquery_session( int majorID, int minorID,
 {
     u_char eID[SNMP_MAXBUF_SMALL];
     size_t elen;
-    netsnmp_session *s = netsnmp_query_get_default_session();
+    netsnmp_session *s = netsnmp_query_get_default_session_unchecked();
 
     if ( s && s->securityEngineIDLen == 0 ) {
         elen = snmpv3_get_engineID(eID, sizeof(eID));
@@ -131,7 +131,7 @@ netsnmp_session *netsnmp_iquery_pdu_session(netsnmp_pdu* pdu) {
                            pdu->securityEngineID,
                            pdu->securityEngineIDLen);
     else
-        return netsnmp_iquery_session( pdu->community, 
+        return netsnmp_iquery_session((char *) pdu->community, 
                            pdu->version,
                            pdu->version+1,
                            SNMP_SEC_LEVEL_NOAUTH,

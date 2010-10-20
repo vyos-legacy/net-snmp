@@ -13,11 +13,7 @@
 #include <stdlib.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -28,9 +24,6 @@
 #endif
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>
-#endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
@@ -47,9 +40,6 @@
 #include <net-snmp/agent/agent_callbacks.h>
 #include <net-snmp/agent/agent_sysORTable.h>
 #include "master.h"
-
-extern struct timeval starttime;
-
 
 
 netsnmp_session *
@@ -109,7 +99,7 @@ open_agentx_session(netsnmp_session * session, netsnmp_pdu *pdu)
     sp->securityAuthProtoLen = pdu->variables->name_length;
     sp->securityName = strdup((char *) pdu->variables->val.string);
     gettimeofday(&now, NULL);
-    sp->engineTime = calculate_time_diff(&now, &starttime);
+    sp->engineTime = calculate_sectime_diff(&now, netsnmp_get_agent_starttime());
 
     sp->subsession = session;   /* link back to head */
     sp->flags |= SNMP_FLAGS_SUBSESSION;
@@ -229,7 +219,7 @@ register_agentx_list(netsnmp_session * session, netsnmp_pdu *pdu)
     reg->handler->myvoid = session;
     reg->global_cacheid = cacheid;
     if (NULL != pdu->community)
-        reg->contextName = strdup(pdu->community);
+        reg->contextName = strdup((char *)pdu->community);
 
     /*
      * register mib. Note that for failure cases, the registration info
@@ -412,11 +402,11 @@ remove_agent_caps_list(netsnmp_session * session, netsnmp_pdu *pdu)
 int
 agentx_notify(netsnmp_session * session, netsnmp_pdu *pdu)
 {
-    netsnmp_session *sp;
+    netsnmp_session       *sp;
     netsnmp_variable_list *var;
-    int             got_sysuptime = 0;
-    extern oid      sysuptime_oid[], snmptrap_oid[];
-    extern size_t   sysuptime_oid_len, snmptrap_oid_len;
+    int                    got_sysuptime = 0;
+    extern const oid       sysuptime_oid[], snmptrap_oid[];
+    extern const size_t    sysuptime_oid_len, snmptrap_oid_len;
 
     sp = find_agentx_session(session, pdu->sessid);
     if (sp == NULL)
@@ -479,7 +469,6 @@ handle_master_agentx_packet(int operation,
                             int reqid, netsnmp_pdu *pdu, void *magic)
 {
     netsnmp_agent_session *asp;
-    struct timeval  now;
 
     if (operation == NETSNMP_CALLBACK_OP_DISCONNECT) {
         DEBUGMSGTL(("agentx/master",
@@ -578,8 +567,7 @@ handle_master_agentx_packet(int operation,
         break;
     }
 
-    gettimeofday(&now, NULL);
-    asp->pdu->time = calculate_time_diff(&now, &starttime);
+    asp->pdu->time = netsnmp_get_agent_uptime();
     asp->pdu->command = AGENTX_MSG_RESPONSE;
     asp->pdu->errstat = asp->status;
     DEBUGMSGTL(("agentx/master", "send response, stat %d (req=0x%lx,trans="

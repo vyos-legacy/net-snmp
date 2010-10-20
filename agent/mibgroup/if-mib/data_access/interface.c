@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: interface.c 17594 2009-05-06 21:45:20Z nba $
+ * $Id: interface.c 19018 2010-06-16 21:34:42Z dts12 $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -250,8 +250,8 @@ netsnmp_access_interface_entry_get_by_name(netsnmp_container *container,
         return NULL;
     }
 
-    tmp.name = (char *)name;
-    return CONTAINER_FIND(container->next, &tmp);
+    tmp.name = NETSNMP_REMOVE_CONST(char *, name);
+    return (netsnmp_interface_entry*)CONTAINER_FIND(container->next, &tmp);
 }
 
 /**
@@ -375,7 +375,7 @@ Interface_Scan_Init(void)
     }
    
     if (NULL != it)
-        e = ITERATOR_FIRST(it);
+        e = (netsnmp_interface_entry*)ITERATOR_FIRST(it);
 }
 
 int
@@ -394,7 +394,7 @@ Interface_Scan_Next(short *index, char *name, netsnmp_interface_entry **entry,
     if (entry)
         *entry = e;
 
-    e = ITERATOR_NEXT(it);
+    e = (netsnmp_interface_entry*)ITERATOR_NEXT(it);
 
     return 1;
 }
@@ -457,7 +457,7 @@ _access_interface_entry_release(netsnmp_interface_entry * entry, void *context)
 static void
 _access_interface_entry_save_name(const char *name, oid index)
 {
-    oid tmp;
+    int tmp;
 
     if(NULL == name)
         return;
@@ -465,16 +465,17 @@ _access_interface_entry_save_name(const char *name, oid index)
     tmp = se_find_value_in_slist("interfaces", name);
     if (tmp == SE_DNE) {
         se_add_pair_to_slist("interfaces", strdup(name), index);
-        DEBUGMSGTL(("access:interface:ifIndex", "saved ifIndex %lu for %s\n",
+        DEBUGMSGTL(("access:interface:ifIndex",
+                    "saved ifIndex %" NETSNMP_PRIo "u for %s\n",
                     index, name));
     }
     else
-        if (index != tmp) {
-            static int logged = 0;
-            if (!logged) {
-                snmp_log(LOG_ERR, "IfIndex of an interface changed.\n");
-                logged = 1;
-            }
+        if (index != (oid)tmp) {
+            NETSNMP_LOGONCE((LOG_ERR, "IfIndex of an interface changed.\n"));
+            DEBUGMSGTL(("access:interface:ifIndex",
+                        "index %" NETSNMP_PRIo "u != tmp for %s\n",
+                        index, name));
+
 	    se_remove_value_from_slist("interfaces", name);
 	    se_add_pair_to_slist("interfaces", strdup(name), index);
 	    DEBUGMSGTL(("access:interface:ifIndex", "ifname %s, old index %d, already existing, replaced with %d\n", name, tmp, index));
@@ -520,39 +521,78 @@ netsnmp_access_interface_entry_update_stats(netsnmp_interface_entry * prev_vals,
         memcpy(prev_vals->old_stats, &prev_vals->stats, sizeof(new_vals->stats));
     }
 
-        netsnmp_c64_check32_and_update(&prev_vals->stats.ibytes,
+        if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.ibytes,
                                        &new_vals->stats.ibytes,
                                        &prev_vals->old_stats->ibytes,
-                                       &need_wrap_check);
-        netsnmp_c64_check32_and_update(&prev_vals->stats.iucast,
+                                       &need_wrap_check))
+            NETSNMP_LOGONCE((LOG_ERR,
+                    "Error expanding ifHCInOctets to 64bits\n"));
+
+        if (new_vals->ns_flags & NETSNMP_INTERFACE_FLAGS_CALCULATE_UCAST) {
+            if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.iall,
+                                           &new_vals->stats.iall,
+                                           &prev_vals->old_stats->iall,
+                                           &need_wrap_check))
+                NETSNMP_LOGONCE((LOG_ERR,
+                        "Error expanding packet count to 64bits\n"));
+        } else {
+            if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.iucast,
+                                           &new_vals->stats.iucast,
+                                           &prev_vals->old_stats->iucast,
+                                           &need_wrap_check))
+                NETSNMP_LOGONCE((LOG_ERR,
+                        "Error expanding ifHCInUcastPkts to 64bits\n"));
+        }
+
+        if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.iucast,
                                        &new_vals->stats.iucast,
                                        &prev_vals->old_stats->iucast,
-                                       &need_wrap_check);
-        netsnmp_c64_check32_and_update(&prev_vals->stats.imcast,
+                                       &need_wrap_check))
+            NETSNMP_LOGONCE((LOG_ERR,
+                    "Error expanding ifHCInUcastPkts to 64bits\n"));
+
+        if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.imcast,
                                        &new_vals->stats.imcast,
                                        &prev_vals->old_stats->imcast,
-                                       &need_wrap_check);
-        netsnmp_c64_check32_and_update(&prev_vals->stats.ibcast,
+                                       &need_wrap_check))
+            NETSNMP_LOGONCE((LOG_ERR,
+                    "Error expanding ifHCInMulticastPkts to 64bits\n"));
+
+        if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.ibcast,
                                        &new_vals->stats.ibcast,
                                        &prev_vals->old_stats->ibcast,
-                                       &need_wrap_check);
-        netsnmp_c64_check32_and_update(&prev_vals->stats.obytes,
+                                       &need_wrap_check))
+            NETSNMP_LOGONCE((LOG_ERR,
+                    "Error expanding ifHCInBroadcastPkts to 64bits\n"));
+
+        if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.obytes,
                                        &new_vals->stats.obytes,
                                        &prev_vals->old_stats->obytes,
-                                       &need_wrap_check);
-        netsnmp_c64_check32_and_update(&prev_vals->stats.oucast,
+                                       &need_wrap_check))
+            NETSNMP_LOGONCE((LOG_ERR,
+                    "Error expanding ifHCOutOctets to 64bits\n"));
+
+        if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.oucast,
                                        &new_vals->stats.oucast,
                                        &prev_vals->old_stats->oucast,
-                                       &need_wrap_check);
-        netsnmp_c64_check32_and_update(&prev_vals->stats.omcast,
+                                       &need_wrap_check))
+            NETSNMP_LOGONCE((LOG_ERR,
+                    "Error expanding ifHCOutUcastPkts to 64bits\n"));
+
+        if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.omcast,
                                        &new_vals->stats.omcast,
                                        &prev_vals->old_stats->omcast,
-                                       &need_wrap_check);
-        netsnmp_c64_check32_and_update(&prev_vals->stats.obcast,
+                                       &need_wrap_check))
+            NETSNMP_LOGONCE((LOG_ERR,
+                    "Error expanding ifHCOutMulticastPkts to 64bits\n"));
+
+        if (0 != netsnmp_c64_check32_and_update(&prev_vals->stats.obcast,
                                        &new_vals->stats.obcast,
                                        &prev_vals->old_stats->obcast,
-                                       &need_wrap_check);
-    
+                                       &need_wrap_check))
+            NETSNMP_LOGONCE((LOG_ERR,
+                    "Error expanding ifHCOutBroadcastPkts to 64bits\n"));
+
     /*
      * Copy 32 bit counters
      */
@@ -584,6 +624,23 @@ netsnmp_access_interface_entry_update_stats(netsnmp_interface_entry * prev_vals,
 }
 
 /**
+ * Calculate stats
+ *
+ * @retval  0 : success
+ * @retval -1 : error
+ */
+int
+netsnmp_access_interface_entry_calculate_stats(netsnmp_interface_entry *entry)
+{
+    DEBUGMSGTL(("access:interface", "calculate_stats\n"));
+    if (entry->ns_flags & NETSNMP_INTERFACE_FLAGS_CALCULATE_UCAST) {
+        u64Subtract(&entry->stats.iall, &entry->stats.imcast,
+                &entry->stats.iucast);
+    }
+    return 0;
+}
+
+/**
  * copy interface entry data (after checking for counter wraps)
  *
  * @retval -2 : malloc failed
@@ -605,6 +662,7 @@ netsnmp_access_interface_entry_copy(netsnmp_interface_entry * lhs,
      * update stats
      */
     netsnmp_access_interface_entry_update_stats(lhs, rhs);
+    netsnmp_access_interface_entry_calculate_stats(lhs);
 
     /*
      * update data
@@ -646,7 +704,7 @@ netsnmp_access_interface_entry_copy(netsnmp_interface_entry * lhs,
         if (NULL != lhs->paddr)
             SNMP_FREE(lhs->paddr);
         if (rhs->paddr) {
-            lhs->paddr = malloc(rhs->paddr_len);
+            lhs->paddr = (char*)malloc(rhs->paddr_len);
             if(NULL == lhs->paddr)
                 return -2;
             memcpy(lhs->paddr,rhs->paddr,rhs->paddr_len);
@@ -787,7 +845,7 @@ _free_interface_config(void)
     netsnmp_conf_if_list   *if_ptr = conf_list, *if_next;
     while (if_ptr) {
         if_next = if_ptr->next;
-        free(if_ptr->name);
+        free(NETSNMP_REMOVE_CONST(char *, if_ptr->name));
         free(if_ptr);
         if_ptr = if_next;
     }

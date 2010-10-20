@@ -60,10 +60,6 @@
 #include <stdlib.h>
 #endif
 
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
-
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -521,7 +517,7 @@ write_rte(int action,
     return SNMP_ERR_NOERROR;
 }
 
-#else                           /* WIN32 cygwin */
+#elif defined(HAVE_IPHLPAPI_H)  /* WIN32 cygwin */
 #include <iphlpapi.h>
 
 extern PMIB_IPFORWARDROW route_row;
@@ -726,7 +722,7 @@ write_rte(int action,
                     if ((status =
                          CreateIpForwardEntry(route_row)) != NO_ERROR) {
                         snmp_log(LOG_ERR,
-                                 "Inside COMMIT: CreateIpNetEntry failed, status %d\n",
+                                 "Inside COMMIT: CreateIpNetEntry failed, status %lu\n",
                                  status);
                         retval = SNMP_ERR_COMMITFAILED;
                     }

@@ -22,7 +22,7 @@ config_exclude(host/hr_swinst)
  */
 #if   defined( darwin )
     config_require(host/data_access/swinst_darwin)
-#elif defined( HAVE_LIBRPM ) || defined( linux )
+#elif defined( HAVE_LIBRPM ) && defined( linux )
     config_require(host/data_access/swinst_rpm)
 #elif defined( HAVE_PKGLOCS_H ) || defined( hpux9 ) || defined( hpux10 ) || defined( hpux11 ) || defined( freebsd2 )
     config_require(host/data_access/swinst_pkginfo)
@@ -30,5 +30,8 @@ config_exclude(host/hr_swinst)
     config_warning(This platform does not yet support hrSWInstalledTable rewrites)
     config_require(host/data_access/swinst_null)
 #endif
+
+void init_swinst( void );
+void shutdown_swinst( void );
 
 #endif /* NETSNMP_ACCESS_SWINST_CONFIG_H */

@@ -46,8 +46,6 @@ static const char *rcsid = "$OpenBSD: inet.c,v 1.92 2005/02/10 14:25:08 itojun E
 #include <unistd.h>
 #endif
 #if HAVE_WINSOCK_H
-#include <winsock2.h>
-#include <ws2tcpip.h>
 #include "winstub.h"
 #endif
 #if HAVE_SYS_SOCKET_H
@@ -69,7 +67,7 @@ static const char *rcsid = "$OpenBSD: inet.c,v 1.92 2005/02/10 14:25:08 itojun E
 #include "netstat.h"
 
 struct stat_table {
-    int             entry;      /* entry number in table */
+    unsigned int  entry;      /* entry number in table */
     /*
      * format string to printf(description, value) 
      * warning: the %d must be before the %s 
@@ -641,7 +639,7 @@ inetname(struct in_addr *inp)
 		snprintf(line, sizeof line, "%s", cp);
 	else {
 		inp->s_addr = ntohl(inp->s_addr);
-#define C(x)	((x) & 0xff)
+#define C(x)	(unsigned)((x) & 0xff)
 		snprintf(line, sizeof line, "%u.%u.%u.%u",
 		    C(inp->s_addr >> 24), C(inp->s_addr >> 16),
 		    C(inp->s_addr >> 8), C(inp->s_addr));

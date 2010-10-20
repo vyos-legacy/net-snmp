@@ -31,7 +31,7 @@ extern          "C" {
  * ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
  * SOFTWARE.
  * 
- * $Id: libsnmp.h 6918 2002-04-20 07:30:29Z hardaker $
+ * $Id: libsnmp.h 18044 2010-01-24 11:41:03Z bvassche $
  * 
  **********************************************************************/
 
@@ -53,11 +53,7 @@ extern          "C" {
 #include <netinet/in.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -71,9 +67,7 @@ extern          "C" {
 #endif
 #include <stdio.h>
 #include <ctype.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#else
+#if HAVE_NETDB_H
 #include <netdb.h>
 #endif
 #if HAVE_ARPA_INET_H

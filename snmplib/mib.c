@@ -1,7 +1,7 @@
 /*
  * mib.c
  *
- * $Id: mib.c 17639 2009-06-01 15:50:45Z dts12 $
+ * $Id: mib.c 19380 2010-09-20 20:23:20Z bvassche $
  *
  * Update: 1998-07-17 <jhy@gsu.edu>
  * Added print_oid_report* functions.
@@ -64,11 +64,7 @@ SOFTWARE.
 #include <netinet/in.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -87,10 +83,6 @@ SOFTWARE.
 #endif
 #if HAVE_SYS_SELECT_H
 #include <sys/select.h>
-#endif
-
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 
 #if HAVE_DMALLOC_H
@@ -151,9 +143,10 @@ static int      _add_strings_to_oid(void *, char *,
 #endif /* NETSNMP_DISABLE_MIB_LOADING */
 
 #ifndef NETSNMP_DISABLE_MIB_LOADING
-extern struct tree *tree_head;
+NETSNMP_IMPORT struct tree *tree_head;
 static struct tree *tree_top;
 
+NETSNMP_IMPORT struct tree *Mib;
 struct tree    *Mib;            /* Backwards compatibility */
 #endif /* NETSNMP_DISABLE_MIB_LOADING */
 
@@ -472,6 +465,8 @@ sprint_realloc_octet_string(u_char ** buf, size_t * buf_len,
         int             repeat, width = 1;
         long            value;
         char            code = 'd', separ = 0, term = 0, ch, intbuf[16];
+#define HEX2DIGIT_NEED_INIT 3
+        char            hex2digit = HEX2DIGIT_NEED_INIT;
         u_char         *ecp;
 
         if (!netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, NETSNMP_DS_LIB_QUICK_PRINT)) {
@@ -518,9 +513,22 @@ sprint_realloc_octet_string(u_char ** buf, size_t * buf_len,
                 }
                 switch (code) {
                 case 'x':
-                    if (netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID,
-                                               NETSNMP_DS_LIB_2DIGIT_HEX_OUTPUT)
-                                       && value < 16) {
+                    if (HEX2DIGIT_NEED_INIT == hex2digit)
+                        hex2digit = netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID,
+                                                           NETSNMP_DS_LIB_2DIGIT_HEX_OUTPUT);
+                    /*
+                     * if value is < 16, it will be a single hex digit. If the
+                     * width is 1 (we are outputting a byte at a time), pat it
+                     * to 2 digits if NETSNMP_DS_LIB_2DIGIT_HEX_OUTPUT is set
+                     * or all of the following are true:
+                     *  - we do not have a separation character
+                     *  - there is no hint left (or there never was a hint)
+                     *
+                     * e.g. for the data 0xAA01BB, would anyone really ever
+                     * want the string "AA1BB"??
+                     */
+                    if (((value < 16) && (1 == width)) &&
+                        (hex2digit || ((0 == separ) && (0 == *hint)))) {
                         sprintf(intbuf, "0%lx", value);
                     } else {
                         sprintf(intbuf, "%lx", value);
@@ -1507,7 +1515,7 @@ sprint_realloc_gauge(u_char ** buf, size_t * buf_len, size_t * out_len,
             return 0;
         }
     } else {
-        sprintf(tmp, "%lu", *var->val.integer);
+        sprintf(tmp, "%u", (unsigned int)(*var->val.integer & 0xffffffff));
         if (!snmp_strcat
             (buf, buf_len, out_len, allow_realloc, (const u_char *) tmp)) {
             return 0;
@@ -1571,7 +1579,7 @@ sprint_realloc_counter(u_char ** buf, size_t * buf_len, size_t * out_len,
             return 0;
         }
     }
-    sprintf(tmp, "%lu", *var->val.integer);
+    sprintf(tmp, "%u", (unsigned int)(*var->val.integer & 0xffffffff));
     if (!snmp_strcat
         (buf, buf_len, out_len, allow_realloc, (const u_char *) tmp)) {
         return 0;
@@ -2767,7 +2775,7 @@ netsnmp_mibindex_load( void )
      * Create a list of which directory each file refers to
      */
     while ((file = readdir( dir ))) {
-        if ( !isdigit(file->d_name[0]))
+        if ( !isdigit((unsigned char)(file->d_name[0])))
             continue;
         i = atoi( file->d_name );
 
@@ -3603,6 +3611,7 @@ int
 build_oid_segment(netsnmp_variable_list * var)
 {
     int             i;
+    uint32_t        ipaddr;
 
     if (var->name && var->name != var->name_loc)
         SNMP_FREE(var->name);
@@ -3619,14 +3628,11 @@ build_oid_segment(netsnmp_variable_list * var)
     case ASN_IPADDRESS:
         var->name_length = 4;
         var->name = var->name_loc;
-        var->name[0] =
-            (((unsigned int) *(var->val.integer)) & 0xff000000) >> 24;
-        var->name[1] =
-            (((unsigned int) *(var->val.integer)) & 0x00ff0000) >> 16;
-        var->name[2] =
-            (((unsigned int) *(var->val.integer)) & 0x0000ff00) >> 8;
-        var->name[3] =
-            (((unsigned int) *(var->val.integer)) & 0x000000ff);
+        memcpy(&ipaddr, var->val.string, sizeof(ipaddr));
+        var->name[0] = (ipaddr >> 24) & 0xff;
+        var->name[1] = (ipaddr >> 16) & 0xff;
+        var->name[2] = (ipaddr >>  8) & 0xff;
+        var->name[3] = (ipaddr >>  0) & 0xff;
         break;
         
     case ASN_PRIV_IMPLIED_OBJECT_ID:
@@ -3811,7 +3817,7 @@ parse_one_oid_index(oid ** oidStart, size_t * oidLen,
         case ASN_TIMETICKS:
             if (*oidLen) {
                 snmp_set_var_value(var, (u_char *) oidIndex++,
-                                   sizeof(long));
+                                   sizeof(oid));
                 --(*oidLen);
             } else {
                 snmp_set_var_value(var, (u_char *) oidLen, sizeof(long));
@@ -3828,7 +3834,8 @@ parse_one_oid_index(oid ** oidStart, size_t * oidLen,
             for (i = 0; i < 4 && i < *oidLen; ++i) {
                 if (oidIndex[i] > 255) {
                     DEBUGMSGTL(("parse_oid_indexes",
-                                "illegal oid in index: %ld\n", oidIndex[0]));
+                                "illegal oid in index: %" NETSNMP_PRIo "d\n",
+                                oidIndex[0]));
                         return SNMPERR_GENERR;  /* sub-identifier too large */
                     }
                     uitmp = uitmp + (oidIndex[i] << (8*(3-i)));
@@ -4001,7 +4008,9 @@ dump_realloc_oid_to_inetaddress(const int addr_type, const oid * objid, size_t o
                     (addr_type == IPV4Z && objidlen != 8))
                     return 2;
 
-                len = sprintf(p, "%lu.%lu.%lu.%lu", objid[0], objid[1], objid[2], objid[3]);
+                len = sprintf(p, "%" NETSNMP_PRIo "u.%" NETSNMP_PRIo "u."
+                              "%" NETSNMP_PRIo "u.%" NETSNMP_PRIo "u",
+                              objid[0], objid[1], objid[2], objid[3]);
                 p += len;
                 if (addr_type == IPV4Z) {
                     zc = (unsigned char*)&zone;
@@ -4024,7 +4033,7 @@ dump_realloc_oid_to_inetaddress(const int addr_type, const oid * objid, size_t o
 
                 len = 0;
                 for (i = 0; i < 16; i ++) {
-                    len = snprintf(p, 4, "%02lx:", objid[i]);
+                    len = snprintf(p, 4, "%02" NETSNMP_PRIo "x:", objid[i]);
                     p += len;
                 }
                 p-- ; /* do not include the last ':' */
@@ -4139,7 +4148,7 @@ _oid_finish_printing(const oid * objid, size_t objidlen,
     }
 
     while (objidlen-- > 0) {    /* output rest of name, uninterpreted */
-        sprintf(intbuf, "%lu.", *objid++);
+        sprintf(intbuf, "%" NETSNMP_PRIo "u.", *objid++);
         if (!*buf_overflow && !snmp_strcat(buf, buf_len, out_len,
                                            allow_realloc,
                                            (const u_char *) intbuf)) {
@@ -4427,7 +4436,7 @@ _get_realloc_symbol(const oid * objid, size_t objidlen,
                         *buf_overflow = 1;
                     }
                 } else {
-                    sprintf(intbuf, "%lu", *objid);
+                    sprintf(intbuf, "%" NETSNMP_PRIo "u", *objid);
                     if (!*buf_overflow
                         && !snmp_strcat(buf, buf_len, out_len,
                                         allow_realloc,
@@ -4436,7 +4445,7 @@ _get_realloc_symbol(const oid * objid, size_t objidlen,
                     }
                 }
             } else {
-                sprintf(intbuf, "%lu", *objid);
+                sprintf(intbuf, "%" NETSNMP_PRIo "u", *objid);
                 if (!*buf_overflow && !snmp_strcat(buf, buf_len, out_len,
                                                    allow_realloc,
                                                    (const u_char *)
@@ -4491,7 +4500,8 @@ _get_realloc_symbol(const oid * objid, size_t objidlen,
         case TYPE_IPADDR:
             if (objidlen < 4)
                 goto finish_it;
-            sprintf(intbuf, "%lu.%lu.%lu.%lu",
+            sprintf(intbuf, "%" NETSNMP_PRIo "u.%" NETSNMP_PRIo "u."
+                    "%" NETSNMP_PRIo "u.%" NETSNMP_PRIo "u",
                     objid[0], objid[1], objid[2], objid[3]);
             objid += 4;
             objidlen -= 4;
@@ -4506,7 +4516,7 @@ _get_realloc_symbol(const oid * objid, size_t objidlen,
                 oid             ntype = *objid++;
 
                 objidlen--;
-                sprintf(intbuf, "%lu.", ntype);
+                sprintf(intbuf, "%" NETSNMP_PRIo "u.", ntype);
                 if (!*buf_overflow && !snmp_strcat(buf, buf_len, out_len,
                                                    allow_realloc,
                                                    (const u_char *)
@@ -4515,7 +4525,8 @@ _get_realloc_symbol(const oid * objid, size_t objidlen,
                 }
 
                 if (ntype == 1 && objidlen >= 4) {
-                    sprintf(intbuf, "%lu.%lu.%lu.%lu",
+                    sprintf(intbuf, "%" NETSNMP_PRIo "u.%" NETSNMP_PRIo "u."
+                            "%" NETSNMP_PRIo "u.%" NETSNMP_PRIo "u",
                             objid[0], objid[1], objid[2], objid[3]);
                     if (!*buf_overflow
                         && !snmp_strcat(buf, buf_len, out_len,
@@ -4726,7 +4737,7 @@ sprint_realloc_description(u_char ** buf, size_t * buf_len,
             break;
     }
     while (objidlen > 1) {
-        sprintf(tmpbuf, " %lu", *objid);
+        sprintf(tmpbuf, " %" NETSNMP_PRIo "u", *objid);
         len = strlen(tmpbuf);
         if (pos + len + 2 > width) {
             if (!snmp_cstrcat(buf, buf_len, out_len, allow_realloc, "\n     "))
@@ -4739,7 +4750,7 @@ sprint_realloc_description(u_char ** buf, size_t * buf_len,
         objid++;
         objidlen--;
     }
-    sprintf(tmpbuf, " %lu }", *objid);
+    sprintf(tmpbuf, " %" NETSNMP_PRIo "u }", *objid);
     len = strlen(tmpbuf);
     if (pos + len + 2 > width) {
         if (!snmp_cstrcat(buf, buf_len, out_len, allow_realloc, "\n     "))
@@ -4868,11 +4879,30 @@ print_tree_node(u_char ** buf, size_t * buf_len,
             if (!snmp_cstrcat(buf, buf_len, out_len, allow_realloc, " ("))
                 return 0;
             while (rp) {
-                if (rp->low == rp->high)
-                    sprintf(str, "%s%d", (first ? "" : " | "), rp->low );
-                else
-                    sprintf(str, "%s%d..%d", (first ? "" : " | "),
-                                              rp->low, rp->high);
+                switch (tp->type) {
+                case TYPE_INTEGER:
+                case TYPE_INTEGER32:
+                    if (rp->low == rp->high)
+                        sprintf(str, "%s%d", (first ? "" : " | "), rp->low );
+                    else
+                        sprintf(str, "%s%d..%d", (first ? "" : " | "),
+                                rp->low, rp->high);
+                    break;
+                case TYPE_UNSIGNED32:
+                case TYPE_OCTETSTR:
+                case TYPE_GAUGE:
+                case TYPE_UINTEGER:
+                    if (rp->low == rp->high)
+                        sprintf(str, "%s%u", (first ? "" : " | "),
+                                (unsigned)rp->low );
+                    else
+                        sprintf(str, "%s%u..%u", (first ? "" : " | "),
+                                (unsigned)rp->low, (unsigned)rp->high);
+                    break;
+                default:
+                    /* No other range types allowed */
+                    break;
+                }
                 if (!snmp_cstrcat(buf, buf_len, out_len, allow_realloc, str))
                     return 0;
                 if (first)
@@ -5255,7 +5285,7 @@ _add_strings_to_oid(void *tp, char *cp,
         /*
          * Search for the appropriate child 
          */
-        if (isdigit(*cp)) {
+        if (isdigit((unsigned char)(*cp))) {
             subid = strtoul(cp, &ecp, 0);
             if (*ecp)
                 goto bad_id;
@@ -5312,7 +5342,7 @@ _add_strings_to_oid(void *tp, char *cp,
             cp2 = strchr(cp, '.');
             if (cp2)
                 *cp2++ = '\0';
-            if (isdigit(*cp)) {
+            if (isdigit((unsigned char)(*cp))) {
                 subid = strtoul(cp, &ecp, 0);
                 if (*ecp)
                     goto bad_id;
@@ -6198,7 +6228,7 @@ const char *parse_octet_hint(const char *hint, const char *value, unsigned char 
 	    if ('*' == *h) {
 		ph.repeat = 1;
 		state = HINT_2_3;
-	    } else if (isdigit(*h)) {
+	    } else if (isdigit((unsigned char)(*h))) {
 		parse_hints_length_add_digit(&ph, *h);
 		state = HINT_2_3;
 	    } else {
@@ -6207,7 +6237,7 @@ const char *parse_octet_hint(const char *hint, const char *value, unsigned char 
 	    break;
 
 	case HINT_2_3:
-	    if (isdigit(*h)) {
+	    if (isdigit((unsigned char)(*h))) {
 		parse_hints_length_add_digit(&ph, *h);
 		/* state = HINT_2_3 */
 	    } else if ('x' == *h || 'd' == *h || 'o' == *h || 'a' == *h) {
@@ -6225,7 +6255,7 @@ const char *parse_octet_hint(const char *hint, const char *value, unsigned char 
 		
 		ph.repeat = 1;
 		state = HINT_2_3;
-	    } else if (isdigit(*h)) {
+	    } else if (isdigit((unsigned char)(*h))) {
 		retval = parse_hints_parse(&ph, &v);
 		parse_hints_reset(&ph);
 		
@@ -6244,7 +6274,7 @@ const char *parse_octet_hint(const char *hint, const char *value, unsigned char 
 		
 		ph.repeat = 1;
 		state = HINT_2_3;
-	    } else if (isdigit(*h)) {
+	    } else if (isdigit((unsigned char)(*h))) {
 		retval = parse_hints_parse(&ph, &v);
 		parse_hints_reset(&ph);
 		

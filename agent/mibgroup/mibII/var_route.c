@@ -41,7 +41,7 @@ PERFORMANCE OF THIS SOFTWARE.
  * (schoenfr@ibr.cs.tu-bs.de) 1994/1995.
  * Linux additions taken from CMU to UCD stack by Jennifer Bray of Origin
  * (jbray@origin-at.co.uk) 1997
- * Support for system({CTL_NET,PF_ROUTE,...) by Simon Leinen
+ * Support for sysctl({CTL_NET,PF_ROUTE,...) by Simon Leinen
  * (simon@switch.ch) 1997
  */
 
@@ -431,7 +431,8 @@ var_ipRouteEntry(struct variable * vp,
      * IPADDR starts at offset 10.
      */
     register int    Save_Valid, result, RtIndex;
-    static int      saveNameLen = 0, saveExact = 0, saveRtIndex = 0;
+    static size_t   saveNameLen = 0;
+    static int      saveExact = 0, saveRtIndex = 0;
     static oid      saveName[MAX_OID_LEN], Current[MAX_OID_LEN];
     u_char         *cp;
     oid            *op;
@@ -1316,15 +1317,15 @@ Route_Scan_Reload(void)
     rtsize = 0;
 
     if (!(in = fopen("/proc/net/route", "r"))) {
-        snmp_log(LOG_ERR, "cannot open /proc/net/route - burps\n");
+        NETSNMP_LOGONCE((LOG_ERR, "cannot open /proc/net/route - burps\n"));
         return;
     }
 
     while (fgets(line, sizeof(line), in)) {
         struct rtentry  rtent;
         char            rtent_name[32];
-        int             refcnt, flags, metric;
-        unsigned        use;
+        int             refcnt, metric;
+        unsigned        flags, use;
 
         rt = &rtent;
         memset((char *) rt, (0), sizeof(*rt));
@@ -1335,18 +1336,15 @@ Route_Scan_Reload(void)
          * Iface Dest GW Flags RefCnt Use Metric Mask MTU Win IRTT
          * eth0 0A0A0A0A 00000000 05 0 0 0 FFFFFFFF 1500 0 0 
          */
-        if (8 != sscanf(line, "%s %x %x %x %u %d %d %x %*d %*d %*d\n",
+        if (8 != sscanf(line, "%s %x %x %x %d %u %d %x %*d %*d %*d\n",
                         rt->rt_dev,
-                        &(((struct sockaddr_in *) &(rtent.rt_dst))->
-                          sin_addr.s_addr),
-                        &(((struct sockaddr_in *) &(rtent.rt_gateway))->
-                          sin_addr.s_addr),
+                        &(((struct sockaddr_in *) &(rtent.rt_dst))->sin_addr.s_addr),
+                        &(((struct sockaddr_in *) &(rtent.rt_gateway))->sin_addr.s_addr),
                         /*
                          * XXX: fix type of the args 
                          */
                         &flags, &refcnt, &use, &metric,
-                        &(((struct sockaddr_in *) &(rtent.rt_genmask))->
-                          sin_addr.s_addr)))
+                        &(((struct sockaddr_in *) &(rtent.rt_genmask))->sin_addr.s_addr)))
             continue;
 
         strncpy(name, rt->rt_dev, sizeof(name));
@@ -1446,7 +1444,7 @@ qsort_compare(const void *v1, const void *v2)
 
 #endif                          /* solaris2 */
 
-#else                           /* WIN32 cygwin */
+#elif defined(HAVE_IPHLPAPI_H)  /* WIN32 cygwin */
 #include <iphlpapi.h>
 #ifndef MIB_IPPROTO_NETMGMT
 #define MIB_IPPROTO_NETMGMT 3

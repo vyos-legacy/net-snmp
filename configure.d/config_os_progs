@@ -40,6 +40,16 @@ AC_PROG_LN_S
 AC_PROG_MAKE_SET
 AC_PROG_SED
 
+AC_CHECK_PROGS([FILE], [file])
+if test x$ac_cv_prog_FILE = x; then
+  # The file program is not included in the default Cygwin setup, although
+  # this program is essential for libtool to work properly. It is nontrivial
+  # to deduce from the message printed by libtool that the 'file' tool is
+  # missing and libtool does not abort when the file program is not found. So
+  # stop now if the file program has not been found.
+  AC_MSG_ERROR([file program not found although it is needed by libtool.], [1])
+fi
+
 AC_CHECK_PROGS(FIND,   find)
 AC_CHECK_PROGS(WHOAMI, whoami logname, whoami)
 
@@ -64,6 +74,24 @@ fi
 MAKE=${MAKE-"make"}
 $MAKE -v -f /dev/null 2>/dev/null | $GREP GNU >/dev/null
 have_gnu_make=$?
+
+
+##
+#   The Perl function system() is used for running the Net-SNMP regression
+#   tests. Find out whether that function invokes a POSIX shell, which is
+#   necessary in order to run the regression tests. When using Windows + MSYS
+#   + ActiveState Perl, Perl's system() function does invoke Windows' cmd.exe
+#   which is not a POSIX shell.
+##
+
+AC_MSG_CHECKING([whether the Perl function system() invokes a POSIX shell])
+if test "x$PERLPROG" != 'x' && test -x "$PERLPROG" && test "x`$PERLPROG -e 'system('"'"'echo $OSTYPE'"'"');'`" != 'x$OSTYPE'; then
+    PERL_SYSTEM_INVOKES_POSIX_SHELL=yes
+else
+    PERL_SYSTEM_INVOKES_POSIX_SHELL=no
+fi
+AC_SUBST([PERL_SYSTEM_INVOKES_POSIX_SHELL])
+AC_MSG_RESULT([yes])
 
 
 ##
@@ -102,7 +130,7 @@ if test "x$developer" = "xyes" -a "x$GCC" = "xyes"; then
 
     #       WWWXXX - strict type checking
     #
-    DEVFLAGS="-Wall -Winline -Wstrict-prototypes -Wwrite-strings -Wcast-qual -Wno-char-subscripts"
+    DEVFLAGS="-Wall -Wstrict-prototypes -Wwrite-strings -Wcast-qual"
 else
     DEVFLAGS=""
 fi
@@ -158,6 +186,39 @@ changequote(, )
 PARTIALTARGETOS=`echo $target_os | sed 's/[-._].*//'`
 changequote([, ])
 AC_MSG_CACHE_ADD(Building for:               $PARTIALTARGETOS)
+
+
+#
+#    Whether or not Cygwin's ld recognizes the flag -no-undefined. 
+#
+
+case x$target_os in
+xcygwin*)
+  saved_LDFLAGS=$LDFLAGS
+
+  AC_MSG_CHECKING([whether the linker supports -no-undefined])
+  LDFLAGS="$saved_LDFLAGS -Wl,-no-undefined"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([],[])],
+                 [AC_MSG_RESULT([yes]); dnl
+                  LD_NO_UNDEFINED=-no-undefined],
+                 [AC_MSG_RESULT([no])])
+  
+  LDFLAGS="$saved_LDFLAGS"
+  ;;
+esac
+
+AC_SUBST(LD_NO_UNDEFINED)
+
+
+#
+#   Socket library: either 'default' (non-MinGW) or 'winsock2' (MinGW).
+#
+case x$target_os in
+  xmingw*)
+    with_socklib=winsock2;;
+  *)
+    with_socklib=default;;
+esac
 
 
 #   Check system define behaviour
@@ -298,7 +359,7 @@ esac
 #
     
 case $target_os in
-    aix4.2*|aix4.3*|aix5*|aix6*)
+    aix4.2*|aix4.3*|aix5*|aix6*|aix7*)
         #   Runtime linking flags                       (AIX)
         #
         AC_MSG_CHECKING([what linker flags to add to enable runtime linking on AIX])
@@ -321,7 +382,7 @@ case $target_os in
 	fi
 	;;
 
-    darwin8*|darwin9*)
+    darwin8*|darwin9*|darwin10*)
         #   Flat Namespace linking                      (Mac OS/X)
         #
         AC_MSG_CHECKING([whether darwin ld might need -flat_namespace])

@@ -153,7 +153,7 @@ _ipv6ScopeZoneIndexTable_initialize_interface
 
     /*
      * Define the minimum and maximum accessible columns.  This
-     * optimizes retrival. 
+     * optimizes retrieval. 
      */
     tbl_info->min_column = IPV6SCOPEZONEINDEXTABLE_MIN_COL;
     tbl_info->max_column = IPV6SCOPEZONEINDEXTABLE_MAX_COL;
@@ -552,7 +552,7 @@ _mfd_ipv6ScopeZoneIndexTable_post_request(netsnmp_mib_handler *handler,
                                           *agtreq_info,
                                           netsnmp_request_info *requests)
 {
-    ipv6ScopeZoneIndexTable_rowreq_ctx *rowreq_ctx =
+    ipv6ScopeZoneIndexTable_rowreq_ctx *rowreq_ctx = (ipv6ScopeZoneIndexTable_rowreq_ctx*)
         netsnmp_container_table_row_extract(requests);
     int             rc, packet_rc;
 
@@ -651,7 +651,7 @@ _mfd_ipv6ScopeZoneIndexTable_object_lookup(netsnmp_mib_handler *handler,
                                            netsnmp_request_info *requests)
 {
     int             rc = SNMP_ERR_NOERROR;
-    ipv6ScopeZoneIndexTable_rowreq_ctx *rowreq_ctx =
+    ipv6ScopeZoneIndexTable_rowreq_ctx *rowreq_ctx = (ipv6ScopeZoneIndexTable_rowreq_ctx*)
         netsnmp_container_table_row_extract(requests);
 
     DEBUGMSGTL(("internal:ipv6ScopeZoneIndexTable:_mfd_ipv6ScopeZoneIndexTable_object_lookup", "called\n"));
@@ -869,7 +869,7 @@ _mfd_ipv6ScopeZoneIndexTable_get_values(netsnmp_mib_handler *handler,
                                         *agtreq_info,
                                         netsnmp_request_info *requests)
 {
-    ipv6ScopeZoneIndexTable_rowreq_ctx *rowreq_ctx =
+    ipv6ScopeZoneIndexTable_rowreq_ctx *rowreq_ctx = (ipv6ScopeZoneIndexTable_rowreq_ctx*)
         netsnmp_container_table_row_extract(requests);
     netsnmp_table_request_info *tri;
     u_char         *old_string;
@@ -1021,10 +1021,14 @@ _ipv6ScopeZoneIndexTable_container_init
     if_ctx->cache->flags = NETSNMP_CACHE_DONT_INVALIDATE_ON_SET;
 
     ipv6ScopeZoneIndexTable_container_init(&if_ctx->container, if_ctx->cache);
-    if (NULL == if_ctx->container)
+    if (NULL == if_ctx->container) {
         if_ctx->container =
             netsnmp_container_find
             ("ipv6ScopeZoneIndexTable:table_container");
+        if (if_ctx->container)
+            if_ctx->container->container_name =
+                 strdup("ipv6ScopeZoneIndexTable");
+    }
     if (NULL == if_ctx->container) {
         snmp_log(LOG_ERR, "error creating container in "
                  "ipv6ScopeZoneIndexTable_container_init\n");
@@ -1075,7 +1079,7 @@ ipv6ScopeZoneIndexTable_row_find_by_mib_index
     if (MFD_SUCCESS != rc)
         return NULL;
 
-    rowreq_ctx =
+    rowreq_ctx = (ipv6ScopeZoneIndexTable_rowreq_ctx*)
         CONTAINER_FIND(ipv6ScopeZoneIndexTable_if_ctx.container, &oid_idx);
 
     return rowreq_ctx;

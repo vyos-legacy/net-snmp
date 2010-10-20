@@ -81,10 +81,15 @@ NETSNMP_ARG_WITH(rsaref,
 tryopenssl=defaultyes
 askedopenssl=no
 NETSNMP_ARG_WITH(openssl,
-[  --with-openssl=PATH             Look for openssl in PATH/lib.],
+[  --with-openssl=PATH             Look for openssl in PATH/lib,
+                                  or PATH may be "internal" to build with
+                                  minimal copied OpenSSL code for USM only.],
     if test "x$withval" = "xyes"; then
       tryopenssl=yes
       askedopenssl=yes
+    elif test "x$withval" = "xinternal"; then
+      tryopenssl=internal
+      askedopenssl=internal
     elif test "x$withval" = "xno"; then
       tryopenssl=no
     elif test -d "$withval"; then
@@ -321,8 +326,8 @@ NETSNMP_ARG_WITH(mibdirs,
 
 AC_ARG_WITH(mibs,
 [  --with-mibs="item1:item2:"    Default mib IDs to read.
-                                  (The default list is "IP-MIB:IF-MIB:
-                                  TCP-MIB:UDP-MIB:SNMPv2-MIB:RFC1213-MIB"
+                                  (The default list is
+                                   "SNMPv2-MIB:IF-MIB:IP-MIB:TCP-MIB:UDP-MIB"
                                   with the addition of any mibs used
                                   by the mib modules the agent is
                                   configured with)],

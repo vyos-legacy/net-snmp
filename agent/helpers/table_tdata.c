@@ -58,9 +58,17 @@ netsnmp_tdata_create_table(const char *name, long flags)
     if ( !table )
         return NULL;
 
+    table->flags = flags;
     if (name)
         table->name = strdup(name);
-    table->container = netsnmp_container_find( "table_container" );
+
+    if (!(table->flags & TDATA_FLAG_NO_CONTAINER)) {
+        table->container = netsnmp_container_find( name );
+        if (!table->container)
+            table->container = netsnmp_container_find( "table_container" );
+        if (table->container)
+            table->container->container_name = strdup(name);
+    }
     return table;
 }
 
@@ -215,7 +223,9 @@ netsnmp_tdata_add_row(netsnmp_tdata     *table,
     /*
      * add this row to the stored table
      */
-    CONTAINER_INSERT( table->container, row );
+    if (CONTAINER_INSERT( table->container, row ) != 0)
+        return SNMPERR_GENERR;
+
     DEBUGMSGTL(("tdata_add_row", "added row (%p)\n", row));
 
     return SNMPERR_SUCCESS;
@@ -317,9 +327,13 @@ _netsnmp_tdata_helper_handler(netsnmp_mib_handler *handler,
     netsnmp_request_info       *request;
     netsnmp_table_request_info *table_info;
     netsnmp_tdata_row          *row;
+    int                         need_processing = 1;
 
     switch ( reqinfo->mode ) {
     case MODE_GET:
+        need_processing = 0; /* only need processing if some vars found */
+        /** Fall through */
+
     case MODE_SET_RESERVE1:
 
         for (request = requests; request; request = request->next) {
@@ -327,10 +341,18 @@ _netsnmp_tdata_helper_handler(netsnmp_mib_handler *handler,
                 continue;
     
             table_info = netsnmp_extract_table_info(request);
-            if (!table_info)
-                continue;           /* ack */
-            row = netsnmp_container_table_row_extract( request );
-
+            if (!table_info) {
+                netsnmp_assert(table_info); /* yes, this will always hit */
+                netsnmp_set_request_error(reqinfo, request, SNMP_ERR_GENERR);
+                continue;           /* eek */
+            }
+            row = (netsnmp_tdata_row*)netsnmp_container_table_row_extract( request );
+            if (!row && (reqinfo->mode == MODE_GET)) {
+                netsnmp_assert(row); /* yes, this will always hit */
+                netsnmp_set_request_error(reqinfo, request, SNMP_ERR_GENERR);
+                continue;           /* eek */
+            }
+            ++need_processing;
             netsnmp_request_add_list_data(request,
                                       netsnmp_create_data_list(
                                           TABLE_TDATA_TABLE, table, NULL));
@@ -338,6 +360,9 @@ _netsnmp_tdata_helper_handler(netsnmp_mib_handler *handler,
                                       netsnmp_create_data_list(
                                           TABLE_TDATA_ROW,   row,   NULL));
         }
+        /** skip next handler if processing not needed */
+        if (!need_processing)
+            handler->flags |= MIB_HANDLER_AUTO_NEXT_OVERRIDE_ONCE;
     }
 
     /* next handler called automatically - 'AUTO_NEXT' */
@@ -375,8 +400,8 @@ netsnmp_tdata_extract_table(netsnmp_request_info *request)
 netsnmp_container *
 netsnmp_tdata_extract_container(netsnmp_request_info *request)
 {
-    netsnmp_tdata *tdata = netsnmp_request_get_list_data(request,
-                                                         TABLE_TDATA_TABLE);
+    netsnmp_tdata *tdata = (netsnmp_tdata*)
+        netsnmp_request_get_list_data(request, TABLE_TDATA_TABLE);
     return ( tdata ? tdata->container : NULL );
 }
 
@@ -408,6 +433,14 @@ netsnmp_insert_tdata_row(netsnmp_request_info *request,
     netsnmp_container_table_row_insert(request, (netsnmp_index *)row);
 }
 
+/** inserts a newly created tdata row into a request */
+NETSNMP_INLINE void
+netsnmp_remove_tdata_row(netsnmp_request_info *request,
+                         netsnmp_tdata_row *row)
+{
+    netsnmp_container_table_row_remove(request, (netsnmp_index *)row);
+}
+
 
 /* ==================================
  *
@@ -437,7 +470,7 @@ netsnmp_tdata_row *
 netsnmp_tdata_row_get(  netsnmp_tdata     *table,
                         netsnmp_tdata_row *row)
 {
-    return CONTAINER_FIND( table->container, row );
+    return (netsnmp_tdata_row*)CONTAINER_FIND( table->container, row );
 }
 
 /** returns the next row in the table */
@@ -472,7 +505,7 @@ netsnmp_tdata_row_get_byoid(netsnmp_tdata *table,
 
     index.oids = searchfor;
     index.len  = searchfor_len;
-    return CONTAINER_FIND( table->container, &index );
+    return (netsnmp_tdata_row*)CONTAINER_FIND( table->container, &index );
 }
 
 /** finds the lexically next row in the 'tdata' table
@@ -501,7 +534,7 @@ netsnmp_tdata_row_next_byoid(netsnmp_tdata *table,
 
     index.oids = searchfor;
     index.len  = searchfor_len;
-    return CONTAINER_NEXT( table->container, &index );
+    return (netsnmp_tdata_row*)CONTAINER_NEXT( table->container, &index );
 }
 
 int

@@ -43,7 +43,7 @@ _factory_free(void *dat, void *context)
     if (data->name != NULL) {
         DEBUGMSGTL(("container", "  _factory_free_list() called for %s\n",
                     data->name));
-	free((void *)data->name); /* SNMP_FREE wasted on object about to be freed */
+	free(NETSNMP_REMOVE_CONST(void *, data->name)); /* SNMP_FREE wasted on object about to be freed */
     }
     free(data); /* SNMP_FREE wasted on param */
 }
@@ -62,6 +62,7 @@ netsnmp_container_init_list(void)
      */
     containers = netsnmp_container_get_binary_array();
     containers->compare = netsnmp_compare_cstring;
+    containers->container_name = strdup("container list");
 
     /*
      * register containers
@@ -121,7 +122,7 @@ netsnmp_container_register_with_compare(const char* name, netsnmp_factory *f,
     if (NULL==containers)
         return -1;
 
-    tmp.name = (char *)name;
+    tmp.name = NETSNMP_REMOVE_CONST(char *, name);
     ct = (container_type *)CONTAINER_FIND(containers, &tmp);
     if (NULL!=ct) {
         DEBUGMSGT(("container_registry",
@@ -348,6 +349,20 @@ int CONTAINER_REMOVE(netsnmp_container *x, const void *k)
 }
 
 /*------------------------------------------------------------------
+ * These functions should EXACTLY match the function version in
+ * container.c. If you change one, change them both.
+ */
+netsnmp_container *CONTAINER_DUP(netsnmp_container *x, void *ctx, u_int flags)
+{
+    if (NULL == x->duplicate) {
+        snmp_log(LOG_ERR, "container '%s' does not support duplicate\n",
+                 x->container_name ? x->container_name : "");
+        return NULL;
+    }
+    return x->duplicate(x, ctx, flags);
+}
+
+/*------------------------------------------------------------------
  * These functions should EXACTLY match the inline version in
  * container.h. If you change one, change them both.
  */
@@ -360,17 +375,17 @@ int CONTAINER_FREE(netsnmp_container *x)
         x = x->next;
     while(x) {
         netsnmp_container *tmp;
-        const char *name;
+        char *name;
         tmp = x->prev;
         name = x->container_name;
-        if (NULL != x->container_name)
-            SNMP_FREE(x->container_name);
+        x->container_name = NULL;
         rc2 = x->cfree(x);
         if (rc2) {
             snmp_log(LOG_ERR,"error on subcontainer '%s' cfree (%d)\n",
                      name ? name : "", rc2);
             rc = rc2;
         }
+        SNMP_FREE(name);
         x = tmp;
     }
     return rc;
@@ -396,6 +411,16 @@ void CONTAINER_CLEAR(netsnmp_container *x, netsnmp_container_obj_func *f,
         x = x->prev;
     }
     x->clear(x, f, c);
+}
+
+/*
+ * clear all containers. When clearing the *first* container, and
+ * *only* the first container, call the free_item function for each item.
+ * After calling this function, all containers should be empty.
+ */
+void CONTAINER_FREE_ALL(netsnmp_container *x, void *c)
+{
+    CONTAINER_CLEAR(x, x->free_item, c);
 }
 
 /*------------------------------------------------------------------
@@ -446,6 +471,26 @@ netsnmp_init_container(netsnmp_container         *c,
     c->insert = ins;
     c->remove = rem;
     c->find = fnd;
+    c->free_item = netsnmp_container_simple_free;
+}
+
+int
+netsnmp_container_data_dup(netsnmp_container *dup, netsnmp_container *c)
+{
+    if (!dup || !c)
+        return -1;
+
+    if (c->container_name)
+        dup->container_name = strdup(c->container_name);
+    dup->compare = c->compare;
+    dup->ncompare = c->ncompare;
+    dup->release = c->release;
+    dup->insert_filter = c->insert_filter;
+    dup->free_item = c->free_item;
+    dup->sync = c->sync;
+    dup->flags = c->flags;
+
+    return 0;
 }
 
 /*------------------------------------------------------------------
@@ -541,6 +586,78 @@ netsnmp_compare_mem(const char * lhs, size_t lhs_len,
     }
 
     return rc;
+}
+
+typedef struct dummy_long_s {
+    long                      index;
+} dummy_long;
+
+int
+netsnmp_compare_long(const void * lhs, const void * rhs)
+{
+    const dummy_long *lhd = (const dummy_long*)lhs;
+    const dummy_long *rhd = (const dummy_long*)rhs;
+
+    if (lhd->index < rhd->index)
+        return -1;
+    else if (lhd->index > rhd->index)
+        return 1;
+
+    return 0;
+}
+
+typedef struct dummy_ulong_s {
+    u_long                      index;
+} dummy_ulong;
+
+int
+netsnmp_compare_ulong(const void * lhs, const void * rhs)
+{
+    const dummy_ulong *lhd = (const dummy_ulong*)lhs;
+    const dummy_ulong *rhd = (const dummy_ulong*)rhs;
+
+    if (lhd->index < rhd->index)
+        return -1;
+    else if (lhd->index > rhd->index)
+        return 1;
+
+    return 0;
+}
+
+typedef struct dummy_int32_s {
+    int32_t                    index;
+} dummy_int32;
+
+int
+netsnmp_compare_int32(const void * lhs, const void * rhs)
+{
+    const dummy_int32 *lhd = (const dummy_int32*)lhs;
+    const dummy_int32 *rhd = (const dummy_int32*)rhs;
+
+    if (lhd->index < rhd->index)
+        return -1;
+    else if (lhd->index > rhd->index)
+        return 1;
+
+    return 0;
+}
+
+typedef struct dummy_uint32_s {
+    uint32_t                   index;
+} dummy_uint32;
+
+int
+netsnmp_compare_uint32(const void * lhs, const void * rhs)
+{
+    const dummy_uint32 *lhd = (const dummy_uint32*)lhs;
+    const dummy_uint32 *rhd = (const dummy_uint32*)rhs;
+
+    if (lhd->index < rhd->index)
+        return -1;
+    else if (lhd->index > rhd->index)
+        return 1;
+
+    return 0;
 }
 
 /*------------------------------------------------------------------

@@ -18,15 +18,8 @@
 #include <sys/types.h>
 #include <stdio.h>
 #include <fcntl.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -93,7 +86,11 @@ register_string_index(oid * name, size_t name_len, char *cp)
     if (res == NULL) {
         return NULL;
     } else {
-        char           *rv = strdup(res->val.string);
+        char *rv = (char *)malloc(res->val_len + 1);
+        if (rv) {
+            memcpy(rv, res->val.string, res->val_len);
+            rv[res->val_len] = 0;
+        }
         free(res);
         return rv;
     }

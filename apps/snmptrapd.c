@@ -40,9 +40,7 @@ SOFTWARE.
 #if HAVE_SYS_WAIT_H
 #include <sys/wait.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#else
+#if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
 #if HAVE_SYS_SOCKIO_H
@@ -52,7 +50,7 @@ SOFTWARE.
 #include <netinet/in.h>
 #endif
 #include <stdio.h>
-#if HAVE_SYS_TIME_H
+#if !defined(mingw32) && defined(HAVE_SYS_TIME_H)
 # include <sys/time.h>
 # if TIME_WITH_SYS_TIME
 #  include <time.h>
@@ -104,6 +102,9 @@ SOFTWARE.
 #include "snmptrapd_auth.h"
 #include "notification-log-mib/notification_log.h"
 #include "mibII/vacm_conf.h"
+#ifdef NETSNMP_EMBEDDED_PERL
+#include "snmp_perl.h"
+#endif
 
 /*
  * Include winservice.h to support Windows Service
@@ -208,7 +209,7 @@ int Facility = LOG_DAEMON;
 #define SNMPTRAPD_STOPPED 0
 int             trapd_status = SNMPTRAPD_STOPPED;
 /* app_name_long used for SCM, registry etc */
-LPTSTR          app_name_long = _T("Net-SNMP Trap Handler");     /* Application Name */
+LPCTSTR         app_name_long = _T("Net-SNMP Trap Handler");     /* Application Name */
 #endif
 
 const char     *app_name = "snmptrapd";
@@ -249,7 +250,7 @@ usage(void)
     fprintf(stderr,
             "  -C\t\t\tdo not read the default configuration files\n");
     fprintf(stderr, "  -d\t\t\tdump sent and received SNMP packets\n");
-    fprintf(stderr, "  -D\t\t\tturn on debugging output\n");
+    fprintf(stderr, "  -D[TOKEN[,...]]\t\tturn on debugging output for the specified TOKENs\n\t\t\t   (ALL gives extremely verbose debugging output)\n");
     fprintf(stderr, "  -f\t\t\tdo not fork from the shell\n");
     fprintf(stderr,
             "  -F FORMAT\t\tuse specified format for logging to standard error\n");
@@ -525,15 +526,6 @@ parse_config_agentgroup(const char *token, char *cptr)
 #endif
 
 void
-parse_config_logOption(const char *token, char *cptr)
-{
-  int my_argc = 0 ;
-  char **my_argv = NULL;
-
-  snmp_log_options( cptr, my_argc, my_argv );
-}
-
-void
 parse_config_doNotFork(const char *token, char *cptr)
 {
   if (netsnmp_ds_parse_boolean(cptr) == 1)
@@ -596,9 +588,6 @@ main(int argc, char *argv[])
     int             agentx_subagent = 1;
 #endif
     netsnmp_trapd_handler *traph;
-#ifdef NETSNMP_EMBEDDED_PERL
-    extern void init_perl(void);
-#endif
 
 
 #ifndef WIN32
@@ -649,9 +638,6 @@ main(int argc, char *argv[])
                             parse_config_agentgroup, NULL, "groupid");
 #endif
     
-    register_config_handler("snmptrapd", "logOption",
-                            parse_config_logOption, NULL, "string");
-
     register_config_handler("snmptrapd", "doNotFork",
                             parse_config_doNotFork, NULL, "(1|yes|true|0|no|false)");
 
@@ -660,12 +646,6 @@ main(int argc, char *argv[])
 
     register_config_handler("snmptrapd", "outputOption",
                             parse_config_outputOption, NULL, "string");
-
-#ifdef WIN32
-    setvbuf(stdout, NULL, _IONBF, BUFSIZ);
-#else
-    setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
-#endif
 
     /*
      * Add some options if they are available.  
@@ -748,7 +728,7 @@ main(int argc, char *argv[])
                         *cp = ' ';
                 } else {
                     /* Old style: implicitly "print=format" */
-                    trap1_fmt_str_remember = malloc(strlen(optarg) + 7);
+                    trap1_fmt_str_remember = (char *)malloc(strlen(optarg) + 7);
                     sprintf( trap1_fmt_str_remember, "print %s", optarg );
                 }
             } else {
@@ -932,7 +912,7 @@ main(int argc, char *argv[])
         for (i = optind; i < argc; i++) {
             char *astring;
             if (listen_ports != NULL) {
-                astring = malloc(strlen(listen_ports) + 2 + strlen(argv[i]));
+                astring = (char *)malloc(strlen(listen_ports) + 2 + strlen(argv[i]));
                 if (astring == NULL) {
                     fprintf(stderr, "malloc failure processing argv[%d]\n", i);
                     exit(1);
@@ -1045,6 +1025,9 @@ main(int argc, char *argv[])
 #ifdef USING_AGENT_NSVACMACCESSTABLE_MODULE
         /* register net-snmp vacm extensions */
         init_register_nsVacm_context("snmptrapd");
+#endif
+#ifdef USING_TLSTM_MIB_SNMPTLSTMCERTTOTSNTABLE_MODULE
+        init_snmpTlstmCertToTSNTable_context("snmptrapd");
 #endif
     }
 #endif
@@ -1332,7 +1315,9 @@ void
 trapd_update_config(void)
 {
     free_config();
+#ifdef USING_MIBII_VACM_CONF_MODULE
     vacm_standard_views(0,0,NULL,NULL);
+#endif
     read_configs();
 }
 

@@ -32,7 +32,7 @@ config_exclude(host/hr_swrun)
 # else
     config_require(host/data_access/swrun_kvm_proc)
 # endif
-#elif defined( aix4 ) || defined( aix5 ) || defined( aix6 )
+#elif defined( aix4 ) || defined( aix5 ) || defined( aix6 ) || defined( aix7 )
     config_require(host/data_access/swrun_procinfo)
 /* Should really be #elif HAVE_KVM_GETPROCS */
 #elif defined(freebsd) || defined(openbsd) || defined(netbsd)
@@ -45,6 +45,9 @@ config_exclude(host/hr_swrun)
     config_warning(This platform does not yet support hrSWRunTable rewrites)
     config_require(host/data_access/swrun_null)
 #endif
+
+void init_swrun(void);
+void shutdown_swrun(void);
 
 netsnmp_cache     *netsnmp_swrun_cache(void);
 netsnmp_container *netsnmp_swrun_container(void);

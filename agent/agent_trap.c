@@ -34,11 +34,7 @@
 #include <strings.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -49,8 +45,6 @@
 #endif
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
-#elif HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>
@@ -79,36 +73,28 @@ struct trap_sink {
 
 struct trap_sink *sinks = NULL;
 
-extern struct timeval starttime;
-
-oid             objid_enterprisetrap[] = { NETSNMP_NOTIFICATION_MIB };
-oid             trap_version_id[] = { NETSNMP_SYSTEM_MIB };
-int             enterprisetrap_len;
-int             trap_version_id_len;
+const oid       objid_enterprisetrap[] = { NETSNMP_NOTIFICATION_MIB };
+const oid       trap_version_id[] = { NETSNMP_SYSTEM_MIB };
+const int       enterprisetrap_len = OID_LENGTH(objid_enterprisetrap);
+const int       trap_version_id_len = OID_LENGTH(trap_version_id);
 
 #define SNMPV2_TRAPS_PREFIX	SNMP_OID_SNMPMODULES,1,1,5
-oid             trap_prefix[]    = { SNMPV2_TRAPS_PREFIX };
-oid             cold_start_oid[] = { SNMPV2_TRAPS_PREFIX, 1 };  /* SNMPv2-MIB */
-oid             warm_start_oid[] = { SNMPV2_TRAPS_PREFIX, 2 };  /* SNMPv2-MIB */
-oid             link_down_oid[]  = { SNMPV2_TRAPS_PREFIX, 3 };  /* IF-MIB */
-oid             link_up_oid[]    = { SNMPV2_TRAPS_PREFIX, 4 };  /* IF-MIB */
-oid             auth_fail_oid[]  = { SNMPV2_TRAPS_PREFIX, 5 };  /* SNMPv2-MIB */
-oid             egp_xxx_oid[]    = { SNMPV2_TRAPS_PREFIX, 99 }; /* ??? */
+const oid       trap_prefix[]    = { SNMPV2_TRAPS_PREFIX };
+const oid       cold_start_oid[] = { SNMPV2_TRAPS_PREFIX, 1 };  /* SNMPv2-MIB */
 
 #define SNMPV2_TRAP_OBJS_PREFIX	SNMP_OID_SNMPMODULES,1,1,4
-oid             snmptrap_oid[] = { SNMPV2_TRAP_OBJS_PREFIX, 1, 0 };
-oid             snmptrapenterprise_oid[] =
-    { SNMPV2_TRAP_OBJS_PREFIX, 3, 0 };
-oid             sysuptime_oid[] = { SNMP_OID_MIB2, 1, 3, 0 };
-size_t          snmptrap_oid_len;
-size_t          snmptrapenterprise_oid_len;
-size_t          sysuptime_oid_len;
+const oid       snmptrap_oid[] = { SNMPV2_TRAP_OBJS_PREFIX, 1, 0 };
+const oid       snmptrapenterprise_oid[] = { SNMPV2_TRAP_OBJS_PREFIX, 3, 0 };
+const oid       sysuptime_oid[] = { SNMP_OID_MIB2, 1, 3, 0 };
+const size_t    snmptrap_oid_len = OID_LENGTH(snmptrap_oid);
+const size_t    snmptrapenterprise_oid_len = OID_LENGTH(snmptrapenterprise_oid);
+const size_t    sysuptime_oid_len = OID_LENGTH(sysuptime_oid);
 
 #define SNMPV2_COMM_OBJS_PREFIX	SNMP_OID_SNMPMODULES,18,1
-oid             agentaddr_oid[] = { SNMPV2_COMM_OBJS_PREFIX, 3, 0 };
-size_t          agentaddr_oid_len;
-oid             community_oid[] = { SNMPV2_COMM_OBJS_PREFIX, 4, 0 };
-size_t          community_oid_len;
+const oid       agentaddr_oid[] = { SNMPV2_COMM_OBJS_PREFIX, 3, 0 };
+const size_t    agentaddr_oid_len = OID_LENGTH(agentaddr_oid);
+const oid       community_oid[] = { SNMPV2_COMM_OBJS_PREFIX, 4, 0 };
+const size_t    community_oid_len = OID_LENGTH(community_oid);
 #if !defined(NETSNMP_DISABLE_SNMPV1) || !defined(NETSNMP_DISABLE_SNMPV2C)
 char           *snmp_trapcommunity = NULL;
 #endif
@@ -142,13 +128,6 @@ int             snmp_enableauthentrapsset = 0;
 void
 init_traps(void)
 {
-    enterprisetrap_len  = OID_LENGTH(objid_enterprisetrap);
-    trap_version_id_len = OID_LENGTH(trap_version_id);
-    snmptrap_oid_len    = OID_LENGTH(snmptrap_oid);
-    snmptrapenterprise_oid_len = OID_LENGTH(snmptrapenterprise_oid);
-    sysuptime_oid_len   = OID_LENGTH(sysuptime_oid);
-    agentaddr_oid_len   = OID_LENGTH(agentaddr_oid);
-    community_oid_len   = OID_LENGTH(community_oid);
 }
 
 static void
@@ -612,7 +591,7 @@ convert_v1pdu_to_v2( netsnmp_pdu* template_v1pdu )
  *			
  * @param specific is the specific trap value.
  *
- * @param enterprise is an enterprise oid in which you want to send specifc 
+ * @param enterprise is an enterprise oid in which you want to send specific 
  *	traps from. 
  *
  * @param enterprise_length is the length of the enterprise oid, use macro,
@@ -632,9 +611,9 @@ convert_v1pdu_to_v2( netsnmp_pdu* template_v1pdu )
  */
 int
 netsnmp_send_traps(int trap, int specific,
-                          oid * enterprise, int enterprise_length,
+                          const oid * enterprise, int enterprise_length,
                           netsnmp_variable_list * vars,
-                          char * context, int flags)
+                          const char * context, int flags)
 {
     netsnmp_pdu           *template_v1pdu;
     netsnmp_pdu           *template_v2pdu;
@@ -645,7 +624,7 @@ netsnmp_send_traps(int trap, int specific,
     u_long                 uptime;
     struct trap_sink *sink;
     const char            *v1trapaddress;
-    int                    res;
+    int                    res = 0;
 
     DEBUGMSGTL(( "trap", "send_trap %d %d ", trap, specific));
     DEBUGMSGOID(("trap", enterprise, enterprise_length));
@@ -727,7 +706,7 @@ netsnmp_send_traps(int trap, int specific,
                 !snmp_varlist_add_variable( &(template_v2pdu->variables),
                      snmptrapenterprise_oid, snmptrapenterprise_oid_len,
                      ASN_OBJECT_ID,
-                     (char*)enterprise, enterprise_length*sizeof(oid))) {
+                     enterprise, enterprise_length*sizeof(oid))) {
                 snmp_log(LOG_WARNING,
                      "send_trap: failed to add snmpEnterprise to v2 trap\n");
                 snmp_free_pdu(template_v2pdu);
@@ -800,7 +779,7 @@ netsnmp_send_traps(int trap, int specific,
      */
        pdu_in_addr_t = (in_addr_t *) template_v1pdu->agent_addr;
        v1trapaddress = netsnmp_ds_get_string(NETSNMP_DS_APPLICATION_ID,
-                                      NETSNMP_DS_AGENT_TRAP_ADDR);
+                                             NETSNMP_DS_AGENT_TRAP_ADDR);
        if (v1trapaddress != NULL) {
            /* "v1trapaddress" was specified in config, try to resolve it */
            res = netsnmp_gethostbyname_v4(v1trapaddress, pdu_in_addr_t);
@@ -857,7 +836,7 @@ netsnmp_send_traps(int trap, int specific,
 void
 send_enterprise_trap_vars(int trap,
                           int specific,
-                          oid * enterprise, int enterprise_length,
+                          const oid * enterprise, int enterprise_length,
                           netsnmp_variable_list * vars)
 {
     netsnmp_send_traps(trap, specific,
@@ -914,7 +893,6 @@ send_trap_to_sess(netsnmp_session * sess, netsnmp_pdu *template_pdu)
 {
     netsnmp_pdu    *pdu;
     int            result;
-    char           tmp[SPRINT_MAX_LEN];
     int            len;
 
 
@@ -947,10 +925,12 @@ send_trap_to_sess(netsnmp_session * sess, netsnmp_pdu *template_pdu)
     } else {
         if ((sess->version == SNMP_VERSION_3) &&
                 (pdu->command == SNMP_MSG_TRAP2) &&
-                (pdu->securityEngineIDLen == 0)) {
+                (sess->securityEngineIDLen == 0)) {
+            u_char          tmp[SPRINT_MAX_LEN];
+
             len = snmpv3_get_engineID(tmp, sizeof(tmp));
             memdup(&pdu->securityEngineID, tmp, len);
-            pdu->securityEngineIDLen = len;
+            sess->securityEngineIDLen = len;
         }
 
         result = snmp_send(sess, pdu);
@@ -978,7 +958,7 @@ send_trap_vars(int trap, int specific, netsnmp_variable_list * vars)
 
 /* Send a trap under a context */
 void send_trap_vars_with_context(int trap, int specific, 
-              netsnmp_variable_list *vars, char *context)
+              netsnmp_variable_list *vars, const char *context)
 {
     if (trap == SNMP_TRAP_ENTERPRISESPECIFIC)
         netsnmp_send_traps(trap, specific, objid_enterprisetrap,
@@ -1061,11 +1041,11 @@ send_v2trap(netsnmp_variable_list * vars)
  *
  * @see send_v2trap
  */
-void send_v3trap(netsnmp_variable_list *vars, char *context)
+void send_v3trap(netsnmp_variable_list *vars, const char *context)
 {
     netsnmp_send_traps(-1, -1, 
-					trap_version_id, OID_LENGTH(trap_version_id),
-                    vars, context, 0);
+                       trap_version_id, OID_LENGTH(trap_version_id),
+                       vars, context, 0);
 }
 
 void
@@ -1219,9 +1199,10 @@ trapOptProc(int argc, char *const *argv, int opt)
 void
 snmpd_parse_config_trapsess(const char *word, char *cptr)
 {
-    char           *argv[MAX_ARGS], *cp = cptr, tmp[SPRINT_MAX_LEN];
-    int             argn, arg;
+    char           *argv[MAX_ARGS], *cp = cptr;
+    int             argn, arg, rc;
     netsnmp_session session, *ss;
+    netsnmp_transport *transport;
     size_t          len;
 
     /*
@@ -1234,15 +1215,24 @@ snmpd_parse_config_trapsess(const char *word, char *cptr)
      */
     argv[0] = strdup("snmpd-trapsess"); /* bogus entry for getopt() */
     for (argn = 1; cp && argn < MAX_ARGS; argn++) {
+        char            tmp[SPRINT_MAX_LEN];
+
         cp = copy_nword(cp, tmp, SPRINT_MAX_LEN);
         argv[argn] = strdup(tmp);
     }
 
-    arg = snmp_parse_args(argn, argv, &session, "C:", trapOptProc);
+    arg = netsnmp_parse_args(argn, argv, &session, "C:", trapOptProc,
+                             NETSNMP_PARSE_ARGS_NOLOGGING |
+                             NETSNMP_PARSE_ARGS_NOZERO);
 
-    ss = snmp_add(&session,
-		  netsnmp_transport_open_client("snmptrap", session.peername),
-		  NULL, NULL);
+    transport = netsnmp_transport_open_client("snmptrap", session.peername);
+    if ((rc = netsnmp_sess_config_and_open_transport(&session, transport))
+        != SNMPERR_SUCCESS) {
+        session.s_snmp_errno = rc;
+        session.s_errno = 0;
+        return;
+    }
+    ss = snmp_add(&session, transport, NULL, NULL);
     for (; argn > 0; argn--) {
         free(argv[argn - 1]);
     }
@@ -1261,21 +1251,18 @@ snmpd_parse_config_trapsess(const char *word, char *cptr)
     if (ss->version == SNMP_VERSION_3 &&
         traptype != SNMP_MSG_INFORM   &&
         ss->securityEngineIDLen == 0) {
+            u_char          tmp[SPRINT_MAX_LEN];
+
             len = snmpv3_get_engineID( tmp, sizeof(tmp));
             memdup(&ss->securityEngineID, tmp, len);
             ss->securityEngineIDLen = len;
     }
 
 #ifndef NETSNMP_DISABLE_SNMPV1
-    if (ss->version == SNMP_VERSION_1) {
-        add_trap_session(ss, SNMP_MSG_TRAP, 0, SNMP_VERSION_1);
-    } else {
+    if (ss->version == SNMP_VERSION_1)
+        traptype = SNMP_MSG_TRAP;
 #endif
-        add_trap_session(ss, traptype, (traptype == SNMP_MSG_INFORM),
-                         ss->version);
-#ifndef NETSNMP_DISABLE_SNMPV1
-    }
-#endif
+    add_trap_session(ss, traptype, (traptype == SNMP_MSG_INFORM), ss->version);
 }
 
 #if !defined(NETSNMP_DISABLE_SNMPV1) || !defined(NETSNMP_DISABLE_SNMPV2C)

@@ -1,6 +1,6 @@
 /*
  * table_container.h
- * $Id: table_container.h 15786 2007-01-24 13:39:00Z dts12 $
+ * $Id: table_container.h 18463 2010-04-07 10:40:50Z rstory $
  */
 #ifndef _TABLE_CONTAINER_HANDLER_H_
 #define _TABLE_CONTAINER_HANDLER_H_
@@ -89,6 +89,8 @@ extern          "C" {
 
     void netsnmp_container_table_row_insert(netsnmp_request_info *request,
                                             netsnmp_index *row);
+    void netsnmp_container_table_row_remove(netsnmp_request_info *request,
+                                            netsnmp_index        *row);
 
 /* ===================================
  * Container Table API: Row operations

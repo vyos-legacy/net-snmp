@@ -1,7 +1,7 @@
 /*
  *  tcpConnTable MIB architecture support
  *
- * $Id: tcpConn_linux.c 17534 2009-04-23 06:41:55Z magfr $
+ * $Id: tcpConn_linux.c 18994 2010-06-16 13:13:25Z dts12 $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -60,7 +60,7 @@ netsnmp_arch_tcpconn_entry_copy(netsnmp_tcpconn_entry *lhs,
  * delete an entry
  */
 int
-netsnmp_arch_tcpconn_delete(netsnmp_tcpconn_entry *entry)
+netsnmp_arch_tcpconn_entry_delete(netsnmp_tcpconn_entry *entry)
 {
     if (NULL == entry)
         return -1;
@@ -134,10 +134,11 @@ _load4(netsnmp_container *container, u_int load_flags)
      */
     while (fgets(line, sizeof(line), in)) {
         netsnmp_tcpconn_entry *entry;
-        int             state, rc, local_port, remote_port, tmp_state;
+        int             rc;
+        unsigned int    state, local_port, remote_port, tmp_state;
         unsigned long long inode;
         size_t          buf_len, offset;
-        u_char          local_addr[10], remote_addr[10];
+        char            local_addr[10], remote_addr[10];
         u_char         *tmp_ptr;
 
         if (6 != (rc = sscanf(line, "%*d: %8[0-9A-Z]:%x %8[0-9A-Z]:%x %x %*x:%*x %*x:%*x %*x %*x %*x %llu",
@@ -290,7 +291,7 @@ _load6(netsnmp_container *container, u_int load_flags)
         int             state, rc, local_port, remote_port, tmp_state;
         unsigned long long  inode;
         size_t          buf_len, offset;
-        u_char          local_addr[48], remote_addr[48];
+        char            local_addr[48], remote_addr[48];
         u_char         *tmp_ptr;
 
         if (6 != (rc = sscanf(line, "%*d: %47[0-9A-Z]:%x %47[0-9A-Z]:%x %x %*x:%*x %*x:%*x %*x %*x %*x %llu",
@@ -337,7 +338,7 @@ _load6(netsnmp_container *container, u_int load_flags)
         entry->pid = netsnmp_get_pid_from_inode(inode);
 
         /** the addr string may need work */
-        buf_len = strlen((char*)local_addr);
+        buf_len = strlen(local_addr);
         if ((32 != buf_len) ||
             (-1 == netsnmp_addrstr_hton(local_addr, 32))) {
             DEBUGMSGT(("verbose:access:tcpconn:container",

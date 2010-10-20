@@ -18,11 +18,7 @@
 #include <errno.h>
 
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -57,8 +53,6 @@
 #include <sys/param.h>
 #endif
 #endif
-#elif HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_SYS_STREAM_H
 #   ifdef sysv5UnixWare7
@@ -107,9 +101,6 @@
 #include <net-snmp/agent/table_dataset.h>
 #include "agent_module_includes.h"
 #include "mib_module_includes.h"
-
-char            dontReadConfigFiles;
-char           *optconfigfile;
 
 #ifdef HAVE_UNISTD_H
 void
@@ -186,9 +177,9 @@ snmpd_set_agent_address(const char *token, char *cptr)
         /*
          * append to the older specification string 
          */
-        sprintf(buf, "%s,%s", ptr, cptr);
+        snprintf(buf, SPRINT_MAX_LEN, "%s,%s", ptr, cptr);
     } else {
-        strcpy(buf, cptr);
+        strncpy(buf, cptr, SPRINT_MAX_LEN);
     }
 
     DEBUGMSGTL(("snmpd_ports", "port spec: %s\n", buf));
@@ -297,6 +288,17 @@ snmpd_register_config_handler(const char *token,
     DEBUGMSGTL(("snmpd_register_app_config_handler",
                 "registering .conf token for \"%s\"\n", token));
     register_app_config_handler(token, parser, releaser, help);
+}
+
+void
+snmpd_register_const_config_handler(const char *token,
+                                    void (*parser) (const char *, const char *),
+                                    void (*releaser) (void), const char *help)
+{
+    DEBUGMSGTL(("snmpd_register_app_config_handler",
+                "registering .conf token for \"%s\"\n", token));
+    register_app_config_handler(token, (void(*)(const char *, char *))parser,
+                                releaser, help);
 }
 
 void

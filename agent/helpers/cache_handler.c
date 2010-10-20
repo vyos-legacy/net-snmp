@@ -10,16 +10,16 @@
  */
 #include <net-snmp/net-snmp-config.h>
 
-#include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
-
-#include <net-snmp/agent/cache_handler.h>
-
 #if HAVE_STRING_H
 #include <string.h>
 #else
 #include <strings.h>
 #endif
+
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+
+#include <net-snmp/agent/cache_handler.h>
 
 static netsnmp_cache  *cache_head = NULL;
 static int             cache_outstanding_valid = 0;
@@ -113,6 +113,9 @@ void            release_cached_resources(unsigned int regNo,
  *  @{
  */
 
+static void
+_cache_free( netsnmp_cache *cache );
+
 /** get cache head
  * @internal
  * unadvertised function to get cache head. You really should not
@@ -200,12 +203,46 @@ netsnmp_cache_free(netsnmp_cache *cache)
         }
     }
 
+    if(0 != cache->timer_id)
+        netsnmp_cache_timer_stop(cache);
+
+    if (cache->valid)
+        _cache_free(cache);
+
     if (cache->rootoid)
         free(cache->rootoid);
 
     free(cache);
 
     return SNMPERR_SUCCESS;
+}
+
+/** removes a cache
+ */
+int
+netsnmp_cache_remove(netsnmp_cache *cache)
+{
+    netsnmp_cache  *cur,*prev;
+
+    if (NULL == cache)
+        return -1;
+
+    if (cache == cache_head) {
+        cache_head = cache_head->next;
+        cache_head->prev = NULL;
+        return 0;
+    }
+
+    prev = cache_head;
+    cur = cache_head->next;
+    for (; cur; prev = cur, cur = cur->next) {
+        if (cache == cur) {
+            prev->next = cur->next;
+            cur->next->prev = cur->prev;
+            return 0;
+        }
+    }
+    return -1;
 }
 
 /** callback function to call cache load function */
@@ -356,7 +393,7 @@ netsnmp_register_cache_handler(netsnmp_handler_registration * reginfo,
 NETSNMP_STATIC_INLINE char *
 _build_cache_name(const char *name)
 {
-    char *dup = malloc(strlen(name) + strlen(CACHE_NAME) + 2);
+    char *dup = (char*)malloc(strlen(name) + strlen(CACHE_NAME) + 2);
     if (NULL == dup)
         return NULL;
     sprintf(dup, "%s:%s", CACHE_NAME, name);
@@ -387,7 +424,7 @@ netsnmp_cache_reqinfo_extract(netsnmp_agent_request_info * reqinfo,
 {
     netsnmp_cache  *result;
     char *cache_name = _build_cache_name(name);
-    result = netsnmp_agent_get_list_data(reqinfo, cache_name);
+    result = (netsnmp_cache*)netsnmp_agent_get_list_data(reqinfo, cache_name);
     SNMP_FREE(cache_name);
     return result;
 }

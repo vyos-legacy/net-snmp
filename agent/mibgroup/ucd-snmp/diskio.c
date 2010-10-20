@@ -51,10 +51,13 @@ static kstat_io_t kio;
 static int      cache_disknr = -1;
 #endif                          /* solaris2 */
 
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
 /*
  * handle disk statistics via libperfstat
  */
+#ifdef HAVE_SYS_PROTOSW_H
+#include <sys/protosw.h>
+#endif
 #include <libperfstat.h>
 static perfstat_disk_t *ps_disk;	/* storage for all disk values */
 static int ps_numdisks;			/* number of disks in system, may change while running */
@@ -104,7 +107,7 @@ void devla_getstats(unsigned int regno, void * dummy);
 static mach_port_t masterPort;		/* to communicate with I/O Kit	*/
 #endif                          /* darwin */
 
-void            diskio_parse_config(const char *, char *);
+static int      getstats(void);
 
 #if defined (freebsd4) || defined(freebsd5)
 void		devla_getstats(unsigned int regno, void *dummy);
@@ -158,7 +161,7 @@ init_diskio(void)
          var_diskio, 1, {5}},
         {DISKIO_WRITES, ASN_COUNTER, NETSNMP_OLDAPI_RONLY,
          var_diskio, 1, {6}},
-#if defined(freebsd4) || defined(freebsd5)
+#if defined(freebsd4) || defined(freebsd5) || defined(linux)
         {DISKIO_LA1, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
          var_diskio, 1, {9}},
         {DISKIO_LA5, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
@@ -207,7 +210,7 @@ init_diskio(void)
     IOMasterPort(bootstrap_port, &masterPort);
 #endif
 
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
     /*
      * initialize values to gather information on first request
      */
@@ -772,7 +775,8 @@ void devla_getstats(unsigned int regno, void * dummy) {
     }
 }
 
-int getstats(void)
+static int
+getstats(void)
 {
     FILE* parts;
     time_t now;
@@ -1156,7 +1160,7 @@ var_diskio(struct variable * vp,
 #endif                          /* darwin */
 
 
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
 /*
  * collect statistics for all disks
  */

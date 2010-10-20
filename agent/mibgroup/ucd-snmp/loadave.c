@@ -97,11 +97,7 @@
 #include <string.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -110,16 +106,16 @@
 #  include <time.h>
 # endif
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #ifdef dynix
 #include <sys/mc_vmparam.h>
 #endif
 #if defined(hpux10) || defined(hpux11)
 #include <sys/pstat.h>
 #endif
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
+#ifdef HAVE_SYS_PROTOSW_H
+#include <sys/protosw.h>
+#endif
 #include <libperfstat.h>
 #endif
 #if HAVE_SYS_SYSGET_H
@@ -135,7 +131,19 @@
 #include "util_funcs/header_simple_table.h"
 #include "kernel.h"
 
-double          maxload[3];
+static double maxload[3];
+static int laConfigSet = 0;
+
+static int
+loadave_store_config(int a, int b, void *c, void *d)
+{
+    char line[SNMP_MAXBUF_SMALL];
+    if (laConfigSet > 0) {
+        snprintf(line, SNMP_MAXBUF_SMALL, "pload %.02f %.02f %.02f", maxload[0], maxload[1], maxload[2]);
+        snmpd_store_config(line);
+    }
+    return SNMPERR_SUCCESS;
+}
 
 void
 init_loadave(void)
@@ -152,7 +160,7 @@ init_loadave(void)
          var_extensible_loadave, 1, {ERRORNAME}},
         {LOADAVE, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
          var_extensible_loadave, 1, {LOADAVE}},
-        {LOADMAXVAL, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+        {LOADMAXVAL, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
          var_extensible_loadave, 1, {LOADMAXVAL}},
         {LOADAVEINT, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
          var_extensible_loadave, 1, {LOADAVEINT}},
@@ -179,15 +187,47 @@ init_loadave(void)
     REGISTER_MIB("ucd-snmp/loadave", extensible_loadave_variables,
                  variable2, loadave_variables_oid);
 
+    laConfigSet = 0;
+
     snmpd_register_config_handler("load", loadave_parse_config,
                                   loadave_free_config,
                                   "max1 [max5] [max15]");
+
+    snmpd_register_config_handler("pload",
+                                  loadave_parse_config, NULL, NULL);
+
+
+    /*
+     * we need to be called back later
+     */
+    snmp_register_callback(SNMP_CALLBACK_LIBRARY, SNMP_CALLBACK_STORE_DATA,
+                                       loadave_store_config, NULL);
+
 }
 
 void
 loadave_parse_config(const char *token, char *cptr)
 {
     int             i;
+
+    if (strcmp(token, "pload") == 0) {
+        if (laConfigSet < 0) {
+            snmp_log(LOG_WARNING,
+                     "ignoring attempted override of read-only load\n");
+            return;
+        } else {
+            laConfigSet++;
+        }
+    } else {
+        if (laConfigSet > 0) {
+            snmp_log(LOG_WARNING,
+                     "ignoring attempted override of read-only load\n");
+            /*
+             * Fall through and copy in this value.
+             */
+        }
+        laConfigSet = -1;
+    }
 
     for (i = 0; i <= 2; i++) {
         if (cptr != NULL)
@@ -216,7 +256,12 @@ loadave_free_config(void)
 int
 try_getloadavg(double *r_ave, size_t s_ave)
 {
+#if defined(HAVE_GETLOADAVG) || defined(linux) || defined(ultrix) \
+    || defined(sun) || defined(__alpha) || defined(dynix) \
+    || !defined(cygwin) && defined(NETSNMP_CAN_USE_NLIST) \
+       && defined(LOADAVE_SYMBOL)
     double         *pave = r_ave;
+#endif
 #ifndef HAVE_GETLOADAVG
 #ifdef HAVE_SYS_FIXPOINT_H
     fix             favenrun[3];
@@ -230,7 +275,7 @@ try_getloadavg(double *r_ave, size_t s_ave)
 #define FIX_TO_DBL(_IN) (((double) _IN)/((double) FSCALE))
 #endif
 #endif
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
     int             favenrun[3];
     perfstat_cpu_total_t cs;
 #endif
@@ -250,7 +295,7 @@ try_getloadavg(double *r_ave, size_t s_ave)
     {
         FILE           *in = fopen("/proc/loadavg", "r");
         if (!in) {
-            snmp_log(LOG_ERR, "snmpd: cannot open /proc/loadavg\n");
+            NETSNMP_LOGONCE((LOG_ERR, "snmpd: cannot open /proc/loadavg\n"));
             return (-1);
         }
         fscanf(in, "%lf %lf %lf", pave, (pave + 1), (pave + 2));
@@ -268,7 +313,7 @@ try_getloadavg(double *r_ave, size_t s_ave)
     r_ave[0] = pst_buf.psd_avg_1_min;
     r_ave[1] = pst_buf.psd_avg_5_min;
     r_ave[2] = pst_buf.psd_avg_15_min;
-#elif defined(aix4) || defined(aix5) || defined(aix6)
+#elif defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
     if(perfstat_cpu_total((perfstat_id_t *)NULL, &cs, sizeof(perfstat_cpu_total_t), 1) > 0) {
         r_ave[0] = cs.loadavg[0] / 65536.0;
         r_ave[1] = cs.loadavg[1] / 65536.0;
@@ -309,6 +354,71 @@ try_getloadavg(double *r_ave, size_t s_ave)
     return 0;
 }
 
+static int
+write_laConfig(int action,
+                          u_char * var_val,
+                          u_char var_val_type,
+                          size_t var_val_len,
+                          u_char * statP, oid * name, size_t name_len)
+{
+    static double laConfig = 0;
+
+    switch (action) {
+    case RESERVE1: /* Check values for acceptability */
+        if (var_val_type != ASN_OCTET_STR) {
+            DEBUGMSGTL(("ucd-snmp/loadave",
+                        "write to laConfig not ASN_OCTET_STR\n"));
+            return SNMP_ERR_WRONGTYPE;
+        }
+        if (var_val_len > 8 || var_val_len <= 0) {
+            DEBUGMSGTL(("ucd-snmp/loadave",
+                        "write to laConfig: bad length\n"));
+            return SNMP_ERR_WRONGLENGTH;
+        }
+
+        if (laConfigSet < 0) {
+            /*
+             * The object is set in a read-only configuration file.
+             */
+            return SNMP_ERR_NOTWRITABLE;
+        }
+        break;
+
+    case RESERVE2: /* Allocate memory and similar resources */
+        {
+            u_char buf[8];
+            int old_errno = errno;
+            double val;
+            char *endp;
+
+            strncpy(buf, var_val, var_val_len);
+            buf[var_val_len] = '\0';
+            val = strtod(buf, &endp);
+
+            if (errno == ERANGE || *endp != '\0' || val < 0 || val > 65536.00) {
+                errno = old_errno;
+                DEBUGMSGTL(("ucd-snmp/loadave",
+                            "write to laConfig: invalid value\n"));
+                return SNMP_ERR_WRONGVALUE;
+            }
+
+            errno = old_errno;
+
+            laConfig = val;
+        }
+        break;
+
+    case COMMIT:
+        {
+            int idx = name[name_len - 1] - 1;
+            maxload[idx] = laConfig;
+            laConfigSet = 1;
+        }
+    }
+
+    return SNMP_ERR_NOERROR;
+}
+
 u_char         *
 var_extensible_loadave(struct variable * vp,
                        oid * name,
@@ -328,6 +438,10 @@ var_extensible_loadave(struct variable * vp,
     case MIBINDEX:
         long_ret = name[*length - 1];
         return ((u_char *) (&long_ret));
+    case LOADMAXVAL:
+        /* setup write method, but don't return yet */
+        *write_method = write_laConfig;
+        break;
     case ERRORNAME:
         sprintf(errmsg, "Load-%d", ((name[*length - 1] == 1) ? 1 :
                                     ((name[*length - 1] == 2) ? 5 : 15)));

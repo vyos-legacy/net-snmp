@@ -11,11 +11,7 @@
 #include <sys/types.h>
 
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -38,9 +34,6 @@
 #endif
 #if HAVE_UNISTD_H
 #include <unistd.h>
-#endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
@@ -230,6 +223,9 @@ snmpv3_secLevel_conf(const char *word, char *cptr)
 }
 
 
+NETSNMP_IMPORT int
+snmpv3_options(char *optarg, netsnmp_session * session, char **Apsz,
+               char **Xpsz, int argc, char *const *argv);
 int
 snmpv3_options(char *optarg, netsnmp_session * session, char **Apsz,
                char **Xpsz, int argc, char *const *argv)
@@ -246,7 +242,7 @@ snmpv3_options(char *optarg, netsnmp_session * session, char **Apsz,
     /*
      * and '.... "-3x value" ....'  (*with* the quotes)
      */
-    while (*optarg && isspace(*optarg)) {
+    while (*optarg && isspace((unsigned char)(*optarg))) {
         optarg++;
     }
     /*
@@ -1403,7 +1399,7 @@ init_snmpv3_post_config(int majorid, int minorid, void *serverarg,
     /*
      * if our engineID has changed at all, the boots record must be set to 1 
      */
-    if (engineIDLen != (int) oldEngineIDLength ||
+    if (engineIDLen != oldEngineIDLength ||
         oldEngineID == NULL || c_engineID == NULL ||
         memcmp(oldEngineID, c_engineID, engineIDLen) != 0) {
         engineBoots = 1;

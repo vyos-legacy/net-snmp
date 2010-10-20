@@ -67,7 +67,7 @@ struct netsnmp_tcpConnEntry_s {
 #define	TCPTABLE_IS_LINKED_LIST
 #else
 
-#if defined (WIN32) || defined (cygwin)
+#ifdef HAVE_IPHLPAPI_H
 #include <iphlpapi.h>
 #define	TCPTABLE_ENTRY_TYPE	MIB_TCPROW
 #define	TCPTABLE_STATE		dwState 
@@ -671,7 +671,7 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
 
     if (!(in = fopen("/proc/net/tcp", "r"))) {
         DEBUGMSGTL(("mibII/tcpTable", "Failed to load TCP Table (linux1)\n"));
-        snmp_log(LOG_ERR, "snmpd: cannot open /proc/net/tcp ...\n");
+        NETSNMP_LOGONCE((LOG_ERR, "snmpd: cannot open /proc/net/tcp ...\n"));
         return -1;
     }
 
@@ -684,10 +684,11 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
         struct inpcb    pcb, *nnew;
         static int      linux_states[12] =
             { 1, 5, 3, 4, 6, 7, 11, 1, 8, 9, 2, 10 };
-        int             state, lp, fp, uid;
+        unsigned int    lp, fp;
+        int             state, uid;
 
         if (6 != sscanf(line,
-                        "%*d: %x:%x %x:%x %x %*X:%*X %*X:%*X %*X %d",
+                        "%*d: %x:%x %x:%x %d %*X:%*X %*X:%*X %*X %d",
                         &pcb.inp_laddr.s_addr, &lp,
                         &pcb.inp_faddr.s_addr, &fp, &state, &uid))
             continue;

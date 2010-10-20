@@ -43,11 +43,7 @@ SOFTWARE.
 # include <netinet/in.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -60,9 +56,6 @@ SOFTWARE.
 #include <sys/select.h>
 #endif
 #include <stdio.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_NETDB_H
 #include <netdb.h>
 #endif
@@ -255,7 +248,8 @@ main(int argc, char *argv[])
     netsnmp_session session, *ss;
     int            total_entries = 0;
 
-    setvbuf(stdout, NULL, _IOLBF, 1024);
+    netsnmp_set_line_buffering(stdout);
+
     netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, 
                            NETSNMP_DS_LIB_QUICK_PRINT, 1);
 
@@ -263,9 +257,11 @@ main(int argc, char *argv[])
      * get the common command line arguments 
      */
     switch (snmp_parse_args(argc, argv, &session, "C:", optProc)) {
-    case -2:
+    case NETSNMP_PARSE_ARGS_ERROR:
+        exit(1);
+    case NETSNMP_PARSE_ARGS_SUCCESS_EXIT:
         exit(0);
-    case -1:
+    case NETSNMP_PARSE_ARGS_ERROR_USAGE:
         usage();
         exit(1);
     default:
@@ -397,7 +393,7 @@ print_table(void)
             printf("\nSNMP table %s, part %d\n\n", table_name, part);
         first_field = last_field;
         dp = data;
-        if (show_index && !no_headers && !column_width) {
+        if (show_index && !no_headers && !column_width && first_pass) {
             width = index_width;
             printf(index_fmt, "index");
         } else
@@ -666,7 +662,7 @@ get_table_entries(netsnmp_session * ss)
                     col++;
                     name[rootlen] = column[col].subid;
                     if ((vars->name_length < name_length) ||
-                        ((int) vars->name[rootlen] != column[col].subid) ||
+                        (vars->name[rootlen] != column[col].subid) ||
                         memcmp(name, vars->name,
                                name_length * sizeof(oid)) != 0
                         || vars->type == SNMP_ENDOFMIBVIEW) {
@@ -890,7 +886,14 @@ getbulk_table_entries(netsnmp_session * ss)
 					              NETSNMP_DS_LIB_OID_OUTPUT_FORMAT));
 			    exit(1);
                         }
-                        name_p = strchr(name_p, '.') + 1;
+                        name_p = strchr(name_p, '.');
+                        if ( name_p == NULL ) {
+                            /* The 'strchr' call above failed, i.e. the results
+                             * don't seem to include instance subidentifiers! */
+                            running = 0;
+                            break;
+                        }
+                        name_p++;  /* Move on to the instance identifier */
                     }
                     for (row = 0; row < entries; row++)
                         if (strcmp(name_p, indices[row]) == 0)

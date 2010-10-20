@@ -62,12 +62,12 @@ void shutdown_hw_fsys( void ) {
 /*
  *  Return the main fsys container
  */
-netsnmp_container *get_fsys_container( void ) { return _fsys_container; }
+netsnmp_container *netsnmp_fsys_get_container( void ) { return _fsys_container; }
 
 /*
  *  Return the main fsys cache control structure (if defined)
  */
-netsnmp_cache *get_fsys_cache( void ) { return _fsys_cache; }
+netsnmp_cache *netsnmp_fsys_get_cache( void ) { return _fsys_cache; }
 
 
 /*
@@ -86,6 +86,7 @@ _fsys_update_stats( unsigned int clientreg, void *data )
 int
 netsnmp_fsys_load( netsnmp_cache *cache, void *data )
 {
+    /* XXX - check cache timeliness */
     return _fsys_load();
 }
 
@@ -106,6 +107,8 @@ static int
 _fsys_load( void )
 {
     netsnmp_fsys_arch_load();
+    /* XXX - update cache timestamp */
+    return 0;
 }
 
 /*
@@ -168,7 +171,7 @@ netsnmp_fsys_by_path( char *path, int create_type )
      */
     sp = _fsys_create_entry();
     if ( sp ) {
-        strcpy( sp->path, path );
+        strncpy( sp->path, path, sizeof(sp->path) );
     }
     return sp;
 }
@@ -211,7 +214,7 @@ netsnmp_fsys_by_device( char *device, int create_type )
      */
     sp = _fsys_create_entry();
     if ( sp ) {
-        strcpy( sp->device, device );
+        strncpy( sp->device, device, sizeof(sp->device) );
     }
     return sp;
 }
@@ -245,7 +248,7 @@ _fsys_create_entry( void )
  *  Convert fsys size information to 1K units
  *    (attempting to avoid 32-bit overflow!)
  */
-unsigned int
+unsigned long long
 _fsys_to_K( int size, int units )
 {
     int factor = 1;
@@ -258,33 +261,53 @@ _fsys_to_K( int size, int units )
         return size/2;
     } else if ( units < 1024 ) {
         factor = 1024 / units;   /* Assuming power of two */
-        return (size * factor);
+        return (size / factor);
     } else {
         factor = units / 1024;   /* Assuming multiple of 1K */
-        return (size / factor);
+        return (size * factor);
     }
 }
 
-unsigned int
-netsnmp_fsys_size( netsnmp_fsys_info *f) {
+unsigned long long
+netsnmp_fsys_size_ull( netsnmp_fsys_info *f) {
     if ( !f ) {
         return 0;
     }
     return _fsys_to_K( f->size, f->units );
 }
 
-unsigned int
-netsnmp_fsys_used( netsnmp_fsys_info *f) {
+unsigned long long
+netsnmp_fsys_used_ull( netsnmp_fsys_info *f) {
     if ( !f ) {
         return 0;
     }
     return _fsys_to_K( f->used, f->units );
 }
 
-unsigned int
-netsnmp_fsys_avail( netsnmp_fsys_info *f) {
+unsigned long long
+netsnmp_fsys_avail_ull( netsnmp_fsys_info *f) {
     if ( !f ) {
         return 0;
     }
     return _fsys_to_K( f->avail, f->units );
 }
+
+
+int
+netsnmp_fsys_size( netsnmp_fsys_info *f) {
+    unsigned long long v = netsnmp_fsys_size_ull(f);
+    return (int)v;
+}
+
+int
+netsnmp_fsys_used( netsnmp_fsys_info *f) {
+    unsigned long long v = netsnmp_fsys_used_ull(f);
+    return (int)v;
+}
+
+int
+netsnmp_fsys_avail( netsnmp_fsys_info *f) {
+    unsigned long long v = netsnmp_fsys_avail_ull(f);
+    return (int)v;
+}
+

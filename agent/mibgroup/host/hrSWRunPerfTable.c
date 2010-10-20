@@ -18,6 +18,7 @@
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/data_access/swrun.h>
 #include "hrSWRunPerfTable.h"
+#include "data_access/swrun.h"
 
 #define MYTABLE "hrSWRunPerfTable"
 
@@ -43,8 +44,8 @@ initialize_table_hrSWRunPerfTable(void)
     size_t          hrSWRunPerfTable_oid_len =
         OID_LENGTH(hrSWRunPerfTable_oid);
     netsnmp_handler_registration *reg;
-    netsnmp_mib_handler *handler;
-    netsnmp_table_registration_info *table_info;
+    netsnmp_mib_handler *handler = NULL;
+    netsnmp_table_registration_info *table_info = NULL;
 
     reg =
         netsnmp_create_handler_registration("hrSWRunPerfTable",

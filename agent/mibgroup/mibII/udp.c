@@ -57,7 +57,10 @@
 #define UDP_STATS_CACHE_TIMEOUT	MIB_STATS_CACHE_TIMEOUT
 #endif
 
-#if defined(HAVE_LIBPERFSTAT_H) && (defined(aix4) || defined(aix5) || defined(aix6)) && !defined(FIRST_PROTOCOL)
+#if defined(HAVE_LIBPERFSTAT_H) && (defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)) && !defined(FIRST_PROTOCOL)
+#ifdef HAVE_SYS_PROTOSW_H
+#include <sys/protosw.h>
+#endif
 #include <libperfstat.h>
 #ifdef FIRST_PROTOCOL
 perfstat_protocol_t ps_proto;
@@ -149,7 +152,7 @@ init_udp(void)
 #define USES_SNMP_DESIGNED_UDPSTAT
 #endif
 
-#ifdef WIN32
+#ifdef HAVE_IPHLPAPI_H
 #include <iphlpapi.h>
 #define UDP_STAT_STRUCTURE MIB_UDPSTATS
 #endif

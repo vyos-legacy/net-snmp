@@ -22,9 +22,6 @@
 #if HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
@@ -41,7 +38,7 @@
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
-#if HAVE_SYS_TIME_H
+#if !defined(mingw32) && defined(HAVE_SYS_TIME_H)
 #include <sys/time.h>
 #endif
 
@@ -112,7 +109,7 @@ static int _lock;
 #endif
 
 NETSNMP_STATIC_INLINE int
-_callback_lock(int major, int minor, const char* warn, int assert)
+_callback_lock(int major, int minor, const char* warn, int do_assert)
 {
     int lock_holded=0;
     struct timeval lock_time = { 0, 1000 };
@@ -136,7 +133,7 @@ _callback_lock(int major, int minor, const char* warn, int assert)
         if (NULL != warn)
             snmp_log(LOG_WARNING,
                      "lock in _callback_lock sleeps more than 100 milliseconds in %s\n", warn);
-        if (assert)
+        if (do_assert)
             netsnmp_assert(lock_holded < 100);
         
         return 1;

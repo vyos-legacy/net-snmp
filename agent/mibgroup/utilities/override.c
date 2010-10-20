@@ -32,7 +32,7 @@ override_handler(netsnmp_mib_handler *handler,
                  netsnmp_request_info *requests)
 {
 
-    override_data  *data = handler->myvoid;
+    override_data  *data = (override_data*)handler->myvoid;
     void *tmpptr;
 
     if (!data) {
@@ -112,7 +112,7 @@ netsnmp_parse_override(const char *token, char *line)
     char            buf[SNMP_MAXBUF], namebuf[SNMP_MAXBUF];
     int             readwrite = 0;
     oid             oidbuf[MAX_OID_LEN];
-    size_t          oidbuf_len = sizeof(oidbuf);
+    size_t          oidbuf_len = MAX_OID_LEN;
     int             type;
     override_data  *thedata;
     netsnmp_handler_registration *the_reg;
@@ -203,7 +203,7 @@ netsnmp_parse_override(const char *token, char *line)
              * hex 
              */
             thedata->value_len =
-                hex_to_binary2(buf + 2, strlen(buf) - 2,
+                hex_to_binary2((u_char *)(buf + 2), strlen(buf) - 2,
                                (char **) &thedata->value);
         } else {
             thedata->value = strdup(buf);

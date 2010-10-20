@@ -26,11 +26,7 @@
 #endif
 #include <sys/types.h>
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -44,10 +40,6 @@
 #endif
 #if HAVE_ARPA_INET_H
 #include <arpa/inet.h>
-#endif
-
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 
 #include <net-snmp/net-snmp-includes.h>
@@ -704,7 +696,7 @@ _agentx_realloc_build(u_char ** buf, size_t * buf_len, size_t * out_len,
 	 * pdu->community and pdu->community_len fields, respectively. */
 	if (pdu->contextName != NULL && pdu->community == NULL)
 	{	
-		pdu->community     = strdup(pdu->contextName);
+		pdu->community     = (u_char *) strdup(pdu->contextName);
 		pdu->community_len = pdu->contextNameLen;
 		pdu->flags |= AGENTX_MSG_FLAG_NON_DEFAULT_CONTEXT;
 	}
@@ -1116,13 +1108,14 @@ agentx_parse_oid(u_char * data, size_t * length, int *inc,
 {
     u_int           n_subid;
     u_int           prefix;
+    u_int           tmp_oid_len;
     int             i;
     int             int_offset;
     u_int          *int_ptr = (u_int *)oid_buf;
     u_char         *buf_ptr = data;
 
     if (*length < 4) {
-        DEBUGMSGTL(("agentx", "Incomplete Object ID"));
+        DEBUGMSGTL(("agentx", "Incomplete Object ID\n"));
         return NULL;
     }
 
@@ -1155,10 +1148,7 @@ agentx_parse_oid(u_char * data, size_t * length, int *inc,
         /*
          * Null OID 
          */
-        *int_ptr = 0;
-        int_ptr++;
-        *int_ptr = 0;
-        int_ptr++;
+        memset(int_ptr, 0, 2 * sizeof(oid));
         *oid_len = 2;
         DEBUGPRINTINDENT("dumpv_recv");
         DEBUGMSG(("dumpv_recv", "OID: NULL (0.0)\n"));
@@ -1166,6 +1156,14 @@ agentx_parse_oid(u_char * data, size_t * length, int *inc,
         return buf_ptr;
     }
 
+    /*
+     * Check that the expanded OID will fit in the buffer provided
+     */
+    tmp_oid_len = (prefix ? n_subid + 5 : n_subid);
+    if (*oid_len < tmp_oid_len) {
+        DEBUGMSGTL(("agentx", "Oversized Object ID\n"));
+        return NULL;
+    }
 
 #ifdef WORDS_BIGENDIAN
 # define endianoff 1
@@ -1173,7 +1171,7 @@ agentx_parse_oid(u_char * data, size_t * length, int *inc,
 # define endianoff 0
 #endif
     if (*length < 4 * n_subid) {
-        DEBUGMSGTL(("agentx", "Incomplete Object ID"));
+        DEBUGMSGTL(("agentx", "Incomplete Object ID\n"));
         return NULL;
     }
 
@@ -1210,7 +1208,7 @@ agentx_parse_oid(u_char * data, size_t * length, int *inc,
         *length -= 4;
     }
 
-    *oid_len = (prefix ? n_subid + 5 : n_subid);
+    *oid_len = tmp_oid_len;
 
     DEBUGINDENTLESS();
     DEBUGPRINTINDENT("dumpv_recv");
@@ -1231,19 +1229,19 @@ agentx_parse_string(u_char * data, size_t * length,
     u_int           len;
 
     if (*length < 4) {
-        DEBUGMSGTL(("agentx", "Incomplete string (too short: %d)",
+        DEBUGMSGTL(("agentx", "Incomplete string (too short: %d)\n",
                     (int)*length));
         return NULL;
     }
 
     len = agentx_parse_int(data, network_byte_order);
     if (*length < len + 4) {
-        DEBUGMSGTL(("agentx", "Incomplete string (still too short: %d)",
+        DEBUGMSGTL(("agentx", "Incomplete string (still too short: %d)\n",
                     (int)*length));
         return NULL;
     }
     if (len > *str_len) {
-        DEBUGMSGTL(("agentx", "String too long (too long)"));
+        DEBUGMSGTL(("agentx", "String too long (too long)\n"));
         return NULL;
     }
     memmove(string, data + 4, len);
@@ -1616,7 +1614,7 @@ agentx_parse(netsnmp_session * session, netsnmp_pdu *pdu, u_char * data,
 		 * need to copy the context into the PDU's context fields.  */
 		if (pdu->community_len > 0 && pdu->contextName == NULL)
 		{
-			pdu->contextName    = strdup(pdu->community);
+			pdu->contextName    = strdup((char *) pdu->community);
 			pdu->contextNameLen = pdu->community_len;
 		}
 
@@ -1924,7 +1922,7 @@ testit(netsnmp_pdu *pdu1)
      */
     len1 = BUFSIZ;
     if (agentx_build(&sess, pdu1, packet1, &len1) < 0) {
-        DEBUGMSGTL(("agentx", "First build failed"));
+        DEBUGMSGTL(("agentx", "First build failed\n"));
         exit(1);
     }
 

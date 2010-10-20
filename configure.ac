@@ -10,10 +10,10 @@
 #
 # Process this file with autoconf to produce a configure script.
 #
-AC_INIT([Net-SNMP], [5.5], [net-snmp-coders@lists.sourceforge.net])
+AC_INIT([Net-SNMP], [5.6], [net-snmp-coders@lists.sourceforge.net])
 AC_PREREQ([2.63])
 AC_CONFIG_SRCDIR([agent/mibgroup/ucd-snmp/extensible.c])
-AC_REVISION([$Revision: 17765 $])
+AC_REVISION([$Revision: 19396 $])
 
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADER(include/net-snmp/net-snmp-config.h)
@@ -42,21 +42,27 @@ AC_SUBST(CONFIGURE_OPTIONS)
 #     checks for system services
 
 m4_include([configure.d/config_project_with_enable])
+m4_include([configure.d/config_project_manual])
 m4_include([configure.d/config_os_progs])
 m4_include([configure.d/config_project_paths])
+m4_include([configure.d/config_os_headers])
+AC_CACHE_SAVE
 m4_include([configure.d/config_project_ipv6_types])
 m4_include([configure.d/config_modules_lib])
+AC_CACHE_SAVE
 m4_include([configure.d/config_modules_agent])
 m4_include([configure.d/config_os_misc1])
 m4_include([configure.d/config_os_libs])
+AC_CACHE_SAVE
 m4_include([configure.d/config_project_perl_python])
-m4_include([configure.d/config_os_headers])
 m4_include([configure.d/config_os_misc2])
 m4_include([configure.d/config_project_types])
 m4_include([configure.d/config_os_misc3])
+AC_CACHE_SAVE
 m4_include([configure.d/config_os_functions])
 m4_include([configure.d/config_os_struct_members])
 m4_include([configure.d/config_os_misc4])
+AC_CACHE_SAVE
 
 #
 # define the agent libraries variables
@@ -66,9 +72,10 @@ AC_SUBST(AGENTLIBS)
 AC_SUBST(OTHERAGENTLIBOBJS)
 AC_SUBST(OTHERAGENTLIBLOBJS)
 
-m4_include([configure.d/config_project_manual])
-
 AC_SUBST(DLLIBS)
+
+AC_SUBST(PARTIALTARGETFLAGS)
+AC_SUBST(ac_cv_NETSNMP_SYSTEM_INCLUDE_FILE)
 
 AC_CONFIG_FILES([Makefile:Makefile.top:Makefile.in:Makefile.rules])
 AC_CONFIG_FILES([snmplib/Makefile:Makefile.top:snmplib/Makefile.in:Makefile.rules:snmplib/Makefile.depend])
@@ -85,6 +92,7 @@ AC_CONFIG_FILES([net-snmp-config:net-snmp-config.in],
 		[chmod +x net-snmp-config])
 AC_CONFIG_FILES([net-snmp-create-v3-user:net-snmp-create-v3-user.in],
 		[chmod +x net-snmp-create-v3-user])
+AC_CONFIG_FILES([dist/generation-scripts/gen-variables:dist/generation-scripts/gen-variables.in])
 
 AC_CONFIG_COMMANDS([default], echo timestamp > stamp-h)
 

@@ -1,7 +1,7 @@
 /*
  *  ipSystemStatsTable and ipIfStatsTable interface MIB architecture support
  *
- * $Id: systemstats_linux.c 17689 2009-07-16 12:38:15Z jsafranek $
+ * $Id: systemstats_linux.c 18483 2010-04-08 10:55:42Z jsafranek $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -116,7 +116,7 @@ _systemstats_v4(netsnmp_container* container, u_int load_flags)
     if (!(devin = fopen("/proc/net/snmp", "r"))) {
         DEBUGMSGTL(("access:systemstats",
                     "Failed to load Systemstats Table (linux1)\n"));
-        snmp_log(LOG_ERR, "cannot open /proc/net/snmp ...\n");
+        NETSNMP_LOGONCE((LOG_ERR, "cannot open /proc/net/snmp ...\n"));
         return -2;
     }
 
@@ -160,7 +160,8 @@ _systemstats_v4(netsnmp_container* container, u_int load_flags)
         while (*stats == ' ') /* skip spaces before stats */
             stats++;
 
-        entry = netsnmp_access_systemstats_entry_create(1, 0);
+        entry = netsnmp_access_systemstats_entry_create(1, 0,
+                    "ipSystemStatsTable.ipv4");
         if(NULL == entry) {
             netsnmp_access_systemstats_container_free(container,
                                                       NETSNMP_ACCESS_SYSTEMSTATS_FREE_NOFLAGS);
@@ -275,6 +276,7 @@ _additional_systemstats_v4(netsnmp_systemstats_entry* entry,
     if (!(devin = fopen("/proc/net/netstat", "r"))) {
         DEBUGMSGTL(("access:systemstats",
                     "cannot open /proc/net/netstat\n"));
+        NETSNMP_LOGONCE((LOG_ERR,"cannot open /proc/net/netstat\n"));
         return -2;
     }
 
@@ -530,10 +532,10 @@ _systemstats_v6_load_systemstats(netsnmp_container* container, u_int load_flags)
     FILE *devin;
     netsnmp_systemstats_entry *entry = NULL;
     const char     *filename = "/proc/net/snmp6";
-    static int      warned_open = 0;
     int rc = 0;
     
-    entry = netsnmp_access_systemstats_entry_create(2, 0);
+    entry = netsnmp_access_systemstats_entry_create(2, 0,
+            "ipSystemStatsTable.ipv6");
     if(NULL == entry)
         return -3;
     
@@ -544,10 +546,7 @@ _systemstats_v6_load_systemstats(netsnmp_container* container, u_int load_flags)
     if (!(devin = fopen(filename, "r"))) {
         DEBUGMSGTL(("access:systemstats",
                     "Failed to load Systemstats Table (linux1)\n"));
-        if(!warned_open) {
-            ++warned_open;
-            snmp_log(LOG_ERR, "cannot open %s ...\n", filename);
-        }
+        NETSNMP_LOGONCE((LOG_ERR, "cannot open %s ...\n", filename));
         free(entry);
         return 0;
     }
@@ -644,7 +643,8 @@ _systemstats_v6_load_ifstats(netsnmp_container* container, u_int load_flags)
             scan_val = strtoull(scan_str, NULL, 0);
         }
         
-        entry = netsnmp_access_systemstats_entry_create(2, scan_val);
+        entry = netsnmp_access_systemstats_entry_create(2, scan_val,
+                "ipIfStatsTable.ipv6");
         if(NULL == entry) {
             fclose(devin);
             closedir(dev_snmp6_dir);

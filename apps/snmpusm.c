@@ -36,11 +36,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -52,9 +48,6 @@
 #if HAVE_SYS_SELECT_H
 #include <sys/select.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_NETDB_H
 #include <netdb.h>
 #endif
@@ -62,9 +55,9 @@
 #include <arpa/inet.h>
 #endif
 
-#ifdef HAVE_OPENSSL_DH_H
+#if defined(HAVE_OPENSSL_DH_H) && defined(HAVE_LIBCRYPTO)
 #include <openssl/dh.h>
-#endif
+#endif /* HAVE_OPENSSL_DH_H && HAVE_LIBCRYPTO */
 
 #include <net-snmp/net-snmp-includes.h>
 
@@ -112,9 +105,11 @@ usmUserPublic[MAX_OID_LEN] = {1, 3, 6, 1, 6, 3, 15, 1, 2, 2, 1, 11},
 usmUserStatus[MAX_OID_LEN] = {1, 3, 6, 1, 6, 3, 15, 1, 2, 2, 1, 13},
 /* diffie helman change key objects */
 usmDHUserAuthKeyChange[MAX_OID_LEN] = {1, 3, 6, 1, 3, 101, 1, 1, 2, 1, 1 },
-usmDHUserOwnAuthKeyChange[MAX_OID_LEN] = {1, 3, 6, 1, 3, 101, 1, 1, 2, 1, 2 },
 usmDHUserPrivKeyChange[MAX_OID_LEN] = {1, 3, 6, 1, 3, 101, 1, 1, 2, 1, 3 },
+#if defined(HAVE_OPENSSL_DH_H) && defined(HAVE_LIBCRYPTO)
+usmDHUserOwnAuthKeyChange[MAX_OID_LEN] = {1, 3, 6, 1, 3, 101, 1, 1, 2, 1, 2 },
 usmDHUserOwnPrivKeyChange[MAX_OID_LEN] = {1, 3, 6, 1, 3, 101, 1, 1, 2, 1, 4 },
+#endif /* HAVE_OPENSSL_DH_H && HAVE_LIBCRYPTO */
 usmDHParameters[] = { 1,3,6,1,3,101,1,1,1,0 }
 ;
 size_t usmDHParameters_len = OID_LENGTH(usmDHParameters);
@@ -127,6 +122,7 @@ int             doauthkey = 0, doprivkey = 0, uselocalizedkey = 0;
 size_t          usmUserEngineIDLen = 0;
 u_char         *usmUserEngineID = NULL;
 char           *usmUserPublic_val = NULL;
+int             docreateandwait = 0;
 
 
 void
@@ -137,19 +133,21 @@ usage(void)
     fprintf(stderr, " COMMAND\n\n");
     snmp_parse_args_descriptions(stderr);
     fprintf(stderr, "\nsnmpusm commands:\n");
-    fprintf(stderr, "  [options] create     USER [CLONEFROM-USER]\n");
-    fprintf(stderr, "  [options] delete     USER\n");
-    fprintf(stderr, "  [options] cloneFrom  USER CLONEFROM-USER\n");
-    fprintf(stderr, "  [options] activate   USER\n");
-    fprintf(stderr, "  [options] deactivate USER\n");
-    fprintf(stderr, "  [options] [-Ca] [-Cx] changekey [USER]\n");
+    fprintf(stderr, "  [options]               create     USER [CLONEFROM-USER]\n");
+    fprintf(stderr, "  [options]               delete     USER\n");
+    fprintf(stderr, "  [options]               activate   USER\n");
+    fprintf(stderr, "  [options]               deactivate USER\n");
+    fprintf(stderr, "  [options] [-Cw]         cloneFrom  USER CLONEFROM-USER\n");
+    fprintf(stderr, "  [options] [-Ca] [-Cx]   changekey  [USER]\n");
     fprintf(stderr,
-            "  [options] [-Ca] [-Cx] passwd OLD-PASSPHRASE NEW-PASSPHRASE [USER]\n");
+            "  [options] [-Ca] [-Cx]   passwd     OLD-PASSPHRASE NEW-PASSPHRASE [USER]\n");
     fprintf(stderr,
-            "  [options] (-Ca|-Cx) -Ck passwd OLD-KEY-OR-PASSPHRASE NEW-KEY-OR-PASSPHRASE [USER]\n");
+            "  [options] (-Ca|-Cx) -Ck passwd     OLD-KEY-OR-PASS NEW-KEY-OR-PASS [USER]\n");
     fprintf(stderr, "\nsnmpusm options:\n");
     fprintf(stderr, "\t-CE ENGINE-ID\tSet usmUserEngineID (e.g. 800000020109840301).\n");
     fprintf(stderr, "\t-Cp STRING\tSet usmUserPublic value to STRING.\n");
+    fprintf(stderr, "\t-Cw\t\tCreate the user with createAndWait.\n");
+    fprintf(stderr, "\t\t\t(it won't be active until you active it)\n");
     fprintf(stderr, "\t-Cx\t\tChange the privacy key.\n");
     fprintf(stderr, "\t-Ca\t\tChange the authentication key.\n");
     fprintf(stderr, "\t-Ck\t\tAllows to use localized key (must start with 0x)\n");
@@ -195,7 +193,6 @@ get_USM_DH_key(netsnmp_variable_list *vars, netsnmp_variable_list *dhvar,
     BIGNUM *other_pub;
     u_char *key;
     size_t key_len;
-    unsigned char *cp;
             
     dhkeychange = (u_char *) malloc(2 * vars->val_len * sizeof(char));
     if (!dhkeychange)
@@ -203,9 +200,10 @@ get_USM_DH_key(netsnmp_variable_list *vars, netsnmp_variable_list *dhvar,
     
     memcpy(dhkeychange, vars->val.string, vars->val_len);
 
-    cp = dhvar->val.string;
-    dh = d2i_DHparams(NULL, (const unsigned char **) &cp,
-                      dhvar->val_len);
+    {
+        const unsigned char *cp = dhvar->val.string;
+        dh = d2i_DHparams(NULL, &cp, dhvar->val_len);
+    }
 
     if (!dh || !dh->g || !dh->p) {
         SNMP_FREE(dhkeychange);
@@ -218,7 +216,7 @@ get_USM_DH_key(netsnmp_variable_list *vars, netsnmp_variable_list *dhvar,
         return SNMPERR_GENERR;
     }
             
-    if (vars->val_len != BN_num_bytes(dh->pub_key)) {
+    if (vars->val_len != (unsigned int)BN_num_bytes(dh->pub_key)) {
         SNMP_FREE(dhkeychange);
         fprintf(stderr,"incorrect diffie-helman lengths (%lu != %d)\n",
                 (unsigned long)vars->val_len, BN_num_bytes(dh->pub_key));
@@ -251,7 +249,7 @@ get_USM_DH_key(netsnmp_variable_list *vars, netsnmp_variable_list *dhvar,
 
         printf("new %s key: 0x", keyname);
         for(kp = key + key_len - outkey_len;
-            kp - key < key_len;  kp++) {
+            kp - key < (int)key_len;  kp++) {
             printf("%02x", (unsigned char) *kp);
         }
         printf("\n");
@@ -296,6 +294,10 @@ optProc(int argc, char *const *argv, int opt)
                     exit(1);
                 }
                 optind++;
+                break;
+
+            case 'w':
+                docreateandwait = 1;
                 break;
 
 	    case 'E': {
@@ -380,9 +382,11 @@ main(int argc, char *argv[])
      * get the common command line arguments 
      */
     switch (arg = snmp_parse_args(argc, argv, &session, "C:", optProc)) {
-    case -2:
+    case NETSNMP_PARSE_ARGS_ERROR:
+        exit(1);
+    case NETSNMP_PARSE_ARGS_SUCCESS_EXIT:
         exit(0);
-    case -1:
+    case NETSNMP_PARSE_ARGS_ERROR_USAGE:
         usage();
         exit(1);
     default:
@@ -708,7 +712,11 @@ main(int argc, char *argv[])
              */
             setup_oid(usmUserStatus, &name_length,
                       usmUserEngineID, usmUserEngineIDLen, argv[arg-1]);
-            longvar = RS_CREATEANDGO;
+            if (docreateandwait) {
+                longvar = RS_CREATEANDWAIT;
+            } else {
+                longvar = RS_CREATEANDGO;
+            }
             snmp_pdu_add_variable(pdu, usmUserStatus, name_length,
                                   ASN_INTEGER, (u_char *) & longvar,
                                   sizeof(longvar));
@@ -948,7 +956,7 @@ main(int argc, char *argv[])
             vars = vars->next_variable;
         }
         /* snmp_free_pdu(dhresponse); */ /* parts still in use somewhere */
-#endif /* HAVE_OPENSSL_DH_H */
+#endif /* HAVE_OPENSSL_DH_H && HAVE_LIBCRYPTO */
     } else {
         fprintf(stderr, "Unknown command\n");
         usage();
@@ -1004,7 +1012,9 @@ main(int argc, char *argv[])
         exitval = 1;
     }
 
+#if defined(HAVE_OPENSSL_DH_H) && defined(HAVE_LIBCRYPTO)
   begone:
+#endif /* HAVE_OPENSSL_DH_H && HAVE_LIBCRYPTO */
     if (response)
         snmp_free_pdu(response);
     snmp_close(ss);

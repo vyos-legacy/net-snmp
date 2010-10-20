@@ -60,11 +60,7 @@ SOFTWARE.
 #endif
 
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -80,9 +76,6 @@ SOFTWARE.
 #include <netinet/in.h>
 #endif
 
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
@@ -165,6 +158,10 @@ SOFTWARE.
 #include <grp.h>
 #endif
 
+#if HAVE_LIMITS_H
+#include <limits.h>
+#endif
+
 #include <net-snmp/types.h>
 #include <net-snmp/output_api.h>
 #include <net-snmp/utilities.h>
@@ -183,6 +180,7 @@ SOFTWARE.
 # define LOOPBACK    0x7f000001
 #endif
 
+#if defined(HAVE_FORK)
 static void
 _daemon_prep(int stderr_log)
 {
@@ -207,6 +205,7 @@ _daemon_prep(int stderr_log)
     dup(0);
     dup(0);
 }
+#endif
 
 /**
  * fork current process into the background.
@@ -320,204 +319,6 @@ netsnmp_daemonize(int quit_immediately, int stderr_log)
  * ********************************************* 
  */
 #ifdef							WIN32
-#	define WIN32_LEAN_AND_MEAN
-#	define WIN32IO_IS_STDIO
-#	define PATHLEN	1024
-
-#	include <tchar.h>
-#	include <windows.h>
-
-/*
- * MinGW defines WIN32, but has working dirent stuff.
- */
-#ifndef HAVE_DIRENT_H 
-
-/*
- * The idea here is to read all the directory names into a string table
- * * (separated by nulls) and when one of the other dir functions is called
- * * return the pointer to the current file name.
- */
-DIR            *
-opendir(const char *filename)
-{
-    DIR            *p;
-    long            len;
-    long            idx;
-    char            scannamespc[PATHLEN];
-    char           *scanname = scannamespc;
-    struct stat     sbuf;
-    WIN32_FIND_DATA FindData;
-    HANDLE          fh;
-
-    /*
-     * check to see if filename is a directory 
-     */
-    if ((stat(filename, &sbuf) < 0) || ((sbuf.st_mode & S_IFDIR) == 0)) {
-        return NULL;
-    }
-
-    /*
-     * get the file system characteristics 
-     */
-    /*
-     * if(GetFullPathName(filename, SNMP_MAXPATH, root, &dummy)) {
-     * *    if(dummy = strchr(root, '\\'))
-     * *        *++dummy = '\0';
-     * *    if(GetVolumeInformation(root, volname, SNMP_MAXPATH, &serial,
-     * *                            &maxname, &flags, 0, 0)) {
-     * *        downcase = !(flags & FS_CASE_IS_PRESERVED);
-     * *    }
-     * *  }
-     * *  else {
-     * *    downcase = TRUE;
-     * *  }
-     */
-
-    /*
-     * Create the search pattern 
-     */
-    strcpy(scanname, filename);
-
-    if (strchr("/\\", *(scanname + strlen(scanname) - 1)) == NULL)
-        strcat(scanname, "/*");
-    else
-        strcat(scanname, "*");
-
-    /*
-     * do the FindFirstFile call 
-     */
-    fh = FindFirstFile(scanname, &FindData);
-    if (fh == INVALID_HANDLE_VALUE) {
-        return NULL;
-    }
-
-    /*
-     * Get us a DIR structure 
-     */
-    p = (DIR *) malloc(sizeof(DIR));
-    /*
-     * Newz(1303, p, 1, DIR); 
-     */
-    if (p == NULL)
-        return NULL;
-
-    /*
-     * now allocate the first part of the string table for
-     * * the filenames that we find.
-     */
-    idx = strlen(FindData.cFileName) + 1;
-    p->start = (char *) malloc(idx);
-    /*
-     * New(1304, p->start, idx, char);
-     */
-    if (p->start == NULL) {
-        free(p);
-        return NULL;
-    }
-    strcpy(p->start, FindData.cFileName);
-    /*
-     * if(downcase)
-     * *    strlwr(p->start);
-     */
-    p->nfiles = 0;
-
-    /*
-     * loop finding all the files that match the wildcard
-     * * (which should be all of them in this directory!).
-     * * the variable idx should point one past the null terminator
-     * * of the previous string found.
-     */
-    while (FindNextFile(fh, &FindData)) {
-        len = strlen(FindData.cFileName);
-        /*
-         * bump the string table size by enough for the
-         * * new name and it's null terminator
-         */
-        p->start = (char *) realloc((void *) p->start, idx + len + 1);
-        /*
-         * Renew(p->start, idx+len+1, char);
-         */
-        if (p->start == NULL) {
-            free(p);
-            return NULL;
-        }
-        strcpy(&p->start[idx], FindData.cFileName);
-        /*
-         * if (downcase) 
-         * *        strlwr(&p->start[idx]);
-         */
-        p->nfiles++;
-        idx += len + 1;
-    }
-    FindClose(fh);
-    p->size = idx;
-    p->curr = p->start;
-    return p;
-}
-
-
-/*
- * Readdir just returns the current string pointer and bumps the
- * * string pointer to the nDllExport entry.
- */
-struct direct  *
-readdir(DIR * dirp)
-{
-    int             len;
-    static int      dummy = 0;
-
-    if (dirp->curr) {
-        /*
-         * first set up the structure to return 
-         */
-        len = strlen(dirp->curr);
-        strcpy(dirp->dirstr.d_name, dirp->curr);
-        dirp->dirstr.d_namlen = len;
-
-        /*
-         * Fake an inode 
-         */
-        dirp->dirstr.d_ino = dummy++;
-
-        /*
-         * Now set up for the nDllExport call to readdir 
-         */
-        dirp->curr += len + 1;
-        if (dirp->curr >= (dirp->start + dirp->size)) {
-            dirp->curr = NULL;
-        }
-
-        return &(dirp->dirstr);
-    } else
-        return NULL;
-}
-
-/*
- * free the memory allocated by opendir 
- */
-int
-closedir(DIR * dirp)
-{
-    free(dirp->start);
-    free(dirp);
-    return 1;
-}
-#endif /* HAVE_DIRENT_H */
-
-#ifndef HAVE_GETTIMEOFDAY
-
-int
-gettimeofday(struct timeval *tv, struct timezone *tz)
-{
-    struct _timeb   timebuffer;
-
-    _ftime(&timebuffer);
-    tv->tv_usec = timebuffer.millitm * 1000;
-    tv->tv_sec = timebuffer.time;
-    return (0);
-}
-#endif                          /* !HAVE_GETTIMEOFDAY */
-
 in_addr_t
 get_myaddr(void)
 {
@@ -816,7 +617,7 @@ get_boottime(void)
 long
 get_uptime(void)
 {
-#if !defined(solaris2) && !defined(linux) && !defined(cygwin) && !defined(aix4) && !defined(aix5) && !defined(aix6)
+#if !defined(solaris2) && !defined(linux) && !defined(cygwin) && !defined(aix4) && !defined(aix5) && !defined(aix6) && !defined(aix7)
     struct timeval  now;
     long            boottime_csecs, nowtime_csecs;
 
@@ -829,7 +630,7 @@ get_uptime(void)
     return (nowtime_csecs - boottime_csecs);
 #endif
 
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
     struct nlist nl;
     int kmem;
     time_t lbolt;
@@ -1059,7 +860,7 @@ setenv(const char *name, const char *value, int overwrite)
 
 /* returns centiseconds */
 int
-calculate_time_diff(struct timeval *now, struct timeval *then)
+calculate_time_diff(const struct timeval *now, const struct timeval *then)
 {
     struct timeval  tmp, diff;
     memcpy(&tmp, now, sizeof(struct timeval));
@@ -1076,7 +877,7 @@ calculate_time_diff(struct timeval *now, struct timeval *then)
 
 /* returns diff in rounded seconds */
 u_int
-calculate_sectime_diff(struct timeval *now, struct timeval *then)
+calculate_sectime_diff(const struct timeval *now, const struct timeval *then)
 {
     struct timeval  tmp, diff;
     memcpy(&tmp, now, sizeof(struct timeval));
@@ -1084,7 +885,7 @@ calculate_sectime_diff(struct timeval *now, struct timeval *then)
     tmp.tv_usec += 1000000L;
     diff.tv_sec = tmp.tv_sec - then->tv_sec;
     diff.tv_usec = tmp.tv_usec - then->tv_usec;
-    if (diff.tv_usec > 1000000L) {
+    if (diff.tv_usec >= 1000000L) {
         diff.tv_usec -= 1000000L;
         diff.tv_sec++;
     }
@@ -1119,7 +920,7 @@ strcasestr(const char *haystack, const char *needle)
                     /*
                      * printf("\nfound '%s' in '%s'\n", needle, cx); 
                      */
-                    return (char *) cx;
+                    return NETSNMP_REMOVE_CONST(char *, cx);
                 }
                 if (!*cp1)
                     break;
@@ -1142,7 +943,7 @@ strcasestr(const char *haystack, const char *needle)
      * printf("\n"); 
      */
     if (cp1 && *cp1)
-        return (char *) cp1;
+        return NETSNMP_REMOVE_CONST(char *, cp1);
 
     return NULL;
 }
@@ -1230,7 +1031,11 @@ mkdirhier(const char *pathname, mode_t mode, int skiplast)
 const char     *
 netsnmp_mktemp(void)
 {
-    static char     name[32];
+#ifdef PATH_MAX
+    static char     name[PATH_MAX];
+#else
+    static char     name[256];
+#endif
     int             fd = -1;
 
     strcpy(name, get_temp_file_pattern());
@@ -1239,14 +1044,13 @@ netsnmp_mktemp(void)
 #else
     if (mktemp(name)) {
 # ifndef WIN32
-        fd = open(name, O_CREAT | O_EXCL | O_WRONLY);
+        fd = open(name, O_CREAT | O_EXCL | O_WRONLY, S_IRUSR | S_IWUSR);
 # else
         /*
          * Win32 needs _S_IREAD | _S_IWRITE to set permissions on file
          * after closing
          */
-        fd = _open(name, _O_CREAT,
-                   _S_IREAD | _S_IWRITE | _O_EXCL | _O_WRONLY);
+        fd = _open(name, _O_CREAT | _O_EXCL | _O_WRONLY, _S_IREAD | _S_IWRITE);
 # endif
     }
 #endif
@@ -1321,7 +1125,7 @@ netsnmp_os_kernel_width(void)
   } else {
     return -1;
   }
-#elif defined(aix4) || defined(aix5) || defined(aix6)
+#elif defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
   return (__KERNEL_32() ? 32 : (__KERNEL_64() ? 64 : -1));
 #elif defined(osf4) || defined(osf5) || defined(__alpha)
   return 64; /* Alpha is always 64bit */

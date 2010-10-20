@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: interface_linux.c 17596 2009-05-06 21:59:20Z nba $
+ * $Id: interface_linux.c 18886 2010-05-27 11:19:06Z jsafranek $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -69,10 +69,12 @@ typedef __u8 u8;           /* ditto */
 #endif  /* HAVE_PTHREAD_H && HAVE_LINUX_RTNETLINK_H */
 #endif  /* NETSNMP_ENABLE_IPV6 */
 unsigned long long
-netsnmp_linux_interface_get_if_speed(int fd, const char *name);
+netsnmp_linux_interface_get_if_speed(int fd, const char *name,
+        unsigned long long defaultspeed);
 #ifdef HAVE_LINUX_ETHTOOL_H
 unsigned long long
-netsnmp_linux_interface_get_if_speed_mii(int fd, const char *name);
+netsnmp_linux_interface_get_if_speed_mii(int fd, const char *name,
+        unsigned long long defaultspeed);
 #endif
 
 #define PROC_SYS_NET_IPVx_NEIGH_RETRANS_TIME_MS "/proc/sys/net/ipv%d/neigh/%s/retrans_time_ms"
@@ -531,16 +533,15 @@ _parse_stats(netsnmp_interface_entry *entry, char *stats, int expected)
      * subtract out multicast packets from rec_pkt before
      * we store it as unicast counter.
      */
-    rec_pkt -= rec_mcast;
-
+    entry->ns_flags |= NETSNMP_INTERFACE_FLAGS_CALCULATE_UCAST;
     entry->stats.ibytes.low = rec_oct & 0xffffffff;
-    entry->stats.iucast.low = rec_pkt & 0xffffffff;
+    entry->stats.iall.low = rec_pkt & 0xffffffff;
     entry->stats.imcast.low = rec_mcast & 0xffffffff;
     entry->stats.obytes.low = snd_oct & 0xffffffff;
     entry->stats.oucast.low = snd_pkt & 0xffffffff;
 #ifdef SCNuMAX   /* XXX - should be flag for 64-bit variables */
     entry->stats.ibytes.high = rec_oct >> 32;
-    entry->stats.iucast.high = rec_pkt >> 32;
+    entry->stats.iall.high = rec_pkt >> 32;
     entry->stats.imcast.high = rec_mcast >> 32;
     entry->stats.obytes.high = snd_oct >> 32;
     entry->stats.oucast.high = snd_pkt >> 32;
@@ -595,7 +596,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
     if (!(devin = fopen("/proc/net/dev", "r"))) {
         DEBUGMSGTL(("access:interface",
                     "Failed to load Interface Table (linux1)\n"));
-        snmp_log(LOG_ERR, "cannot open /proc/net/dev ...\n");
+        NETSNMP_LOGONCE((LOG_ERR, "cannot open /proc/net/dev ...\n"));
         return -2;
     }
 
@@ -663,8 +664,8 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
         }
         if ((scan_expected == 10) && ((stats - line) < 6)) {
             snmp_log(LOG_ERR,
-                     "interface data format error 2 (%ld < 6), line ==|%s|\n",
-                     stats - line, line);
+                     "interface data format error 2 (%d < 6), line ==|%s|\n",
+                     (int)(stats - line), line);
         }
 
         DEBUGMSGTL(("9:access:ifcontainer", "processing '%s'\n", ifstart));
@@ -801,7 +802,17 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
         }
 
         if (IANAIFTYPE_ETHERNETCSMACD == entry->type) {
-            unsigned long long speed = netsnmp_linux_interface_get_if_speed(fd, entry->name);
+            unsigned long long speed;
+            unsigned long long defaultspeed = NOMINAL_LINK_SPEED;
+            if (!(entry->os_flags & IFF_RUNNING)) {
+                /*
+                 * use speed 0 if the if speed cannot be determined *and* the
+                 * interface is down
+                 */
+                defaultspeed = 0;
+            }
+            speed = netsnmp_linux_interface_get_if_speed(fd,
+                    entry->name, defaultspeed);
             if (speed > 0xffffffffL) {
                 entry->speed = 0xffffffff;
             } else
@@ -896,7 +907,8 @@ netsnmp_arch_set_admin_status(netsnmp_interface_entry * entry,
  * Determines network interface speed from ETHTOOL_GSET
  */
 unsigned long long
-netsnmp_linux_interface_get_if_speed(int fd, const char *name)
+netsnmp_linux_interface_get_if_speed(int fd, const char *name,
+            unsigned long long defaultspeed)
 {
     struct ifreq ifr;
     struct ethtool_cmd edata;
@@ -912,7 +924,7 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name)
     if (ioctl(fd, SIOCETHTOOL, &ifr) == -1) {
         DEBUGMSGTL(("mibII/interfaces", "ETHTOOL_GSET on %s failed\n",
                     ifr.ifr_name));
-        return netsnmp_linux_interface_get_if_speed_mii(fd,name);
+        return netsnmp_linux_interface_get_if_speed_mii(fd,name,defaultspeed);
     }
     
 #if HAVE_STRUCT_ETHTOOL_CMD_SPEED_HI
@@ -922,7 +934,7 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name)
 	DEBUGMSGTL(("mibII/interfaces", "speed is not known for %s\n",
 			ifr.ifr_name));
         /* try MII */
-        return netsnmp_linux_interface_get_if_speed_mii(fd,name);
+        return netsnmp_linux_interface_get_if_speed_mii(fd,name,defaultspeed);
     }
 
     /* return in bps */
@@ -937,12 +949,14 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name)
  */
 unsigned long long
 #ifdef HAVE_LINUX_ETHTOOL_H
-netsnmp_linux_interface_get_if_speed_mii(int fd, const char *name)
+netsnmp_linux_interface_get_if_speed_mii(int fd, const char *name,
+        unsigned long long  defaultspeed)
 #else
-netsnmp_linux_interface_get_if_speed(int fd, const char *name)
+netsnmp_linux_interface_get_if_speed(int fd, const char *name,
+        unsigned long long defaultspeed)
 #endif
 {
-    unsigned long long retspeed = 10000000;
+    unsigned long long retspeed = defaultspeed;
     struct ifreq ifr;
 
     /* the code is based on mii-diag utility by Donald Becker
@@ -1162,7 +1176,7 @@ void *netsnmp_prefix_listen(void *formal)
               if(!(new = net_snmp_create_prefix_info (onlink, autonomous, in6pAddr)))
                  DEBUGMSGTL(("access:interface:prefix", "Unable to create prefix info\n"));
               else {
-                    iret = net_snmp_update_prefix_info (listen_info->list_head, new, listen_info->lockinfo);
+                    iret = net_snmp_search_update_prefix_info (listen_info->list_head, new, 0, listen_info->lockinfo);
                     if(iret < 0) {
                        DEBUGMSGTL(("access:interface:prefix", "Unable to add/update prefix info\n"));
                        free(new);

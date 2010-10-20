@@ -20,7 +20,7 @@
 #include <net-snmp/agent/hardware/fsys.h>
 #include "host_res.h"
 #include "hrh_filesys.h"
-#include "hr_storage.h"
+#include "hrh_storage.h"
 #include "hr_disk.h"
 #include <net-snmp/utilities.h>
 
@@ -54,7 +54,7 @@
 #include <stdlib.h>
 #endif
 
-#if defined(aix4) || defined(aix5) || defined(aix6)
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
 #include <sys/mntctl.h>
 #include <sys/vmount.h>
 #include <sys/statfs.h>
@@ -243,7 +243,9 @@ var_hrhfilesys(struct variable *vp,
         return (u_char *) string;
 
     case HRFSYS_TYPE:
-        fsys_type_id[fsys_type_len - 1] = HRFS_entry->type;
+        fsys_type_id[fsys_type_len - 1] = 
+            (HRFS_entry->type > _NETSNMP_FS_TYPE_LOCAL ?
+                                 NETSNMP_FS_TYPE_OTHER : HRFS_entry->type);
         *var_len = sizeof(fsys_type_id);
         return (u_char *) fsys_type_id;
 
@@ -278,10 +280,11 @@ static int      HRFS_index;
 void
 Init_HR_FileSys(void)
 {
-    netsnmp_cache *c = get_fsys_cache();
+    netsnmp_cache *c = netsnmp_fsys_get_cache();
     netsnmp_cache_check_and_reload( c );
 
     HRFS_entry = NULL;
+    HRFS_index = 0;
 }
 
 int
@@ -296,7 +299,8 @@ Get_Next_HR_FileSys(void)
     while ( HRFS_entry && !(HRFS_entry->flags & NETSNMP_FS_FLAG_ACTIVE))
         HRFS_entry = netsnmp_fsys_get_next( HRFS_entry );
 
-    return (HRFS_entry ? HRFS_entry->idx.oids[0] : -1 );
+    HRFS_index = (HRFS_entry ? HRFS_entry->idx.oids[0] : -1 );
+    return HRFS_index;
 }
 
 

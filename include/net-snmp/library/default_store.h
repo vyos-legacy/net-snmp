@@ -24,6 +24,8 @@
 #ifndef DEFAULT_STORE_H
 #define DEFAULT_STORE_H
 
+#include <net-snmp/net-snmp-config.h>
+
 #ifdef __cplusplus
 extern          "C" {
 #endif
@@ -89,7 +91,7 @@ extern          "C" {
 #define NETSNMP_DS_LIB_APPEND_LOGFILES     37 /* append, don't overwrite, log files */
 #define NETSNMP_DS_LIB_NO_DISCOVERY        38 /* don't support RFC5343 contextEngineID discovery */
 #define NETSNMP_DS_LIB_TSM_USE_PREFIX      39 /* TSM's simple security name mapping */
-#define NETSNMP_DS_LIB_ALLOW_SELF_SIGNED   40 /* Certs for DTLS */
+#define NETSNMP_DS_LIB_DONT_LOAD_HOST_FILES 40 /* don't read host.conf files */
 
     /*
      * library integers 
@@ -149,37 +151,48 @@ extern          "C" {
 #define NETSNMP_DS_LIB_APPTYPES          20
 #define NETSNMP_DS_LIB_KSM_KEYTAB        21
 #define NETSNMP_DS_LIB_KSM_SERVICE_NAME  22
-/* for the client */
 #define NETSNMP_DS_LIB_X509_CLIENT_PUB   23
-#define NETSNMP_DS_LIB_X509_CLIENT_PRIV  24
-#define NETSNMP_DS_LIB_X509_SERVER_CERTS 25
-/* for the server */
-#define NETSNMP_DS_LIB_X509_SERVER_PUB   26
-#define NETSNMP_DS_LIB_X509_SERVER_PRIV  27
-#define NETSNMP_DS_LIB_X509_CLIENT_CERTS 28
-#define NETSNMP_DS_LIB_SSHTOSNMP_SOCKET  29
+#define NETSNMP_DS_LIB_X509_SERVER_PUB   24
+#define NETSNMP_DS_LIB_SSHTOSNMP_SOCKET  25
+#define NETSNMP_DS_LIB_CERT_EXTRA_SUBDIR 26
+#define NETSNMP_DS_LIB_HOSTNAME          27
+#define NETSNMP_DS_LIB_X509_CRL_FILE     28
+#define NETSNMP_DS_LIB_TLS_ALGORITMS     29
 
     /*
      * end storage definitions 
      */
 
+    NETSNMP_IMPORT
     int             netsnmp_ds_set_boolean(int storeid, int which, int value);
+    NETSNMP_IMPORT
     int             netsnmp_ds_get_boolean(int storeid, int which);
+    NETSNMP_IMPORT
     int             netsnmp_ds_toggle_boolean(int storeid, int which);
+    NETSNMP_IMPORT
     int             netsnmp_ds_set_int(int storeid, int which, int value);
+    NETSNMP_IMPORT
     int             netsnmp_ds_get_int(int storeid, int which);
+    NETSNMP_IMPORT
     int             netsnmp_ds_set_string(int storeid, int which,
                                   const char *value);
+    NETSNMP_IMPORT
     char           *netsnmp_ds_get_string(int storeid, int which);
+    NETSNMP_IMPORT
     int             netsnmp_ds_set_void(int storeid, int which, void *value);
+    NETSNMP_IMPORT
     void           *netsnmp_ds_get_void(int storeid, int which);
+    NETSNMP_IMPORT
     int             netsnmp_ds_register_config(u_char type, const char *ftype,
                                        const char *token, int storeid,
                                        int which);
+    NETSNMP_IMPORT
     int             netsnmp_ds_register_premib(u_char type, const char *ftype,
                                        const char *token, int storeid,
                                        int which);
+    NETSNMP_IMPORT
     int             netsnmp_ds_parse_boolean(char *line);
+    NETSNMP_IMPORT
     void            netsnmp_ds_shutdown(void);
 
 #ifdef __cplusplus

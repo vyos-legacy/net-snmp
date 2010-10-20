@@ -1,7 +1,7 @@
 /*
  *  Arp MIB architecture support
  *
- * $Id: scalars_linux.c 17580 2009-04-28 06:07:20Z magfr $
+ * $Id: scalars_linux.c 18994 2010-06-16 13:13:25Z dts12 $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -28,7 +28,7 @@ netsnmp_arch_ip_scalars_ipForwarding_get(u_long *value)
         return -2;
     }
 
-    rc = fscanf(filep, "%ld", value);
+    rc = fscanf(filep, "%lu", value);
     fclose(filep);
     if (1 != rc) {
         DEBUGMSGTL(("access:ipForwarding", "could not read %s\n",
@@ -96,7 +96,7 @@ netsnmp_arch_ip_scalars_ipv6IpForwarding_get(u_long *value)
         return -2;
     }
 
-    rc = fscanf(filep, "%ld", value);
+    rc = fscanf(filep, "%lu", value);
     fclose(filep);
     if (1 != rc) {
         DEBUGMSGTL(("access:ipv6IpForwarding", "could not read %s\n",

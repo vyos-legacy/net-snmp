@@ -19,21 +19,22 @@
 
 #include <net-snmp/net-snmp-config.h>
 
-#ifndef HAVE_INET_PTON
+#include <ctype.h>
 
 #if HAVE_ARPA_NAMESER_H
 #include <arpa/nameser.h>
 #endif
 
-  /*
-   * Net-SNMP Win32 additions
-   */
-#if defined(HAVE_WINSOCK_H) || defined(cygwin)
-#include <winsock2.h>
-#include <ws2tcpip.h>
 #include <errno.h>
 #include <stdio.h>
+#if HAVE_STRING_H
+#include <string.h>
+#else
+#include <strings.h>
 #endif
+
+#include <net-snmp/types.h>
+#include "inet_pton.h"
 
 #ifndef EAFNOSUPPORT
 #define EAFNOSUPPORT            WSAEAFNOSUPPORT
@@ -46,9 +47,6 @@
 #ifndef INT16SZ
 #define	INT16SZ		2
 #endif
-  /*
-   * End of Net-SNMP Win32 additions
-   */
 
 #ifndef INADDRSZ
 #define	INADDRSZ	4
@@ -76,10 +74,7 @@ static int	inet_pton6(const char *src, u_char *dst);
  *	Paul Vixie, 1996.
  */
 int
-inet_pton(af, src, dst)
-	int af;
-	const char *src;
-	void *dst;
+inet_pton(int af, const char *src, void *dst)
 {
 
 	switch (af) {
@@ -108,10 +103,7 @@ inet_pton(af, src, dst)
  *	Paul Vixie, 1996.
  */
 static int
-inet_pton4(src, dst, pton)
-	const char *src;
-	u_char *dst;
-	int pton;
+inet_pton4(const char *src, u_char *dst, int pton)
 {
 	u_int val;
 	u_int digit;
@@ -232,9 +224,7 @@ inet_pton4(src, dst, pton)
  *	Paul Vixie, 1996.
  */
 static int
-inet_pton6(src, dst)
-	const char *src;
-	u_char *dst;
+inet_pton6(const char *src, u_char *dst)
 {
 	static const char xdigits_l[] = "0123456789abcdef",
 			  xdigits_u[] = "0123456789ABCDEF";
@@ -319,5 +309,3 @@ inet_pton6(src, dst)
 	return (1);
 }
 #endif
-
-#endif /* HAVE_INET_PTON */

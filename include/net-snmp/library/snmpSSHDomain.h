@@ -1,20 +1,19 @@
 #ifndef _SNMPSSHDOMAIN_H
 #define _SNMPSSHDOMAIN_H
 
+config_require(IPv4Base)
+config_require(SocketBase)
+
 #ifdef NETSNMP_TRANSPORT_SSH_DOMAIN
+
+#include <net-snmp/library/snmp_transport.h>
+
+#if HAVE_NETINET_IN_H
+#include <netinet/in.h>
+#endif
 
 #ifdef __cplusplus
 extern          "C" {
-#endif
-
-#include <net-snmp/library/snmp_transport.h>
-#include <net-snmp/library/asn1.h>
-
-#if HAVE_SYS_SOCKET_H
-#include <sys/socket.h>
-#endif
-#if HAVE_NETINET_IN_H
-#include <netinet/in.h>
 #endif
 
 /*
@@ -23,12 +22,13 @@ extern          "C" {
  */
 
 #define TRANSPORT_DOMAIN_SSH_IP		1,3,6,1,2,1,100,1,100
-NETSNMP_IMPORT oid netsnmp_snmpSSHDomain[];
+NETSNMP_IMPORT const oid netsnmp_snmpSSHDomain[];
+enum { netsnmp_snmpSSHDomain_len = 9 };
 
 netsnmp_transport *netsnmp_ssh_transport(struct sockaddr_in *addr, int local);
 
 /*
- * "Constructor" for transport domain object.  
+ * "Constructor" for transport domain object.
  */
 
 void            netsnmp_ssh_ctor(void);

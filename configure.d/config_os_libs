@@ -58,11 +58,96 @@ fi
 #   libsocket
 #       Needed for 'socket(2)'                          (Solaris)
 #       Possibly also for 'gethostname(3)'              (non-Solaris)
-#           (alternatively in libnsl)                   (Solaris)
+#           (alternatively in libnsl                    (Solaris)
+#            or in libws2_32)                           (MinGW)
 #
-AC_SEARCH_LIBS(socket, socket,,AC_MSG_ERROR([socket(2) not found.]))
-AC_SEARCH_LIBS(gethostbyname, [nsl socket])
-AC_CHECK_FUNCS(gethostbyname)
+case x$with_socklib in
+xwinsock2)
+  #   libws2_w32                                        (MinGW)
+  #
+  netsnmp_save_LIBS="$LIBS"
+  LIBS="$LIBS -lws2_32"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([
+    #include <winsock2.h>
+  ], [
+    socket(0, 0, 0);
+    gethostbyname(0);
+  ])], [
+    # Keep LIBS.
+    true
+  ], [
+    # Restore LIBS and complain.
+    LIBS="$netsnmp_save_LIBS"
+    AC_MSG_ERROR([libws2_32 not found.])
+  ])
+  ;;
+*)
+  AC_SEARCH_LIBS(socket, socket,,AC_MSG_ERROR([socket(2) not found.]))
+  AC_SEARCH_LIBS(gethostbyname, [nsl socket])
+  AC_CHECK_FUNCS(gethostbyname)
+  ;;
+esac
+
+
+#   libiphlpapi                                         (Cygwin and MinGW)
+#
+netsnmp_save_LIBS="$LIBS"
+LIBS="$LIBS -liphlpapi"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([
+  #include <winsock2.h>
+  #include <iphlpapi.h>
+], [
+  IpRenewAddress(0);
+])], [
+  # Keep LIBS.
+  true
+], [
+  # Restore LIBS and complain.
+  LIBS="$netsnmp_save_LIBS"
+  case x$with_socklib in
+  xwinsock2)
+    AC_MSG_ERROR([libiphlpapi not found.])
+    ;;
+  esac
+])
+
+
+#   libregex                                            (MinGW)
+#
+netsnmp_save_LIBS="$LIBS"
+LIBS="$LIBS -lregex"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([
+  #include <sys/types.h>
+  #include <regex.h>
+], [
+  regcomp(0, 0, 0);
+])], [
+  # Keep LIBS.
+  true
+], [
+  # Restore LIBS.
+  LIBS="$netsnmp_save_LIBS"
+])
+
+
+#   libsnmpapi                                          (MinGW)
+#
+netsnmp_save_LIBS="$LIBS"
+LIBS="$LIBS -lsnmpapi"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([
+  #include <snmp.h>
+], [
+  SnmpUtilMemAlloc(0);
+])], [
+  # Keep LIBS.
+  true
+], [
+  # Restore LIBS.
+  LIBS="$netsnmp_save_LIBS"
+])
+
+AC_SEARCH_LIBS(getfsstat, [nbutil])
+AC_CHECK_FUNCS(getfsstat)
 
 
 #   kstat library                                       (Solaris)
@@ -71,6 +156,13 @@ NETSNMP_SEARCH_LIBS(kstat_lookup, kstat,
         AC_DEFINE(HAVE_LIBKSTAT, 1,
         	[Define to 1 if you have the `kstat' library (-lkstat).]),,,
         LNETSNMPLIBS)
+
+
+#   pthread library                                     (Linux)
+#
+if test "x$PARTIALTARGETOS" = "xlinux"; then
+  NETSNMP_SEARCH_LIBS(pthread_create, pthread,,,, LMIBLIBS)
+fi
 
 
 #   libkvm
@@ -167,32 +259,59 @@ fi
 #   Security related functions
 #
 NONAGENTLIBS=$LIBS	 # save old libraries
-SSHINSTALLBINPROGS=""
-if test "x$tryopenssl" != "xno"; then
+SSHPROG=no
+TLSPROG=no
+if test "x$tryopenssl" != "xno" -a "x$tryopenssl" != "xinternal"; then
+    # check for libpkcs11 if asked
     if test "x$askedopenssl" != "xyes" -a "x$askedpkcs" = "xyes"; then
         AC_CHECK_LIB(pkcs11, C_Initialize,
             AC_DEFINE(HAVE_LIBPKCS11, 1,
                 [Define to 1 if you have the `pkcs11' library (-lpkcs11).])
-            LIBPKCS11="-lpkcs11")
+		LIBPKCS11="-lpkcs11")
     else 
         if test "x$tryrsaref" != "xno"; then
             AC_CHECK_LIB(rsaref, RSAPrivateDecrypt)
             AC_CHECK_LIB(RSAglue, RSA_PKCS1_RSAref)
         fi
 
-        AC_CHECK_LIB(crypto, EVP_md5,
+        AC_MSG_CHECKING([for -leay32])
+        netsnmp_save_LIBS="$LIBS"
+        LIBS="-leay32"
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([
+                #include <openssl/evp.h>],
+                [return EVP_md5();])],
+            [AC_MSG_RESULT(yes); ac_cv_lib_eay32_EVP_md5=yes; CRYPTO="eay32"],
+            [AC_MSG_RESULT(no)]
+        )
+        LIBS="$netsnmp_save_LIBS"
+
+        if test x$CRYPTO = x; then
+            AC_CHECK_LIB([crypto], [EVP_md5], [CRYPTO="crypto"])
+        fi
+
+        if test x$CRYPTO != x; then
             AC_DEFINE(HAVE_LIBCRYPTO, 1,
-                [Define to 1 if you have the `crypto' library (-lcrypto).])
-            LIBCRYPTO="-lcrypto")
-        AC_CHECK_LIB(crypto, AES_cfb128_encrypt, 
-            AC_DEFINE(HAVE_AES_CFB128_ENCRYPT, 1,
-                [Define to 1 if you have the `AES_cfb128_encrypt' function.]))
-        if echo " $transport_result_list " | $GREP " DTLS" > /dev/null; then
+                [Define to 1 if you have the OpenSSL library (-lcrypto or -leay32).])
+            LIBCRYPTO="-l${CRYPTO}"
+            AC_CHECK_LIB(${CRYPTO}, AES_cfb128_encrypt, 
+                AC_DEFINE(HAVE_AES_CFB128_ENCRYPT, 1,
+                    [Define to 1 if you have the `AES_cfb128_encrypt' function.]))
+        fi
+        if echo " $transport_result_list " | $GREP "DTLS" > /dev/null; then
+	    AC_CHECK_LIB(ssl, DTLSv1_method,
+                AC_DEFINE(HAVE_LIBSSL_DTLS, 1,
+                    [Define to 1 if your `ssl' library supports DTLS (-lssl).])
+                LIBCRYPTO=" -lssl $LIBCRYPTO",	
+		AC_MSG_ERROR([The DTLS based transports require the libssl library from OpenSSL to be available and support DTLS])	,-lcrypto)
+            TLSPROG=yes
+        fi
+        if echo " $transport_result_list " | $GREP "TLS" > /dev/null; then
 	    AC_CHECK_LIB(ssl, SSL_library_init,
                 AC_DEFINE(HAVE_LIBSSL, 1,
                     [Define to 1 if you have the `ssl' library (-lssl).])
                 LIBCRYPTO=" -lssl $LIBCRYPTO",	
 		AC_MSG_ERROR([The DTLS based transports require the libssl library from OpenSSL to be available])	,-lcrypto)
+            TLSPROG=yes
         fi
         if echo " $transport_result_list " | $GREP " SSH " > /dev/null; then
 	    AC_CHECK_LIB(ssh2, libssh2_session_startup,
@@ -200,7 +319,7 @@ if test "x$tryopenssl" != "xno"; then
                     [Define to 1 if you have the `ssh2' library (-lssh2).])
                 LIBCRYPTO=" -lssh2 $LIBCRYPTO",
                 AC_MSG_ERROR([The SSH transport requires the libssh2 library to be available]),)
-            SSHINSTALLBINPROGS=sshtosnmp
+            SSHPROG=yes
         fi
     fi
 elif test "x$askedpkcs" = "xyes"; then
@@ -209,8 +328,53 @@ elif test "x$askedpkcs" = "xyes"; then
         LIBPKCS11="-lpkcs11")
 fi
 LIBS=$NONAGENTLIBS	 # restore old libraries
-AC_SUBST(SSHINSTALLBINPROGS)
+if test "x$SSHPROG" = "xyes"; then
+    NETSNMP_BUILD_SSH_PROG_TRUE=''
+    NETSNMP_BUILD_SSH_PROG_FALSE='#'
+else
+    NETSNMP_BUILD_SSH_PROG_TRUE='#'
+    NETSNMP_BUILD_SSH_PROG_FALSE=''
+fi
+if test "x$TLSPROG" = "xyes"; then
+    NETSNMP_BUILD_TLS_PROG_TRUE=''
+    NETSNMP_BUILD_TLS_PROG_FALSE='#'
+else
+    NETSNMP_BUILD_TLS_PROG_TRUE='#'
+    NETSNMP_BUILD_TLS_PROG_FALSE=''
+fi
+AC_SUBST(NETSNMP_BUILD_SSH_PROG_TRUE)
+AC_SUBST(NETSNMP_BUILD_SSH_PROG_FALSE)
+AC_SUBST(NETSNMP_BUILD_TLS_PROG_TRUE)
+AC_SUBST(NETSNMP_BUILD_TLS_PROG_FALSE)
 
+#
+# If we're using internal crypto support we need to compile in extra files
+#
+crypto_files_c=""
+crypto_files_o=""
+crypto_files_lo=""
+if test "x$tryopenssl" != "xno" -a "x$CRYPTO" = "x"; then
+   # If we:
+   #   1) couldn't find needed openssl support
+   #   2) OR were asked to use internal support
+   #   3) AND we have the needed files
+   # then use it
+   CRYPTO="internal"
+   crypto_files_c="openssl/openssl_sha1.c openssl/openssl_md5.c openssl/openssl_set_key.c openssl/openssl_des_enc.c openssl/openssl_cbc_enc.c openssl/openssl_aes_cfb.c openssl/openssl_aes_core.c openssl/openssl_cfb128.c"
+   crypto_files_o="openssl/openssl_sha1.o openssl/openssl_md5.o openssl/openssl_set_key.o openssl/openssl_des_enc.o openssl/openssl_cbc_enc.o openssl/openssl_aes_cfb.o openssl/openssl_aes_core.oo openssl/openssl_cfb128.o"
+   crypto_files_lo="openssl/openssl_sha1.lo openssl/openssl_md5.lo openssl/openssl_set_key.lo openssl/openssl_des_enc.lo openssl/openssl_cbc_enc.lo openssl/openssl_aes_cfb.lo openssl/openssl_aes_core.lo openssl/openssl_cfb128.lo"
+   AC_DEFINE(HAVE_AES_CFB128_ENCRYPT)
+fi
+AC_SUBST(crypto_files_c)
+AC_SUBST(crypto_files_o)
+AC_SUBST(crypto_files_lo)
+
+#
+# if we can do any sort of crypto then note it
+#
+if test "x$CRYPTO" != "x" ; then
+  AC_DEFINE(NETSNMP_CAN_DO_CRYPTO, 1, "Define if crytography support is possible")
+fi
 
 #   TCP wrapper support
 #
@@ -285,7 +449,7 @@ fi
 # installed tables (on linux in particular)
 #
 if test "x$with_rpm" != "xno" && \
-        echo " $module_list " | $GREP " host/hr_swinst " > /dev/null; then
+        echo " $module_list " | $EGREP " host/(hr_swinst|data_access/swinst_rpm) " > /dev/null; then
   # ARG.  RPM is a real pain.
   # FWIW librpm.la, librpmio.la, and libpopt.la have correct dependencies.
   _rpmlibs=""
@@ -337,6 +501,13 @@ if test "x$with_rpm" != "xno" && \
     LMIBLIBS="$_rpmlibs $LMIBLIBS"
     CFLAGS="$CFLAGS -I/usr/include/rpm"
   ],, $LMIBLIBS, _rpmlibs)
+
+  # rpm 4.6 has incompatible API, turn on the legacy one
+  AC_CHECK_DECL([headerGetEntry],
+    : ,
+    AC_DEFINE([_RPM_4_4_COMPAT], [], [Define if you have RPM 4.6 or newer to turn on legacy API]),
+    [[#include <rpm/rpmlib.h>]]
+  )
 fi
 
 ##

@@ -10,11 +10,7 @@
 #include <fcntl.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -100,20 +96,16 @@
 #include <string.h>
 #endif
 #include <ctype.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
-#ifndef HAVE_STRNCASECMP
-int             strncasecmp(const char *s1, const char *s2, size_t n);
-#endif
 
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/auto_nlist.h>
 #include <net-snmp/agent/agent_callbacks.h>
+#include <net-snmp/library/system.h>
 
 #include "struct.h"
 #include "extensible.h"
+#include "mibgroup/util_funcs.h"
 #include "utilities/execute.h"
 #include "util_funcs/header_simple_table.h"
 

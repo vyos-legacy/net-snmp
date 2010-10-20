@@ -45,11 +45,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <ctype.h>
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -60,9 +56,6 @@ SOFTWARE.
 #endif
 #if HAVE_SYS_SELECT_H
 #include <sys/select.h>
-#endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_NETDB_H
 #include <netdb.h>
@@ -102,9 +95,11 @@ main(int argc, char *argv[])
      * get the common command line arguments 
      */
     switch (snmp_parse_args(argc, argv, &session, NULL, NULL)) {
-    case -2:
+    case NETSNMP_PARSE_ARGS_ERROR:
+        exit(1);
+    case NETSNMP_PARSE_ARGS_SUCCESS_EXIT:
         exit(0);
-    case -1:
+    case NETSNMP_PARSE_ARGS_ERROR_USAGE:
         usage();
         exit(1);
     default:
@@ -303,7 +298,7 @@ input_variable(netsnmp_variable_list * vp)
     if (buf[val_len - 1] == '\n')
         buf[--val_len] = 0;
     if (*buf == '$') {
-        switch (toupper(buf[1])) {
+        switch (toupper((unsigned char)(buf[1]))) {
         case 'G':
             command = SNMP_MSG_GET;
             printf("Request type is Get Request\n");
@@ -343,7 +338,7 @@ input_variable(netsnmp_variable_list * vp)
             }
             break;
         case 'Q':
-            switch ((toupper(buf[2]))) {
+            switch ((toupper((unsigned char)(buf[2])))) {
             case '\n':
             case 0:
                 printf("Quitting,  Goodbye\n");
@@ -456,6 +451,7 @@ input_variable(netsnmp_variable_list * vp)
                     goto getValue;
                 }
                 memcpy(vp->val.string, buf, strlen(buf) - 1);
+                vp->val.string[sizeof(vp->val.string)-1] = 0;
                 vp->val_len = strlen(buf) - 1;
             } else if (ch == 'x') {
                 size_t          buf_len = 256;

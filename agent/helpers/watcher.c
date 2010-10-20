@@ -10,6 +10,15 @@
 
 #include <string.h>
 
+#ifdef HAVE_DMALLOC_H
+static void free_wrapper(void * p)
+{
+    free(p);
+}
+#else
+#define free_wrapper free
+#endif
+
 /** @defgroup watcher watcher
  *  Watch a specified variable and process it as an instance or scalar object
  *  @ingroup leaf
@@ -106,10 +115,16 @@ get_data_size(const netsnmp_watcher_info* winfo)
 {
     if (winfo->flags & WATCHER_SIZE_STRLEN)
         return strlen((const char*)winfo->data);
-    else if (winfo->flags & WATCHER_SIZE_IS_PTR)
-        return *winfo->data_size_p;
-    else
-        return winfo->data_size;
+    else {
+        size_t res;
+        if (winfo->flags & WATCHER_SIZE_IS_PTR)
+            res = *winfo->data_size_p;
+        else
+            res = winfo->data_size;
+        if (winfo->flags & WATCHER_SIZE_UNIT_OIDS)
+          res *= sizeof(oid);
+        return res;
+    }
 }
 
 NETSNMP_STATIC_INLINE void
@@ -118,10 +133,14 @@ set_data(netsnmp_watcher_info* winfo, void* data, size_t size)
     memcpy(winfo->data, data, size);
     if (winfo->flags & WATCHER_SIZE_STRLEN)
         ((char*)winfo->data)[size] = '\0';
-    else if (winfo->flags & WATCHER_SIZE_IS_PTR)
-        *winfo->data_size_p = size;
-    else
-        winfo->data_size = size;
+    else {
+        if (winfo->flags & WATCHER_SIZE_UNIT_OIDS)
+          size /= sizeof(oid);
+        if (winfo->flags & WATCHER_SIZE_IS_PTR)
+            *winfo->data_size_p = size;
+        else
+            winfo->data_size = size;
+    }
 }
 
 typedef struct {
@@ -132,7 +151,7 @@ typedef struct {
 NETSNMP_STATIC_INLINE netsnmp_watcher_cache*
 netsnmp_watcher_cache_create(const void* data, size_t size)
 {
-    netsnmp_watcher_cache *res =
+    netsnmp_watcher_cache *res = (netsnmp_watcher_cache*)
         malloc(sizeof(netsnmp_watcher_cache) + size - 1);
     if (res) {
         res->size = size;
@@ -210,7 +229,7 @@ netsnmp_watcher_helper_handler(netsnmp_mib_handler *handler,
         } else
             netsnmp_request_add_list_data(requests,
                                           netsnmp_create_data_list
-                                          ("watcher", old_data, free));
+                                          ("watcher", old_data, &free_wrapper));
         break;
 
     case MODE_SET_FREE:
@@ -228,7 +247,7 @@ netsnmp_watcher_helper_handler(netsnmp_mib_handler *handler,
         break;
 
     case MODE_SET_UNDO:
-        old_data = netsnmp_request_get_list_data(requests, "watcher");
+        old_data = (netsnmp_watcher_cache*)netsnmp_request_get_list_data(requests, "watcher");
         set_data(winfo, old_data->data, old_data->size);
         break;
 

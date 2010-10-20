@@ -8,11 +8,7 @@
 #include <stdlib.h>
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -20,9 +16,6 @@
 # else
 #  include <time.h>
 # endif
-#endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
@@ -167,8 +160,6 @@ struct agent_netsnmp_set_info *
 save_set_vars(netsnmp_session * ss, netsnmp_pdu *pdu)
 {
     struct agent_netsnmp_set_info *ptr;
-    struct timeval  now;
-    extern struct timeval starttime;
 
     ptr = (struct agent_netsnmp_set_info *)
         malloc(sizeof(struct agent_netsnmp_set_info));
@@ -181,8 +172,7 @@ save_set_vars(netsnmp_session * ss, netsnmp_pdu *pdu)
     ptr->transID = pdu->transid;
     ptr->sess = ss;
     ptr->mode = SNMP_MSG_INTERNAL_SET_RESERVE1;
-    gettimeofday(&now, NULL);
-    ptr->uptime = calculate_time_diff(&now, &starttime);
+    ptr->uptime = netsnmp_get_agent_uptime();
 
     ptr->var_list = snmp_clone_varbind(pdu->variables);
     if (ptr->var_list == NULL) {
@@ -462,7 +452,7 @@ handle_agentx_packet(int operation, netsnmp_session * session, int reqid,
      */
 
     internal_pdu = snmp_clone_pdu(pdu);
-    internal_pdu->contextName = internal_pdu->community;
+    internal_pdu->contextName = (char *) internal_pdu->community;
     internal_pdu->contextNameLen = internal_pdu->community_len;
     internal_pdu->community = NULL;
     internal_pdu->community_len = 0;
@@ -505,7 +495,7 @@ handle_subagent_response(int op, netsnmp_session * session, int reqid,
              u = u->next_variable, v = v->next_variable) {
             if (snmp_oid_compare
                 (u->val.objid, u->val_len / sizeof(oid), nullOid,
-                 nullOidLen) != 0) {
+                 nullOidLen/sizeof(oid)) != 0) {
                 /*
                  * The master agent requested scoping for this variable.  
                  */
@@ -647,12 +637,12 @@ agentx_registration_callback(int majorID, int minorID, void *serverarg,
 }
 
 
-int
+static int
 agentx_sysOR_callback(int majorID, int minorID, void *serverarg,
                       void *clientarg)
 {
-    struct register_sysOR_parameters *reg_parms =
-        (struct register_sysOR_parameters *) serverarg;
+    const struct register_sysOR_parameters *reg_parms =
+        (const struct register_sysOR_parameters *) serverarg;
     netsnmp_session *agentx_ss = (netsnmp_session *) clientarg;
 
     if (minorID == SNMPD_CALLBACK_REG_SYSOR)
@@ -857,7 +847,10 @@ subagent_open_master_session(void)
 static void
 agentx_reopen_sysORTable(const struct sysORTable* data, void* v)
 {
-  agentx_sysOR_callback(0, SNMPD_CALLBACK_REG_SYSOR, data, v);
+    netsnmp_session *agentx_ss = (netsnmp_session *) v;
+  
+    agentx_add_agentcaps(agentx_ss, data->OR_oid, data->OR_oidlen,
+                         data->OR_descr);
 }
 
 /*

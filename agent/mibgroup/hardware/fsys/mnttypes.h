@@ -39,11 +39,17 @@
 #ifndef MNTTYPE_EXT3
 #define MNTTYPE_EXT3     "ext3"
 #endif
+#ifndef MNTTYPE_EXT4
+#define MNTTYPE_EXT4     "ext4"
+#endif
 #ifndef MNTTYPE_EXT2FS
 #define MNTTYPE_EXT2FS   "ext2fs"
 #endif
 #ifndef MNTTYPE_EXT3FS
 #define MNTTYPE_EXT3FS   "ext3fs"
+#endif
+#ifndef MNTTYPE_EXT4FS
+#define MNTTYPE_EXT4FS   "ext4fs"
 #endif
 #ifndef MNTTYPE_FAT32
 #define MNTTYPE_FAT32    "fat32"
@@ -75,6 +81,9 @@
 #ifndef MNTTYPE_NFS3
 #define MNTTYPE_NFS3     "nfs3"
 #endif
+#ifndef MNTTYPE_NFS4
+#define MNTTYPE_NFS4     "nfs4"
+#endif
 #ifndef MNTTYPE_NTFS
 #define MNTTYPE_NTFS     "ntfs"
 #endif
@@ -87,6 +96,9 @@
 #ifndef MNTTYPE_SMBFS
 #define MNTTYPE_SMBFS    "smbfs"
 #endif
+#ifndef MNTTYPE_CIFS
+#define MNTTYPE_CIFS     "cifs"
+#endif
 #ifndef MNTTYPE_SYSV
 #define MNTTYPE_SYSV     "sysv"
 #endif
@@ -96,9 +108,29 @@
 #ifndef MNTTYPE_VFAT
 #define MNTTYPE_VFAT     "vfat"
 #endif
+#ifndef MNTTYPE_GFS
+#define MNTTYPE_GFS      "gfs"
+#endif
+#ifndef MNTTYPE_GFS2
+#define MNTTYPE_GFS2     "gfs2"
+#endif
+
+/*
+ *  File systems to monitor, but not covered by HR-TYPES enumerations
+ */
+#ifndef MNTTYPE_LOFS
+#define MNTTYPE_LOFS     "lofs"
+#endif
+#ifndef MNTTYPE_APP
+#define MNTTYPE_APP      "app"
+#endif
+#ifndef MNTTYPE_MVFS
+#define MNTTYPE_MVFS     "mvfs"
+#endif
 
 /*
  *  File systems to skip
+ *    (Probably not strictly needed)
  */
 #ifndef MNTTYPE_DEVPTS
 #define MNTTYPE_DEVPTS   "devpts"
@@ -117,6 +149,12 @@
 #endif
 #ifndef MNTTYPE_USBFS
 #define MNTTYPE_USBFS    "usbfs"
+#endif
+#ifndef MNTTYPE_BINFMT
+#define MNTTYPE_BINFMT   "binfmt_misc"
+#endif
+#ifndef MNTTYPE_RPCPIPE
+#define MNTTYPE_RPCPIPE  "rpc_pipefs"
 #endif
 
 #endif /* _NETSNMP_FSYS_MNTTYPES_H */

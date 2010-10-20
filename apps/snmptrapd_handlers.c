@@ -14,10 +14,10 @@
 #endif
 #include <ctype.h>
 #include <sys/types.h>
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#else
+#if HAVE_NETINET_IN_H
 #include <netinet/in.h>
+#endif
+#if HAVE_NETDB_H
 #include <netdb.h>
 #endif
 #if HAVE_SYS_WAIT_H
@@ -213,7 +213,7 @@ parse_format(const char *token, char *line)
      * which tells us which style of format this is
      */
     cp = line;
-    while (*cp && !isspace(*cp))
+    while (*cp && !isspace((unsigned char)(*cp)))
         cp++;
     if (!(*cp)) {
         /*
@@ -226,7 +226,7 @@ parse_format(const char *token, char *line)
 
     sep = cp;
     *(cp++) = '\0';
-    while (*cp && isspace(*cp))
+    while (*cp && isspace((unsigned char)(*cp)))
         cp++;
 
     /*
@@ -355,7 +355,7 @@ static netsnmp_handler_map handlers[] = {
  * to be applied to *all* incoming traps
  */
 netsnmp_trapd_handler *
-netsnmp_add_global_traphandler(int list, Netsnmp_Trap_Handler handler)
+netsnmp_add_global_traphandler(int list, Netsnmp_Trap_Handler *handler)
 {
     netsnmp_trapd_handler *traph;
 
@@ -401,7 +401,7 @@ netsnmp_add_global_traphandler(int list, Netsnmp_Trap_Handler handler)
  * traps with no specific trap handlers of their own.
  */
 netsnmp_trapd_handler *
-netsnmp_add_default_traphandler( Netsnmp_Trap_Handler handler) {
+netsnmp_add_default_traphandler(Netsnmp_Trap_Handler *handler) {
     return netsnmp_add_global_traphandler(NETSNMPTRAPD_DEFAULT_HANDLER,
                                           handler);
 }
@@ -781,6 +781,11 @@ int   command_handler( netsnmp_pdu           *pdu,
                        netsnmp_transport     *transport,
                        netsnmp_trapd_handler *handler)
 {
+#ifndef USING_UTILITIES_EXECUTE_MODULE
+    NETSNMP_LOGONCE((LOG_WARNING,
+                     "support for run_shell_command not available\n"));
+    return NETSNMPTRAPD_HANDLER_FAIL;
+#else
     u_char         *rbuf = NULL;
     size_t          r_len = 64, o_len = 0;
     int             oldquick;
@@ -839,6 +844,7 @@ int   command_handler( netsnmp_pdu           *pdu,
         free(rbuf);
     }
     return NETSNMPTRAPD_HANDLER_OK;
+#endif /* !def USING_UTILITIES_EXECUTE_MODULE */
 }
 
 

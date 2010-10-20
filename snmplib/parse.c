@@ -74,11 +74,7 @@ SOFTWARE.
 # endif
 #endif
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -86,9 +82,6 @@ SOFTWARE.
 # else
 #  include <time.h>
 # endif
-#endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>
@@ -548,6 +541,7 @@ static struct tree *tbuckets[NHASHSIZE];
 static struct module *module_head = NULL;
 
 static struct node *orphan_nodes = NULL;
+NETSNMP_IMPORT struct tree *tree_head;
 struct tree        *tree_head = NULL;
 
 #define	NUMBER_OF_ROOT_NODES	3
@@ -555,6 +549,7 @@ static struct module_import root_imports[NUMBER_OF_ROOT_NODES];
 
 static int      current_module = 0;
 static int      max_module = 0;
+static int      first_err_module = 1;
 static char    *last_err_module = NULL; /* no repeats on "Cannot find module..." */
 
 static void     tree_from_node(struct tree *tp, struct node *np);
@@ -704,7 +699,7 @@ name_hash(const char *name)
     if (!name)
         return 0;
     for (cp = name; *cp; cp++)
-        hash += tolower(*cp);
+        hash += tolower((unsigned char)(*cp));
     return (hash);
 }
 
@@ -801,6 +796,11 @@ print_error(const char *str, const char *token, int type)
 static void
 print_module_not_found(const char *cp)
 {
+    if (first_err_module) {
+        snmp_log(LOG_ERR, "MIB search path: %s\n",
+                           netsnmp_get_mib_directory());
+        first_err_module = 0;
+    }
     if (!last_err_module || strcmp(cp, last_err_module))
         print_error("Cannot find module", cp, CONTINUE);
     if (last_err_module)
@@ -939,13 +939,38 @@ free_node(struct node *np)
     free((char *) np);
 }
 
+static void
+print_range_value(FILE * fp, int type, struct range_list * rp)
+{
+    switch (type) {
+    case TYPE_INTEGER:
+    case TYPE_INTEGER32:
+        if (rp->low == rp->high)
+            fprintf(fp, "%d", rp->low);
+        else
+            fprintf(fp, "%d..%d", rp->low, rp->high);
+        break;
+    case TYPE_UNSIGNED32:
+    case TYPE_OCTETSTR:
+    case TYPE_GAUGE:
+    case TYPE_UINTEGER:
+        if (rp->low == rp->high)
+            fprintf(fp, "%u", (unsigned)rp->low);
+        else
+            fprintf(fp, "%u..%u", (unsigned)rp->low, (unsigned)rp->high);
+        break;
+    default:
+        /* No other range types allowed */
+        break;
+    }
+}
+
 #ifdef TEST
 static void
 print_nodes(FILE * fp, struct node *root)
 {
     struct enum_list *ep;
     struct index_list *ip;
-    struct range_list *rp;
     struct varbind_list *vp;
     struct node    *np;
 
@@ -961,10 +986,13 @@ print_nodes(FILE * fp, struct node *root)
             }
         }
         if (np->ranges) {
-            fprintf(fp, "  Ranges: \n");
+            struct range_list *rp;
+            fprintf(fp, "  Ranges: ");
             for (rp = np->ranges; rp; rp = rp->next) {
-                fprintf(fp, "    %d..%d\n", rp->low, rp->high);
+                fprintf(fp, "\n    ");
+                print_range_value(fp, np->type, rp);
             }
+            fprintf(fp, "\n");
         }
         if (np->indexes) {
             fprintf(fp, "  Indexes: \n");
@@ -2195,12 +2223,12 @@ parse_ranges(FILE * fp, struct range_list **retp)
             nexttype = get_token(fp, nexttoken, MAXTOKEN);
         else
             taken = 0;
-        high = low = strtol(nexttoken, NULL, 10);
+        high = low = strtoul(nexttoken, NULL, 10);
         nexttype = get_token(fp, nexttoken, MAXTOKEN);
         if (nexttype == RANGE) {
             nexttype = get_token(fp, nexttoken, MAXTOKEN);
             errno = 0;
-            high = strtol(nexttoken, NULL, 10);
+            high = strtoul(nexttoken, NULL, 10);
             if ( errno == ERANGE ) {
                 if (netsnmp_ds_get_int(NETSNMP_DS_LIBRARY_ID, 
                                        NETSNMP_DS_LIB_MIB_WARNINGS))
@@ -4076,22 +4104,22 @@ unload_all_mibs(void)
     struct module  *mp;
     struct module_compatability *mcp;
     struct tc      *ptc;
-    int             i;
+    unsigned int    i;
 
     for (mcp = module_map_head; mcp; mcp = module_map_head) {
         if (mcp == module_map)
             break;
         module_map_head = mcp->next;
-        if (mcp->tag) free((char *) mcp->tag);
-        free((char *) mcp->old_module);
-        free((char *) mcp->new_module);
+        if (mcp->tag) free(NETSNMP_REMOVE_CONST(char *, mcp->tag));
+        free(NETSNMP_REMOVE_CONST(char *, mcp->old_module));
+        free(NETSNMP_REMOVE_CONST(char *, mcp->new_module));
         free(mcp);
     }
 
     for (mp = module_head; mp; mp = module_head) {
         struct module_import *mi = mp->imports;
         if (mi) {
-            for (i = 0; i < mp->no_imports; ++i) {
+            for (i = 0; i < (unsigned int)mp->no_imports; ++i) {
                 SNMP_FREE((mi + i)->label);
             }
             mp->no_imports = 0;
@@ -4231,7 +4259,7 @@ parse(FILE * fp, struct node *root)
     extern void     xmalloc_stats(FILE *);
 #endif
     char            token[MAXTOKEN];
-    char            name[MAXTOKEN];
+    char            name[MAXTOKEN+1];
     int             type = LABEL;
     int             lasttype = LABEL;
 
@@ -4323,7 +4351,8 @@ parse(FILE * fp, struct node *root)
         case ENDOFFILE:
             continue;
         default:
-            strcpy(name, token);
+            strncpy(name, token, sizeof(name));
+            name[sizeof(name)-1] = '\0';
             type = get_token(fp, token, MAXTOKEN);
             nnp = NULL;
             if (type == MACRO) {
@@ -4340,7 +4369,8 @@ parse(FILE * fp, struct node *root)
                 print_error(name, "is a reserved word", lasttype);
             continue;           /* see if we can parse the rest of the file */
         }
-        strcpy(name, token);
+        strncpy(name, token, sizeof(name));
+        name[sizeof(name)-1] = '\0';
         type = get_token(fp, token, MAXTOKEN);
         nnp = NULL;
 
@@ -4714,9 +4744,9 @@ get_token(FILE * fp, char *token, int maxtlen)
                 goto more;
             }
         }
-        if (token[0] == '-' || isdigit(token[0])) {
+        if (token[0] == '-' || isdigit((unsigned char)(token[0]))) {
             for (cp = token + 1; *cp; cp++)
-                if (!isdigit(*cp))
+                if (!isdigit((unsigned char)(*cp)))
                     return LABEL;
             return NUMBER;
         }
@@ -5385,10 +5415,7 @@ print_mib_leaves(FILE * f, struct tree *tp, int width)
             while (rp) {
                 if (rp != tp->ranges)
                     fprintf(f, " | ");
-                if (rp->low == rp->high)
-                    fprintf(f, "%d", rp->low);
-                else
-                    fprintf(f, "%d..%d", rp->low, rp->high);
+                print_range_value(f, tp->type, rp);
                 rp = rp->next;
             }
             fprintf(f, "\n");

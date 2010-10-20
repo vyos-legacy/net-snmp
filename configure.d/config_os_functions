@@ -10,7 +10,17 @@
 ##
 AC_FUNC_ALLOCA          #  alloca()
 AC_PROG_GCC_TRADITIONAL
-AC_FUNC_MEMCMP          #  memcmp()   -  obs
+
+if test "$cross_compiling" = yes -a "${ac_cv_func_memcmp_working+set}" != set
+then
+  # Cross-compiling and ac_cv_func_memcmp_working has not been set - assume
+  # that memcmp() is available.
+  ac_cv_func_memcmp_working=yes
+else
+  # Native compilation - test for the availability of memcmp().
+  AC_FUNC_MEMCMP
+fi
+
 AC_TYPE_SIGNAL
 AC_FUNC_GETMNTENT
 
@@ -22,30 +32,35 @@ AC_CHECK_FUNCS([lrand48         rand          random    ] dnl
                [signal          sigset                  ] )
 
 #  Library:
-AC_CHECK_FUNCS([fork            gai_strerror                   ] dnl
+AC_CHECK_FUNCS([closedir        fork          gai_strerror     ] dnl
                [getaddrinfo     gethostname   gethostbyname    ] dnl
                [getipnodebyname               gettimeofday     ] dnl
-               [if_nametoindex  mkstemp       regcomp          ] dnl
+               [if_nametoindex  mkstemp       opendir          ] dnl
+               [readdir         regcomp                        ] dnl
                [setenv          setitimer     setlocale        ] dnl
-               [setsid          snprintf                       ] dnl
-               [strcasestr                    strdup           ] dnl
-               [strerror        strlcpy       strncasecmp      ] dnl
-               [strtok_r        strtol        strtoul          ] dnl
-               [strtoull        sysconf       times            ] dnl
-               [vsnprintf                                      ] )
+               [setsid          snprintf      strcasestr       ] dnl
+               [strdup          strerror      strncasecmp      ] dnl
+               [sysconf         times         vsnprintf        ] )
+
+AC_CONFIG_LIBOBJ_DIR([snmplib])
+
+AC_REPLACE_FUNCS([getopt        inet_ntop     inet_pton        ] dnl
+                 [strlcpy       strtok_r      strtol           ] dnl
+                 [strtoul       strtoull                       ] )
 
 #  Agent:
-AC_CHECK_FUNCS([cgetnext        execv         gai_strerror     ] dnl
-               [getfsstat       getgrnam      gethostname      ] dnl
-               [                getloadavg                     ] dnl
+AC_CHECK_FUNCS([cgetnext        chown          execv           ] dnl
+               [gai_strerror                   getgrnam        ] dnl
+               [gethostname     getloadavg                     ] dnl
                [getpid          getpwnam      getvfsstat       ] dnl
                [hasmntopt       initgroups                     ] dnl
-               [if_nameindex    if_nametoindex                 ] dnl
+               [if_nameindex    if_nametoindex localtime_r     ] dnl
                [mkstemp         mktime                         ] dnl
                [poll            regcomp                        ] dnl
                [setgid          setgroups                      ] dnl
                [setmntent       setuid                         ] dnl
                [sigaction       sigblock      sighold          ] dnl
+               [sigprocmask                                    ] dnl
                [statfs          statvfs       stime            ] dnl
                [strncasecmp     system                         ] dnl
                [uname           usleep                         ] )
@@ -189,3 +204,62 @@ if test $netsnmp_cv_sys_ioctl_h_has_SIOCGIFADDR = yes; then
    [define if SIOCGIFADDR exists in sys/ioctl.h])
 fi
 
+##
+#   Check how to print a size_t variable
+##
+
+AC_CACHE_CHECK(
+    [the underlying type of a size_t],
+    netsnmp_cv_size_t_type,
+    [m4_foreach([TYPE], [[int],[long],[long long],[short],[char]],
+     [if [[ x$netsnmp_cv_size_t_type = x ]] ; then
+         AC_COMPILE_IFELSE(
+	     [AC_LANG_PROGRAM(
+[AC_INCLUDES_DEFAULT()
+extern unsigned TYPE variable;
+extern size_t variable;],
+                 [])],
+             [netsnmp_cv_size_t_type="TYPE"])
+     fi
+    ])])
+
+AC_MSG_CHECKING([how to printf a size_t])
+case "$netsnmp_cv_size_t_type" in
+    char|short|int) netsnmp_PRIz="" ;;
+    long) netsnmp_PRIz="l" ;;
+    "long long") netsnmp_PRIz="ll" ;;
+    *) AC_MSG_ERROR([underlying type of size_t not known]) ;;
+esac
+AC_MSG_RESULT($netsnmp_PRIz)
+AC_DEFINE_UNQUOTED([NETSNMP_PRIz], ["$netsnmp_PRIz"],
+                   [Size prefix to use to printf a size_t or ssize_t])
+
+##
+#   Check how to print a uint32_t variable
+##
+
+AC_CACHE_CHECK(
+    [the underlying type of an uint32_t],
+    netsnmp_cv_uint32_t_type,
+    [m4_foreach([TYPE], [[char],[short],[int],[long],[long long]],
+     [if [[ x$netsnmp_cv_uint32_t_type = x ]] ; then
+         AC_COMPILE_IFELSE(
+	     [AC_LANG_PROGRAM(
+[AC_INCLUDES_DEFAULT()
+extern unsigned TYPE variable;
+extern uint32_t variable;],
+                 [])],
+             [netsnmp_cv_uint32_t_type="TYPE"])
+     fi
+    ])])
+
+AC_MSG_CHECKING([how to printf a uint32_t])
+case "$netsnmp_cv_uint32_t_type" in
+    char|short|int) netsnmp_PRI32="" ;;
+    long) netsnmp_PRI32="l" ;;
+    "long long") netsnmp_PRI32="ll" ;;
+    *) AC_MSG_ERROR([underlying type of uint32_t not known]) ;;
+esac
+AC_MSG_RESULT($netsnmp_PRI32)
+AC_DEFINE_UNQUOTED([NETSNMP_PRI32], ["$netsnmp_PRI32"],
+                   [Size prefix to use to printf a uint32_t])

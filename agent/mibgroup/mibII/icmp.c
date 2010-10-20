@@ -45,7 +45,10 @@
 #endif /* ICMP6_MEMBERSHIP_QUERY */
 
 
-#if defined(HAVE_LIBPERFSTAT_H) && (defined(aix4) || defined(aix5) || defined(aix6)) && !defined(FIRST_PROTOCOL)
+#if defined(HAVE_LIBPERFSTAT_H) && (defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)) && !defined(FIRST_PROTOCOL)
+#ifdef HAVE_SYS_PROTOSW_H
+#include <sys/protosw.h>
+#endif
 #include <libperfstat.h>
 #ifdef FIRST_PROTOCOL
 perfstat_protocol_t ps_proto;
@@ -160,8 +163,10 @@ icmp_msg_stats_load(netsnmp_cache *cache, void *vmagic)
 {
     struct icmp_mib v4icmp;
     struct icmp4_msg_mib v4icmpmsg;
+#ifdef NETSNMP_ENABLE_IPV6
     struct icmp6_mib v6icmp;
     struct icmp6_msg_mib v6icmpmsg;
+#endif
     int i, j, k, flag, inc;
 
     memset(&icmp_msg_stats_table, 0, sizeof(icmp_msg_stats_table));
@@ -372,7 +377,7 @@ icmp_stats_next_entry( void **loop_context,
                      netsnmp_variable_list *index,
                      netsnmp_iterator_info *data)
 {
-	int i = (int)(*loop_context);
+	int i = (int)(intptr_t)(*loop_context);
 	netsnmp_variable_list *idx = index;
 
 	if(i > 1)
@@ -388,7 +393,7 @@ icmp_stats_next_entry( void **loop_context,
 
 	*data_context = &icmp_stats_table[i];
 
-	*loop_context = (void *)(++i);
+	*loop_context = (void *)(intptr_t)(++i);
 	
 	return index;
 }
@@ -412,7 +417,7 @@ icmp_msg_stats_next_entry(void **loop_context,
                           netsnmp_variable_list *index,
                           netsnmp_iterator_info *data)
 {
-    int i = (int)(*loop_context);
+    int i = (int)(intptr_t)(*loop_context);
     netsnmp_variable_list *idx = index;
 
     if(i >= ICMP_MSG_STATS_IPV4_COUNT + ICMP_MSG_STATS_IPV6_COUNT)
@@ -430,7 +435,7 @@ icmp_msg_stats_next_entry(void **loop_context,
             sizeof(uint32_t));
 
     *data_context = &icmp_msg_stats_table[i];
-    *loop_context = (void *)(++i);
+    *loop_context = (void *)(intptr_t)(++i);
 
     return index;
 }
@@ -442,7 +447,7 @@ icmp_msg_stats_first_entry(void **loop_context,
                            netsnmp_variable_list *index,
                            netsnmp_iterator_info *data)
 {
-    *loop_context = 0;
+    *loop_context = NULL;
     *data_context = NULL;
     return icmp_msg_stats_next_entry(loop_context, data_context, index, data);
 }
@@ -452,11 +457,13 @@ void
 init_icmp(void)
 {
     netsnmp_handler_registration *reginfo;
+#ifdef linux
     netsnmp_handler_registration *msg_stats_reginfo;
     netsnmp_iterator_info *iinfo;
     netsnmp_iterator_info *msg_stats_iinfo;
     netsnmp_table_registration_info *table_info;
     netsnmp_table_registration_info *msg_stats_table_info;
+#endif
 
     /*
      * register ourselves with the agent as a group of scalars...
@@ -575,7 +582,7 @@ init_icmp(void)
 #define USES_SNMP_DESIGNED_ICMPSTAT
 #endif
 
-#if defined (WIN32) || defined (cygwin)
+#ifdef HAVE_IPHLPAPI_H
 #include <iphlpapi.h>
 #define ICMP_STAT_STRUCTURE MIB_ICMP
 #endif

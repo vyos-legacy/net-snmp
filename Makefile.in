@@ -1,3 +1,4 @@
+
 #
 # Makefile.in (at the root of net-snmp)
 #
@@ -16,7 +17,7 @@ CPP		= @CPP@ 					        \
 INSTALLHEADERS=version.h
 INCLUDESUBDIR=system
 INCLUDESUBDIRHEADERS= aix.h bsd.h bsdi3.h bsdi4.h bsdi.h cygwin.h \
-	darwin.h darwin7.h darwin8.h darwin9.h dragonfly.h dynix.h \
+	darwin.h darwin7.h darwin8.h darwin9.h darwin10.h dragonfly.h dynix.h \
 	freebsd2.h freebsd3.h freebsd4.h freebsd5.h freebsd6.h freebsd.h \
 	generic.h \
 	hpux.h irix.h linux.h mingw32.h mips.h netbsd.h openbsd.h osf5.h \
@@ -80,7 +81,7 @@ apps:
 	@(cd snmplib; $(MAKE) )
 	@(cd apps; $(MAKE) )
 
-snmpget snmpbulkget snmpwalk snmpbulkwalk snmptranslate snmpstatus snmpdelta snmptable snmptest snmpset snmpusm snmpvacm snmpgetnext encode_keychange snmpdf snmptrap:
+snmpget snmpbulkget snmpwalk snmpbulkwalk snmptranslate snmpstatus snmpdelta snmptable snmptest snmpset snmpusm snmpvacm snmpgetnext encode_keychange snmpdf snmptrap snmptls:
 	@(cd snmplib; $(MAKE) )
 	@(cd apps; $(MAKE) $@ )
 
@@ -104,19 +105,12 @@ sedscript: sedscript.in include/net-snmp/net-snmp-config.h $(srcdir)/agent/mibgr
 EXAMPLE.conf: sedscript EXAMPLE.conf.def
 	$(SED) -f sedscript $(srcdir)/EXAMPLE.conf.def > EXAMPLE.conf
 
-docs: docsdir mancp
+docs: docsdir 
 
 docsdir: docsdox
 
 docsdox: doxygen.conf
 	srcdir=$(srcdir) VERSION=$(VERSION) doxygen $(srcdir)/doxygen.conf
-	-rm docs/man/man3/todo.3
-	-rm docs/man/man3/deprecated.3
-
-mancp:
-	@for i in docs/man/man3/* ; do \
-	     cp $$i man/netsnmp_`basename $$i` ; \
-	done
 
 net-snmp-config-x: net-snmp-config
 	chmod a+x net-snmp-config
@@ -138,11 +132,8 @@ copypersistentfiles:
 #
 # test targets
 #
-test: all testdirs
-	( cd testing; $(MAKE) test )
-
-test-mibs: all testdirs
-	( cd testing; $(MAKE) test-mibs )
+test test-mibs testall testfailed testsimple: all testdirs
+	( cd testing; $(MAKE) $@ )
 
 testdirs:
 	for i in $(TESTDIRS) ; do	\
@@ -254,7 +245,8 @@ configclean: makefileclean
 	rm -f include/net-snmp/agent/mib_module_config.h		\
 		include/net-snmp/agent/agent_module_config.h		\
 		include/net-snmp/library/snmpv3-security-includes.h \
-		snmplib/snmpsm_init.h                   \
+		snmplib/snmpsm_init.h                               \
+                snmplib/transports/snmp_transport_inits.h           \
 		agent/mibgroup/agent_module_includes.h 	\
 		agent/mibgroup/agent_module_inits.h 	\
 		agent/mibgroup/agent_module_shutdown.h 	\
@@ -331,6 +323,30 @@ $(srcdir)/configure: $(configure_ac) aclocal.m4
 	    echo "WARNING: not running autoconf"; \
 	fi
 
+gendir=dist/generation-scripts
+generation-scripts: generation-scripts-dirs $(gendir)/gen-transport-headers $(gendir)/gen-security-headers
+
+$(gendir)/gen-variables: $(gendir)/gen-variables.in
+	./config.status
+
+generation-scripts-dirs:
+	@if [ ! -d dist ] ; then \
+	    mkdir dist ;        \
+	fi
+	@if [ ! -d dist/generation-scripts ] ; then \
+	    mkdir dist/generation-scripts ;        \
+	fi
+
+$(gendir)/gen-transport-headers: $(gendir)/gen-transport-headers.in $(gendir)/gen-variables
+	rm -f $@
+	autoconf -o $@ $<
+	chmod a+x $@
+
+$(gendir)/gen-security-headers: $(gendir)/gen-security-headers.in $(gendir)/gen-variables
+	rm -f $@
+	autoconf -o $@ $<
+	chmod a+x $@
+
 config.status: configure
 	@if test "x$(NOAUTODEPS)" = "x"; then \
 	    echo "running config.status because $? changed"; \
@@ -368,25 +384,35 @@ tarclean:
 	fi
 
 checks:
-	$(MAKE) -k makefilecheck commentcheck warningcheck dependcheck
+	$(MAKE) -k makefilecheck commentcheck warningcheck dependcheck \
+	assertcheck perlcalloccheck
 
 dependcheck:
 	@echo "Checking for full paths in dependency files..."
-	@grep -n -E "^/" `$(FIND) $(top_srcdir) -name Makefile.depend` && exit 1
+	@if grep -n -E "^/" `$(FIND) $(top_srcdir) -name Makefile.depend`; then false; fi
 
 warningcheck:
 	@echo "Checking for cpp warnings..."
-	@grep -n -E "#warning" `$(FIND) $(top_srcdir) -name \*.\[ch\]` && exit 1
+	@if grep -n "#warning" `$(FIND) $(top_srcdir) -name \*.\[ch\]`; then false; fi
+
+assertcheck:
+	@echo "Checking for non-snmp asserts..."
+	@if grep -n -w "assert" `$(FIND) $(top_srcdir) -name \*.\[ch\] | grep -v snmp_assert.h`; then false; fi
 
 commentcheck:
 	@echo "Checking for C++ style comments..."
-	@grep -n -E "([^:)n]|^)//" `$(FIND) $(top_srcdir) -path './win32' -prune -o -name \*.\[ch\] | grep -v agent/mibgroup/winExtDLL.c` && exit 1
+	@if grep -n -E "([^:)n]|^)//" `$(FIND) $(top_srcdir) -path './win32' -prune -o -name \*.\[ch\] | grep -v agent/mibgroup/winExtDLL.c`; then false; fi
 
-# always exit 1, since I can't figure out how to invert grep rc
 makefilecheck:
 	@echo "Checking for non-portable Makefile constructs..."
-	@grep -n "\.c=" `$(FIND) $(top_srcdir) -name "Makefile.*"`
-	@exit 1
+	@if grep -n "\.c=" `$(FIND) $(top_srcdir) -name .svn -prune -o -path ./Makefile.in -prune -o -name "Makefile.*" -print`; then false; fi
+
+# Invoking calloc() directly or indirectly from a Perl XSUB and freeing that
+# memory by calling free() from the XSUB is a sure way to trigger "Free to
+# wrong pool" errors on Windows.
+perlcalloccheck:
+	@echo "Checking for calloc() in Perl's external subroutines ..."
+	@if grep -nwE 'calloc|SNMP_MALLOC_STRUCT|SNMP_MALLOC_TYPEDEF' `$(FIND) $(top_srcdir) -name '*.xs'`; then false; fi
 
 dist: tar
 

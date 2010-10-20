@@ -25,9 +25,6 @@
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
 #endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
-#endif
 #ifdef WIN32
 #include <limits.h>
 #endif
@@ -104,7 +101,7 @@ pass_persist_parse_config(const char *token, char *cptr)
 	/* change priority level */
 	cptr++;
 	cptr = skip_white(cptr);
-	if (! isdigit(*cptr)) {
+	if (! isdigit((unsigned char)(*cptr))) {
 	  config_perror("priority must be an integer");
 	  return;
 	}
@@ -127,7 +124,7 @@ pass_persist_parse_config(const char *token, char *cptr)
      */
     if (*cptr == '.')
         cptr++;
-    if (!isdigit(*cptr)) {
+    if (!isdigit((unsigned char)(*cptr))) {
         config_perror("second token is not a OID");
         return;
     }
@@ -141,7 +138,7 @@ pass_persist_parse_config(const char *token, char *cptr)
     (*ppass)->type = PASSTHRU_PERSIST;
 
     (*ppass)->miblen = parse_miboid(cptr, (*ppass)->miboid);
-    while (isdigit(*cptr) || *cptr == '.')
+    while (isdigit((unsigned char)(*cptr)) || *cptr == '.')
         cptr++;
     /*
      * path
@@ -326,13 +323,8 @@ var_extensible_pass_persist(struct variable *vp,
                 else if (!strncasecmp(buf, "integer64", 9)) {
                     static struct counter64 c64;
                     uint64_t v64 = strtoull(buf2, NULL, 10);
-                    if (sizeof(long) > 4) {    /* 64-bit machine */
-                        c64.high = v64 >> 32;
-                        c64.low = v64 & 0xffffffff;
-                    }
-                    else {    /* 32-bit machine */
-                        *((uint64_t *) &c64) = v64;
-                    }
+                    c64.high = (unsigned long)(v64 >> 32);
+                    c64.low  = (unsigned long)(v64 & 0xffffffff);
                     *var_len = sizeof(c64);
                     vp->type = ASN_INTEGER64;
                     return ((unsigned char *) &c64);
@@ -351,13 +343,8 @@ var_extensible_pass_persist(struct variable *vp,
                 else if (!strncasecmp(buf, "counter64", 9)) {
                     static struct counter64 c64;
                     uint64_t v64 = strtoull(buf2, NULL, 10);
-                    if (sizeof(long) > 4) {    /* 64-bit machine */
-                        c64.high = v64 >> 32;
-                        c64.low = v64 & 0xffffffff;
-                    }
-                    else {    /* 32-bit machine */
-                        *((uint64_t *) &c64) = v64;
-                    }
+                    c64.high = (unsigned long)(v64 >> 32);
+                    c64.low  = (unsigned long)(v64 & 0xffffffff);
                     *var_len = sizeof(c64);
                     vp->type = ASN_COUNTER64;
                     return ((unsigned char *) &c64);
@@ -808,7 +795,7 @@ close_persist_pipe(int iindex)
     }
 
 #if defined(WIN32) && !defined (mingw32) && !defined (HAVE_SIGNAL)
-    if (!CloseHandle(persist_pipes[iindex].pid)) {
+    if (!CloseHandle((HANDLE)persist_pipes[iindex].pid)) {
           DEBUGMSGTL(("ucd-snmp/pass_persist","close_persist_pipe pid: close error\n"));
         } 
 #endif

@@ -2,11 +2,7 @@
 
 #include <sys/types.h>
 #if TIME_WITH_SYS_TIME
-# ifdef WIN32
-#  include <sys/timeb.h>
-# else
-#  include <sys/time.h>
-# endif
+# include <sys/time.h>
 # include <time.h>
 #else
 # if HAVE_SYS_TIME_H
@@ -17,9 +13,6 @@
 #endif
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>
-#endif
-#if HAVE_WINSOCK_H
-#include <winsock.h>
 #endif
 #if HAVE_STRING_H
 #include <string.h>
@@ -113,7 +106,7 @@ var_extensible_version(struct variable *vp,
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERDATE:
-        sprintf(errmsg, "$Date: 2008-12-29 15:34:58 -0800 (Mon, 29 Dec 2008) $");
+        sprintf(errmsg, "$Date: 2010-01-24 03:41:03 -0800 (Sun, 24 Jan 2010) $");
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERCDATE:
@@ -124,7 +117,7 @@ var_extensible_version(struct variable *vp,
         return ((u_char *) errmsg);
     case VERIDENT:
         sprintf(errmsg,
-                "$Id: versioninfo.c 17326 2008-12-29 23:34:58Z magfr $");
+                "$Id: versioninfo.c 18044 2010-01-24 11:41:03Z bvassche $");
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERCONFIG:
