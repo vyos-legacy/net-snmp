@@ -30,14 +30,14 @@
 #define NIP6_FMT "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x"
 #endif
 
-int _load_v4(netsnmp_container *container, int idx_offset);
+static int _load_v4(netsnmp_container *container, int idx_offset);
 #ifdef NETSNMP_ENABLE_IPV6
 static int _load_v6(netsnmp_container *container, int idx_offset);
 #endif
 #ifdef HAVE_LINUX_RTNETLINK_H
-int get_translation_table_info (int sd, int *status, 
+static int get_translation_table_info (int sd, int *status, 
                                 char *buff, size_t size);
-int fillup_entry_info(netsnmp_arp_entry *entry,
+static int fillup_entry_info(netsnmp_arp_entry *entry,
                       struct nlmsghdr *nlmp);
 #endif
 /**
@@ -74,7 +74,7 @@ netsnmp_access_arp_container_arch_load(netsnmp_container *container)
 
 /**
  */
-int
+static int
 _load_v4(netsnmp_container *container, int idx_offset)
 {
     FILE           *in;
@@ -280,7 +280,7 @@ _load_v6(netsnmp_container *container, int idx_offset)
     return idx_offset;
 }
 #if defined(HAVE_LINUX_RTNETLINK_H)
-int 
+static int 
 get_translation_table_info (int sd, int *status, char *buff, size_t size)
 {
     struct {
@@ -314,7 +314,7 @@ get_translation_table_info (int sd, int *status, char *buff, size_t size)
     return 0;
 }
 
-int
+static int
 fillup_entry_info(netsnmp_arp_entry *entry, struct nlmsghdr *nlmp)
 {
     struct ndmsg    *rtmp;
