@@ -328,12 +328,19 @@ fillup_entry_info(netsnmp_arp_entry *entry, struct nlmsghdr *nlmp)
     u_char          *hwaddr;
 
     rtmp = (struct ndmsg *)NLMSG_DATA(nlmp);
-    if (nlmp->nlmsg_type != RTM_NEWNEIGH && nlmp->nlmsg_type != RTM_DELNEIGH)
+    if (nlmp->nlmsg_type != RTM_NEWNEIGH) {
+	snmp_log(LOG_ERR, "fillup_entry_info not NEWNEIGH: %08x",
+		 nlmp->nlmsg_type);
         return -1;
+    }
 
     if(rtmp->ndm_state != NUD_NOARP) {
        memset(tb, 0, sizeof(struct rtattr *) * (NDA_MAX + 1));
        length = nlmp->nlmsg_len - NLMSG_LENGTH(sizeof(*rtmp));
+       if (length < 0) {
+	   snmp_log(LOG_ERR, "fillup_entry_info msg too short %d", length);
+	   return -1;
+       }
        /* this is what the kernel-removed NDA_RTA define did */
        rta = ((struct rtattr*)(((char*)(rtmp)) +
                                NLMSG_ALIGN(sizeof(struct ndmsg))));
@@ -342,10 +349,12 @@ fillup_entry_info(netsnmp_arp_entry *entry, struct nlmsghdr *nlmp)
                   tb[rta->rta_type] = rta;
               rta = RTA_NEXT(rta,length);
        }
-       if(length)
-          return -1;
-       /* Fill up the index
-       */
+       if (length) {
+	   snmp_log(LOG_ERR, "fillup_entry_info extra %d", length);
+	   return -1;
+       }
+
+       /* Fill up the index */
        entry->if_index = rtmp->ndm_ifindex;
        /* Fill up ip address */
        if (tb[NDA_DST]) {
@@ -418,8 +427,6 @@ fillup_entry_info(netsnmp_arp_entry *entry, struct nlmsghdr *nlmp)
              entry->arp_type = INETNETTOMEDIATYPE_LOCAL;
              break;
        }      
-    } else {
-        return -1;  /* could not create data for this interface */
     }
     
     return 0;
