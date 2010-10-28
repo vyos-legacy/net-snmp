@@ -1103,9 +1103,31 @@ _ifXTable_check_column(ifXTable_rowreq_ctx * rowreq_ctx,
         /*
          * ifAlias(18)/DisplayString/ASN_OCTET_STR/char(char)//L/A/W/e/R/d/H 
          */
-	/* VYATTA: ifAlias is only setable via CLI description field! */
     case COLUMN_IFALIAS:
-        rc = SNMP_ERR_NOTWRITABLE;
+        rc = netsnmp_check_vb_type_and_max_size(var, ASN_OCTET_STR,
+                                                sizeof(rowreq_ctx->data.
+                                                       ifAlias));
+        /*
+         * check defined range(s). 
+         */
+        if ((SNMPERR_SUCCESS == rc)
+            && ((var->val_len < 0) || (var->val_len > 64))
+            ) {
+            rc = SNMP_ERR_WRONGLENGTH;
+        }
+        if (SNMPERR_SUCCESS != rc) {
+            DEBUGMSGTL(("ifXTable:_ifXTable_check_column:ifAlias",
+                        "varbind validation failed (eg bad type or size)\n"));
+        } else {
+            rc = ifAlias_check_value(rowreq_ctx, (char *) var->val.string,
+                                     var->val_len);
+            if ((MFD_SUCCESS != rc) && (MFD_NOT_VALID_EVER != rc)
+                && (MFD_NOT_VALID_NOW != rc)) {
+                snmp_log(LOG_ERR, "bad rc %d from ifAlias_check_value\n",
+                         rc);
+                rc = SNMP_ERR_GENERR;
+            }
+        }
         break;
 
         /*
@@ -1230,6 +1252,14 @@ _ifXTable_undo_setup_column(ifXTable_rowreq_ctx * rowreq_ctx, int column)
     case COLUMN_IFPROMISCUOUSMODE:
         rowreq_ctx->column_set_flags |= COLUMN_IFPROMISCUOUSMODE_FLAG;
         rc = ifPromiscuousMode_undo_setup(rowreq_ctx);
+        break;
+
+        /*
+         * ifAlias(18)/DisplayString/ASN_OCTET_STR/char(char)//L/A/W/e/R/d/H 
+         */
+    case COLUMN_IFALIAS:
+        rowreq_ctx->column_set_flags |= COLUMN_IFALIAS_FLAG;
+        rc = ifAlias_undo_setup(rowreq_ctx);
         break;
 
     default:
@@ -1392,6 +1422,15 @@ _ifXTable_set_column(ifXTable_rowreq_ctx * rowreq_ctx,
         rowreq_ctx->column_set_flags |= COLUMN_IFPROMISCUOUSMODE_FLAG;
         rc = ifPromiscuousMode_set(rowreq_ctx,
                                    *((u_long *) var->val.string));
+        break;
+
+        /*
+         * ifAlias(18)/DisplayString/ASN_OCTET_STR/char(char)//L/A/W/e/R/d/H 
+         */
+    case COLUMN_IFALIAS:
+        rowreq_ctx->column_set_flags |= COLUMN_IFALIAS_FLAG;
+        rc = ifAlias_set(rowreq_ctx, (char *) var->val.string,
+                         var->val_len);
         break;
 
     default:
@@ -1558,6 +1597,13 @@ _ifXTable_undo_column(ifXTable_rowreq_ctx * rowreq_ctx,
          */
     case COLUMN_IFPROMISCUOUSMODE:
         rc = ifPromiscuousMode_undo(rowreq_ctx);
+        break;
+
+        /*
+         * ifAlias(18)/DisplayString/ASN_OCTET_STR/char(char)//L/A/W/e/R/d/H 
+         */
+    case COLUMN_IFALIAS:
+        rc = ifAlias_undo(rowreq_ctx);
         break;
 
     default:
@@ -2024,6 +2070,11 @@ _ifXTable_container_col_save(ifXTable_rowreq_ctx * rowreq_ctx,
             sprintf(buf, "%ld", rowreq_ctx->data.ifLinkUpDownTrapEnable);
         break;
 
+    case COLUMN_IFALIAS:   /** DisplayString = ASN_OCTET_STR */
+        buf = read_config_save_octet_string(buf, rowreq_ctx->data.ifAlias,
+                                            rowreq_ctx->data.ifAlias_len);
+        break;
+
     default:
             /** We shouldn't get here */
         snmp_log(LOG_ERR, "unknown column %d in "
@@ -2061,6 +2112,14 @@ _ifXTable_container_col_restore(ifXTable_rowreq_ctx * rowreq_ctx,
         buf = read_config_read_memory(ASN_INTEGER, buf,
                                       (char *) &rowreq_ctx->data.
                                       ifLinkUpDownTrapEnable, &len);
+        break;
+
+    case COLUMN_IFALIAS:   /** DisplayString = ASN_OCTET_STR */
+        rowreq_ctx->data.ifAlias_len = sizeof(rowreq_ctx->data.ifAlias);
+        buf = read_config_read_memory(ASN_OCTET_STR, buf,
+                                      (char *) &rowreq_ctx->data.ifAlias,
+                                      (size_t *) & rowreq_ctx->data.
+                                      ifAlias_len);
         break;
 
     default:

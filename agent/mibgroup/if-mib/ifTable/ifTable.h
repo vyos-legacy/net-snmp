@@ -249,6 +249,8 @@ config_exclude(mibII/interfaces)
         /*
          * ifAlias(18)/DisplayString/ASN_OCTET_STR/char(char)//L/A/W/e/R/d/H
          */
+        char            ifAlias[64];
+        size_t          ifAlias_len;    /* # of char elements, not bytes */
 
         /*
          * ifCounterDiscontinuityTime(19)/TimeStamp/ASN_TIMETICKS/u_long(u_long)//l/A/w/e/r/d/h
