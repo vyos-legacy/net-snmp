@@ -149,7 +149,6 @@ typedef struct netsnmp_interface_entry_s {
      */
     char   *name;
     char   *descr;
-    char   *alias;
     int     type;
     u_int   speed;
     u_int   speed_high;

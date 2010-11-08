@@ -331,9 +331,6 @@ netsnmp_access_interface_entry_free(netsnmp_interface_entry * entry)
     if (NULL != entry->descr)
         free(entry->descr);
 
-    if (NULL != entry->alias)
-	free(entry->alias);
-
     if (NULL != entry->paddr)
         free(entry->paddr);
 
@@ -759,9 +756,6 @@ netsnmp_access_interface_entry_overrides(netsnmp_interface_entry *entry)
      */
     if(entry->descr && (strlen(entry->descr) > 255))
         entry->descr[255] = 0;
-
-    if(entry->alias && (strlen(entry->alias) > 255))
-        entry->alias[255] = 0;
 
     if_ptr =
         netsnmp_access_interface_entry_overrides_get(entry->name);

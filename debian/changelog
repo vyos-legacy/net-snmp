@@ -1,3 +1,13 @@
+net-snmp (5.6-vyatta2) unstable; urgency=low
+
+  * Make local functions static in arp_linux
+  * More robust handling of IPv6 neighbor table
+  * Revert "Fix ifXTable save/restore now that ifAlias column not used"
+  * Revert "Fix ifAlias support"
+  * Revert "Add support for ifAlias"
+
+ -- Stephen Hemminger <shemminger@vyatta.com>  Thu, 28 Oct 2010 16:31:05 -0700
+
 net-snmp (5.6-vyatta1) unstable; urgency=low
 
   * Update to net-snmp 5.6
