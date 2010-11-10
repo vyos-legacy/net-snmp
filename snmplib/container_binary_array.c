@@ -423,14 +423,10 @@ netsnmp_binary_array_insert(netsnmp_container *c, const void *entry)
         if (new_max == 0)
             new_max = 10;       /* Start with 10 entries */
 
-        new_data = (void *) calloc(new_max, t->data_size);
+        new_data = realloc(t->data, new_max * t->data_size);
         if (new_data == NULL)
             return -1;
 
-        if (t->data) {
-            memcpy(new_data, t->data, t->max_size * t->data_size);
-            SNMP_FREE(t->data);
-        }
         t->data = (void**)new_data;
         t->max_size = new_max;
     }
