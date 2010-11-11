@@ -257,6 +257,8 @@ ipCidrRouteTable_container_load(netsnmp_container *container)
     /*
      * we just got a fresh copy of route data. snarf data
      */
+    CONTAINER_CLEAR(container, ipCidrRouteTable_container_free, NULL);
+
     CONTAINER_FOR_EACH(route_container,
                        (netsnmp_container_obj_func *) _snarf_route_entry,
                        container);
