@@ -48,7 +48,7 @@ netsnmp_access_route_container_load(netsnmp_container* container, u_int load_fla
     DEBUGMSGTL(("access:route:container", "load\n"));
 
     if (NULL == container) {
-        container = netsnmp_container_find("access:_route:table_container");
+        container = netsnmp_container_find("access:_route:fifo");
         if (container)
             container->container_name = strdup("_route");
     }
