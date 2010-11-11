@@ -1,3 +1,12 @@
+net-snmp (5.6-vyatta3) unstable; urgency=low
+
+  * Reduce the deleted interface hold time to 1 minute
+  * Use realloc when resizing a binary_array_container
+  * Eliminate data_size in binary_array_table
+  * Improve performance of binary_array container
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Wed, 10 Nov 2010 17:57:51 -0800
+
 net-snmp (5.6-vyatta2) unstable; urgency=low
 
   * Make local functions static in arp_linux
