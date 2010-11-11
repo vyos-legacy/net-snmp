@@ -36,6 +36,7 @@
 typedef struct binary_array_table_s {
     size_t                     max_size;   /* Size of the current data table */
     size_t                     count;      /* Index of the next free entry */
+    int                        dirty;
     void                     **data;       /* The table itself */
 } binary_array_table;
 
@@ -46,6 +47,75 @@ typedef struct binary_array_iterator_s {
 } binary_array_iterator;
 
 static netsnmp_iterator *_ba_iterator_get(netsnmp_container *c);
+
+/**********************************************************************
+ *
+ * 
+ *
+ */
+static void
+array_qsort(void **data, int first, int last, netsnmp_container_compare *f)
+{
+    int i, j;
+    void *mid, *tmp;
+    
+    i = first;
+    j = last;
+    mid = data[(first+last)/2];
+    
+    do {
+        while ( ((*f)(data[i], mid) < 0) && (i < last))
+            ++i;
+        while ( ((*f)(mid, data[j]) < 0) && (j > first))
+            --j;
+
+        if(i < j) {
+            tmp = data[i];
+            data[i] = data[j];
+            data[j] = tmp;
+            ++i;
+            --j;
+        }
+        else if (i == j) {
+            ++i;
+            --j;
+            break;
+        }
+    } while(i <= j);
+
+    if (j > first)
+        array_qsort(data, first, j, f);
+    
+    if (i < last)
+        array_qsort(data, i, last, f);
+}
+
+static int
+Sort_Array(netsnmp_container *c)
+{
+    binary_array_table *t = (binary_array_table*)c->container_data;
+    netsnmp_assert(t!=NULL);
+    netsnmp_assert(c->compare!=NULL);
+
+    if (c->flags & CONTAINER_KEY_UNSORTED)
+        return 0;
+
+    if (t->dirty) {
+        /*
+         * Sort the table 
+         */
+        if (t->count > 1)
+            array_qsort(t->data, 0, t->count - 1, c->compare);
+        t->dirty = 0;
+
+        /*
+         * no way to know if it actually changed... just assume so.
+         */
+        ++c->sync;
+    }
+
+    return 1;
+}
 
 static int
 linear_search(const void *val, netsnmp_container *c)
@@ -94,6 +164,9 @@ binary_search(const void *val, netsnmp_container *c, int exact)
         }
         return linear_search(val, c);
     }
+
+    if (t->dirty)
+        Sort_Array(c);
 
     while (len > 0) {
         half = len >> 1;
@@ -146,6 +219,7 @@ netsnmp_binary_array_initialize(void)
 
     t->max_size = 0;
     t->count = 0;
+    t->dirty = 0;
     t->data = NULL;
 
     return t;
@@ -199,6 +273,12 @@ netsnmp_binary_array_get(netsnmp_container *c, const void *key, int exact)
      */
     if (!t->count)
         return NULL;
+
+    /*
+     * if the table is dirty, sort it.
+     */
+    if (t->dirty)
+        Sort_Array(c);
 
     /*
      * if there is a key, search. Otherwise default is 0;
@@ -263,6 +343,12 @@ netsnmp_binary_array_remove(netsnmp_container *c, const void *key, void **save)
         return 0;
 
     /*
+     * if the table is dirty, sort it.
+     */
+    if (t->dirty)
+        Sort_Array(c);
+
+    /*
      * search
      */
     if ((index = binary_search(key, c, 1)) == -1)
@@ -278,6 +364,9 @@ netsnmp_binary_array_for_each(netsnmp_container *c,
 {
     binary_array_table *t = (binary_array_table*)c->container_data;
     size_t             i;
+
+    if (sort && t->dirty)
+        Sort_Array(c);
 
     for (i = 0; i < t->count; ++i)
         (*fe) (t->data[i], context);
@@ -298,66 +387,27 @@ netsnmp_binary_array_clear(netsnmp_container *c,
     }
 
     t->count = 0;
+    t->dirty = 0;
     ++c->sync;
-}
-
-static int
-binary_array_findslot(netsnmp_container *c, const void *entry)
-{
-    binary_array_table *t = (binary_array_table*)c->container_data;
-    size_t             len = t->count;
-    size_t             first = 0;
- 
-    if (c->flags & CONTAINER_KEY_UNSORTED) {
-	if (c->flags & CONTAINER_KEY_ALLOW_DUPLICATES)
-	    return t->count;
-
-	if (linear_search(entry, c) == -1)
-	    return t->count;	/* not found; insert at end */
-	else
-	    return -1;		/* found; duplicate detected */
-    } 
-
-    if (!len)
-        return -1;
-
-    while (len > 0) {
-	size_t half = len >> 1;
-        size_t middle = first + half;
-
-	if (c->compare(t->data[middle], entry) < 0) {
-            first = middle;
-            ++first;
-            len = len - half - 1;
-        } else
-            len = half;
-    }
-
-    if (first >= t->count)
-	    return t->count;	/* not found: insert at end */
-
-    if (! (c->flags & CONTAINER_KEY_ALLOW_DUPLICATES) &&
-	c->compare(t->data[first], entry) == 0)
-	    return -1;		/* duplicate */
-
-    return first;
 }
 
 NETSNMP_STATIC_INLINE int
 netsnmp_binary_array_insert(netsnmp_container *c, const void *entry)
 {
     binary_array_table *t = (binary_array_table*)c->container_data;
-    int             new_max;
-    void           *new_data;
-    size_t          index;
-
+    int             new_max, was_dirty = 0;
+    void           *new_data;   /* Used for * a) extending the data table
+                                 * * b) the next entry to use */
     /*
-     * find where new entry should go in the array
+     * check for duplicates
      */
-    index = binary_array_findslot(c, entry);
-    if (index == -1) {
-	DEBUGMSGTL(("container","not inserting duplicate key\n"));
-	return -1;
+    if (! (c->flags & CONTAINER_KEY_ALLOW_DUPLICATES)) {
+        was_dirty = t->dirty;
+        new_data = netsnmp_binary_array_get(c, entry, 1);
+        if (NULL != new_data) {
+            DEBUGMSGTL(("container","not inserting duplicate key\n"));
+            return -1;
+        }
     }
     
     /*
@@ -379,18 +429,19 @@ netsnmp_binary_array_insert(netsnmp_container *c, const void *entry)
         t->max_size = new_max;
     }
 
-    /* 
-     * move data below entry down to make room
-     */
-    memmove(&t->data[index+1], &t->data[index],
-	    (t->count - index) * sizeof(void *));
-
     /*
      * Insert the new entry into the data array
      */
-    t->data[index] = NETSNMP_REMOVE_CONST(void *, entry);
-    ++t->count;
-    ++c->sync;
+    t->data[t->count++] = NETSNMP_REMOVE_CONST(void *, entry);
+    t->dirty = 1;
+
+    /*
+     * if array was dirty before we called get, sync was incremented when
+     * get called SortArray. If we didn't call get or the array wasn't dirty,
+     * bump sync now.
+     */
+    if (!was_dirty)
+        ++c->sync;
 
     return 0;
 }
@@ -412,6 +463,9 @@ binary_search_for_start(netsnmp_index *val, netsnmp_container *c)
 
     if (!len)
         return -1;
+
+    if (t->dirty)
+        Sort_Array(c);
 
     while (len > 0) {
         half = len >> 1;
@@ -450,6 +504,12 @@ netsnmp_binary_array_get_subset(netsnmp_container *c, void *key, int *len)
     netsnmp_assert(c->ncompare);
     if (!t->count | !c->ncompare)
         return NULL;
+
+    /*
+     * if the table is dirty, sort it.
+     */
+    if (t->dirty)
+        Sort_Array(c);
 
     /*
      * find matching items
@@ -589,6 +649,7 @@ _ba_duplicate(netsnmp_container *c, void *ctx, u_int flags)
 
     dupt->max_size = t->max_size;
     dupt->count = t->count;
+    dupt->dirty = t->dirty;
 
     /*
      * shallow copy
@@ -769,6 +830,9 @@ _ba_iterator_reset(binary_array_iterator *it)
         netsnmp_assert(NULL != t);
         return -1;
     }
+
+    if (t->dirty)
+        Sort_Array(it->base.container);
 
     /*
      * save sync count, to make sure container doesn't change while
