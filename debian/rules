@@ -47,7 +47,7 @@ override_dh_auto_configure:
 	  --enable-shared --with-cflags="$(CFLAGS) -DNETSNMP_USE_INLINE" \
 	  --with-perl-modules="INSTALLDIRS=vendor" --enable-as-needed \
 	  $(IPV6) --with-logfile=none \
-	  --without-rpm --with-libwrap --with-openssl \
+	  --without-rpm --without-libwrap --with-openssl \
 	  --without-dmalloc --without-efence --without-rsaref \
 	  --with-sys-contact="root" --with-sys-location="Unknown" \
 	  --with-mib-modules="$(MIB_MODULES)" \
