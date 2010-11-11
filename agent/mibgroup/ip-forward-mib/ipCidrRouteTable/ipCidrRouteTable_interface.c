@@ -2238,7 +2238,7 @@ _ipCidrRouteTable_container_init(ipCidrRouteTable_interface_ctx * if_ctx)
     /*
      * cache init
      */
-    if_ctx->cache = netsnmp_cache_create(30,    /* timeout in seconds */
+    if_ctx->cache = netsnmp_cache_create(IPCIDRROUTETABLE_CACHE_TIMEOUT,
                                          _cache_load, _cache_free,
                                          ipCidrRouteTable_oid,
                                          ipCidrRouteTable_oid_size);

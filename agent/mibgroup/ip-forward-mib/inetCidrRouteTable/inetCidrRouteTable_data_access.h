@@ -44,7 +44,7 @@ extern          "C" {
      * TODO:180:o: Review inetCidrRouteTable cache timeout.
      * The number of seconds before the cache times out
      */
-#define INETCIDRROUTETABLE_CACHE_TIMEOUT   60
+#define INETCIDRROUTETABLE_CACHE_TIMEOUT   (5*60)
 
     void            inetCidrRouteTable_container_init(netsnmp_container
                                                       **container_ptr_ptr,

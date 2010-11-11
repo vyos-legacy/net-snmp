@@ -43,8 +43,10 @@ extern          "C" {
     /*
      * TODO:180:o: Review ipCidrRouteTable cache timeout.
      * The number of seconds before the cache times out
+     * Must be larger than time to do bulk download of whole cache
+     * observed that was 4 minutes for 150K routes.
      */
-#define IPCIDRROUTETABLE_CACHE_TIMEOUT   60
+#define IPCIDRROUTETABLE_CACHE_TIMEOUT   (5*60)
 
     void            ipCidrRouteTable_container_init(netsnmp_container
                                                     **container_ptr_ptr,

@@ -2290,7 +2290,7 @@ _inetCidrRouteTable_container_init(inetCidrRouteTable_interface_ctx *
     /*
      * cache init
      */
-    if_ctx->cache = netsnmp_cache_create(30,    /* timeout in seconds */
+    if_ctx->cache = netsnmp_cache_create(INETCIDRROUTETABLE_CACHE_TIMEOUT,
                                          _cache_load, _cache_free,
                                          inetCidrRouteTable_oid,
                                          inetCidrRouteTable_oid_size);
