@@ -1,3 +1,16 @@
+net-snmp (5.6-vyatta4) unstable; urgency=low
+
+  * Revert "Improve performance of binary_array container"
+  * Improve performance of sort in binary_container_array
+  * Update list of derived files
+  * Add ifindex cache for route table load
+  * Use FIFO for route_container
+  * Remove tcp wrapper library support
+  * Optimize update of route table containers
+  * Increase route table cache timeout
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Thu, 11 Nov 2010 15:38:29 -0800
+
 net-snmp (5.6-vyatta3) unstable; urgency=low
 
   * Reduce the deleted interface hold time to 1 minute
