@@ -35,6 +35,7 @@ _type_from_flags(unsigned int flags)
         return 0; /* route not up */
 
 }
+
 static int
 _load_ipv4(netsnmp_container* container, u_long *index )
 {
@@ -43,7 +44,9 @@ _load_ipv4(netsnmp_container* container, u_long *index )
     netsnmp_route_entry *entry = NULL;
     char            name[16];
     int             fd;
-
+    char   	    ncache[16];
+    int    	    icache = 0;
+ 
     DEBUGMSGTL(("access:route:container",
                 "route_container_arch_load ipv4\n"));
 
@@ -109,13 +112,21 @@ _load_ipv4(netsnmp_container* container, u_long *index )
         /*
          * don't bother to try and get the ifindex for routes with
          * no interface name.
-         * NOTE[1]: normally we'd use netsnmp_access_interface_index_find,
-         * but since that will open/close a socket, and we might
-         * have a lot of routes, call the ioctl routine directly.
+	 *
+	 * May have lots of routes with same interface name
+	 * therefore worth caching the previous results.
          */
-        if ('*' != name[0])
-            entry->if_index =
-                netsnmp_access_interface_ioctl_ifindex_get(fd,name);
+        if ('*' != name[0]) {
+	    if (icache && strcmp(name, ncache) == 0)
+		entry->if_index = icache;
+	    else {
+		entry->if_index = netsnmp_access_interface_ioctl_ifindex_get(fd, name);
+		if (entry->if_index) {
+		    strcpy(ncache, name);
+		    icache = entry->if_index;
+		}
+	    }
+	}
 
         /*
          * arbitrary index
