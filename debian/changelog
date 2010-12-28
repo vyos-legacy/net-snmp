@@ -1,3 +1,9 @@
+net-snmp (5.6-vyatta6) unstable; urgency=low
+
+  * new branch
+
+ -- An-Cheng Huang <ancheng@vyatta.com>  Tue, 28 Dec 2010 20:43:35 +0000
+
 net-snmp (5.6-vyatta5) unstable; urgency=low
 
   * Read client address from snmp.conf
