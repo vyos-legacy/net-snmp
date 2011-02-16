@@ -899,6 +899,7 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name,
         return netsnmp_linux_interface_get_if_speed_mii(fd,name,defaultspeed);
     }
     
+    speed = edata.speed;
 #if HAVE_STRUCT_ETHTOOL_CMD_SPEED_HI
     speed |= edata.speed_hi << 16;
 #endif
