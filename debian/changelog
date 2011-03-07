@@ -1,3 +1,10 @@
+net-snmp (5.6-vyatta8) unstable; urgency=low
+
+  * Remove tabs from interface_linux
+  * Add pci slot info to ifDescr
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Mon, 07 Mar 2011 15:38:11 -0800
+
 net-snmp (5.6-vyatta7) unstable; urgency=low
 
   * Fix bug in link speed determination
