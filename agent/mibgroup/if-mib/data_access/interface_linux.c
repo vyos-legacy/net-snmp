@@ -279,12 +279,21 @@ static int sysfs_get_id(const char *path, unsigned short *id)
 static void
 _arch_interface_description_get(netsnmp_interface_entry *entry)
 {
-    const char *descr;
-    char buf[256];
     unsigned short vendor_id, device_id;
+    char devbuf[128], lbuf[128], slot[64], buf[256];
 
     if (!pci_access)
         return;
+
+    snprintf(buf, sizeof(buf),
+             "/sys/class/net/%s/device", entry->name);
+
+    /* read sysfs link to get "../../../0000:07:00.0" */
+    if (readlink(buf, lbuf, sizeof(lbuf)) < 0) {
+        DEBUGMSGTL(("access:interface",
+                    "readlink %s failed", buf));
+        return;
+    }
 
     snprintf(buf, sizeof(buf),
              "/sys/class/net/%s/device/vendor", entry->name);
@@ -298,17 +307,15 @@ _arch_interface_description_get(netsnmp_interface_entry *entry)
     if (!sysfs_get_id(buf, &device_id))
         return;
 
-    descr = pci_lookup_name(pci_access, buf, sizeof(buf),
-                            PCI_LOOKUP_VENDOR | PCI_LOOKUP_DEVICE,
-                            vendor_id, device_id);
-    if (descr) {
-        free(entry->descr);
-        entry->descr = strdup(descr);
-    } else {
-        DEBUGMSGTL(("access:interface",
-                    "Failed pci_lookup_name vendor=%#hx device=%#hx\n",
-                    vendor_id, device_id));
-    }
+    /* Produce "000:08:00.0 Mycontroller Group 91010 Ethernet Controller" */
+    snprintf(buf, sizeof(buf), "%s %s", basename(lbuf),
+             pci_lookup_name(pci_access, devbuf, sizeof(devbuf),
+                             PCI_LOOKUP_VENDOR | PCI_LOOKUP_DEVICE,
+                             vendor_id, device_id));
+    if (entry->descr)
+            free(entry->descr);
+
+    entry->descr = strdup(buf);
 }
 #endif
 
