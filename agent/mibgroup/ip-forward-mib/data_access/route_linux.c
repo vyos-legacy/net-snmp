@@ -1,7 +1,7 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: route_linux.c 18994 2010-06-16 13:13:25Z dts12 $
+ * $Id$
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -16,350 +16,280 @@
 #include "ip-forward-mib/inetCidrRouteTable/inetCidrRouteTable_constants.h"
 #include "if-mib/data_access/interface_ioctl.h"
 
-static int
-_type_from_flags(unsigned int flags)
-{
-    /*
-     *  RTF_GATEWAY RTF_UP RTF_DYNAMIC RTF_CACHE
-     *  RTF_MODIFIED RTF_EXPIRES RTF_NONEXTHOP
-     *  RTF_DYNAMIC RTF_LOCAL RTF_PREFIX_RT
-     *
-     * xxx: can we distinguish between reject & blackhole?
-     */
-    if (flags & RTF_UP) {
-        if (flags & RTF_GATEWAY)
-            return INETCIDRROUTETYPE_REMOTE;
-        else /*if (flags & RTF_LOCAL) */
-            return INETCIDRROUTETYPE_LOCAL;
-    } else 
-        return 0; /* route not up */
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <unistd.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 
+#define RCVBUF_SIZE 32768
+#define SNDBUF_SIZE 512
+
+static int
+_addresstype_from_family(int family)
+{
+    switch (family) {
+    case AF_INET:
+        return INETADDRESSTYPE_IPV4;
+    case AF_INET6:
+        return INETADDRESSTYPE_IPV6;
+    default:
+        return INETADDRESSTYPE_UNKNOWN;
+    }
 }
 
 static int
-_load_ipv4(netsnmp_container* container, u_long *index )
+_type_from_rtm(const struct rtmsg *r)
 {
-    FILE           *in;
-    char            line[256];
-    netsnmp_route_entry *entry = NULL;
-    char            name[16];
-    int             fd;
-    char   	    ncache[16];
-    int    	    icache = 0;
- 
-    DEBUGMSGTL(("access:route:container",
-                "route_container_arch_load ipv4\n"));
+    switch (r->rtm_type) {
+    case RTN_UNREACHABLE:
+        return INETCIDRROUTETYPE_REJECT;
+    case RTN_BLACKHOLE:
+        return INETCIDRROUTETYPE_BLACKHOLE;
+    case RTN_LOCAL:
+        return INETCIDRROUTETYPE_LOCAL;
+    default:
+        return INETCIDRROUTETYPE_OTHER;
+    }
+}
+
+static netsnmp_route_entry *
+entry_from_rtm(struct rtmsg *r, int rtcount, u_long *index)
+{
+    netsnmp_route_entry *entry;
+    struct rtattr *rta  = RTM_RTA(r);
+    u_char addresstype = _addresstype_from_family(r->rtm_family);
+
+    entry = netsnmp_access_route_entry_create();
+    entry->ns_rt_index = ++(*index);
+    entry->rt_type = _type_from_rtm(r);
+    entry->rt_proto = (r->rtm_flags & RTF_DYNAMIC)
+        ? IANAIPROUTEPROTOCOL_ICMP : IANAIPROUTEPROTOCOL_LOCAL;
+
+    DEBUGMSGTL(("access:route", "route index %u type %u proto %u\n",
+                entry->ns_rt_index, entry->rt_type, entry->rt_proto));
+
+    while (RTA_OK(rta, rtcount)) {
+        size_t len = RTA_PAYLOAD(rta);
+        char b[INET6_ADDRSTRLEN];
+
+        switch (rta->rta_type) {
+        case RTA_OIF:
+            entry->if_index = *(int *)(RTA_DATA(rta));
+
+            DEBUGMSGTL(("access:route","    dev %s\n",
+                        if_indextoname(entry->if_index, b)));
+            break;
+
+        case RTA_DST:
+            entry->rt_dest_type = addresstype;
+            entry->rt_dest_len = len;
+            memcpy(entry->rt_dest, RTA_DATA(rta), len);
+
+            entry->rt_pfx_len = r->rtm_dst_len;
+
+            DEBUGMSGTL(("access:route","    to %s/%u\n",
+                        inet_ntop(r->rtm_family, entry->rt_dest,
+                                  b, sizeof(b)),
+                        r->rtm_dst_len));
+            break;
+
+        case RTA_GATEWAY:
+            entry->rt_nexthop_type = addresstype;
+            entry->rt_nexthop_len = len;
+            memcpy(entry->rt_nexthop, RTA_DATA(rta), len);
+
+            DEBUGMSGTL(("access:route","    via %s\n",
+                        inet_ntop(r->rtm_family, entry->rt_nexthop,
+                                  b, sizeof(b))));
+            break;
+
+        case RTA_PRIORITY:
+            entry->rt_metric1 = *(uint32_t *)RTA_DATA(rta);
+            DEBUGMSGTL(("access:route","    metric %d\n",
+                        entry->rt_metric1));
+            break;
+        }
+
+        rta = RTA_NEXT(rta,len);
+    }
+
+#ifdef USING_IP_FORWARD_MIB_IPCIDRROUTETABLE_IPCIDRROUTETABLE_MODULE
+    entry->rt_tos = r->rtm_tos;
+    if (r->rtm_family == AF_INET)
+        entry->rt_mask = ~0 << (32 - r->rtm_dst_len);
+#endif
+
+#ifdef USING_IP_FORWARD_MIB_INETCIDRROUTETABLE_INETCIDRROUTETABLE_MODULE
+    /*
+      inetCidrRoutePolicy OBJECT-TYPE
+      SYNTAX     OBJECT IDENTIFIER
+      MAX-ACCESS not-accessible
+      STATUS     current
+      DESCRIPTION
+      "This object is an opaque object without any defined
+      semantics.  Its purpose is to serve as an additional
+      index which may delineate between multiple entries to
+      the same destination.  The value { 0 0 } shall be used
+      as the default value for this object."
+    */
+    /*
+     * on linux, many routes all look alike, and would have the same
+     * indexed based on dest and next hop. So we use the if index
+     * routing protocol and metric as the policy,
+     * to distinguise between them. Hopefully this is unique.
+     */
+    entry->rt_policy = calloc(3, sizeof(oid));
+    entry->rt_policy[0] = entry->if_index;
+    entry->rt_policy[1] = r->rtm_protocol;
+    entry->rt_policy[2] = entry->rt_metric1;
+    entry->rt_policy_len = sizeof(oid) * 3;
+#endif
+
+    return entry;
+}
+
+static int
+_load_netlink(netsnmp_container* container, int family, u_long *index)
+{
+    int             nlsk;
+    unsigned char rcvbuf[RCVBUF_SIZE];
+    int rcvbuf_size = RCVBUF_SIZE;
+    unsigned char sndbuf[SNDBUF_SIZE];
+    struct nlmsghdr *hdr;
+    struct rtmsg *rthdr;
+    int count;
+    int end_of_message = 0;
+    int rc = 0;
+    static int seq;
+
+    DEBUGMSGTL(("access:route", "route_container_load %s\n",
+                (family == AF_INET) ? "ipv4" : "ipv6"));
 
     netsnmp_assert(NULL != container);
 
     /*
-     * fetch routes from the proc file-system:
+     * Open a netlink socket
      */
-    if (!(in = fopen("/proc/net/route", "r"))) {
-        NETSNMP_LOGONCE((LOG_ERR, "cannot open /proc/net/route\n"));
+    nlsk = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
+    if (nlsk < 0) {
+        snmp_log_perror("socket netlink");
+        return -1;
+    }
+
+    if (setsockopt(nlsk, SOL_SOCKET, SO_RCVBUF,
+                   &rcvbuf_size, sizeof(rcvbuf_size)) < 0) {
+        snmp_log_perror("setsockopt netlink rcvbuf");
+        close(nlsk);
+        return -1;
+    }
+
+    memset(sndbuf, 0, SNDBUF_SIZE);
+    hdr = (struct nlmsghdr *)sndbuf;
+    hdr->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+    hdr->nlmsg_type = RTM_GETROUTE;
+    hdr->nlmsg_flags = NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST;
+    hdr->nlmsg_seq = ++seq;
+
+    rthdr = (struct rtmsg *)NLMSG_DATA(hdr);
+    rthdr->rtm_table = RT_TABLE_MAIN;
+    rthdr->rtm_family = family;
+
+    /*
+     * Send a request to the kernel to dump the routing table to us
+     */
+    count = send(nlsk, sndbuf, hdr->nlmsg_len, 0);
+    if (count < 0) {
+        snmp_log_perror("send netlink");
+        close(nlsk);
         return -2;
     }
 
     /*
-     * create socket for ioctls (see NOTE[1], below)
+     * Now listen for response
      */
-    fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if(fd < 0) {
-        snmp_log(LOG_ERR, "could not create socket\n");
-        fclose(in);
-        return -2;
-    }
-
-    fgets(line, sizeof(line), in); /* skip header */
-
-    while (fgets(line, sizeof(line), in)) {
-        char            rtent_name[32];
-        int             refcnt, rc;
-        uint32_t        dest, nexthop, mask, tmp_mask;
-        unsigned        flags, use;
-
-        entry = netsnmp_access_route_entry_create();
+    do {
+        struct nlmsghdr *n;
 
         /*
-         * as with 1.99.14:
-         *    Iface Dest     GW       Flags RefCnt Use Met Mask     MTU  Win IRTT
-         * BE eth0  00000000 C0A80101 0003  0      0   0   FFFFFFFF 1500 0   0 
-         * LE eth0  00000000 0101A8C0 0003  0      0   0   00FFFFFF    0 0   0  
+         * Get the message
          */
-        rc = sscanf(line, "%s %x %x %x %d %u %d %x %*d %*d %*d\n",
-                    rtent_name, &dest, &nexthop,
-                    /*
-                     * XXX: fix type of the args 
-                     */
-                    &flags, &refcnt, &use, &entry->rt_metric1,
-                    &tmp_mask);
-        DEBUGMSGTL(("9:access:route:container", "line |%s|\n", line));
-        if (8 != rc) {
-            snmp_log(LOG_ERR,
-                     "/proc/net/route data format error (%d!=8), line ==|%s|",
-                     rc, line);
-            
-            netsnmp_access_route_entry_free(entry);        
-            continue;
+        count = recv(nlsk, rcvbuf, RCVBUF_SIZE, 0);
+        if (count < 0) {
+            snmp_log_perror("recv netlink");
+            rc = -1;
+            break;
         }
 
         /*
-         * temporary null terminated name
+         * Walk all of the returned messages
          */
-        strncpy(name, rtent_name, sizeof(name));
-        name[ sizeof(name)-1 ] = 0;
+        for (n = (struct nlmsghdr *)rcvbuf; NLMSG_OK(n, count);
+             n = NLMSG_NEXT(n, count)) {
+            struct rtmsg *rtm;
+            netsnmp_route_entry *entry;
 
-        /*
-         * don't bother to try and get the ifindex for routes with
-         * no interface name.
-	 *
-	 * May have lots of routes with same interface name
-	 * therefore worth caching the previous results.
-         */
-        if ('*' != name[0]) {
-	    if (icache && strcmp(name, ncache) == 0)
-		entry->if_index = icache;
-	    else {
-		entry->if_index = netsnmp_access_interface_ioctl_ifindex_get(fd, name);
-		if (entry->if_index) {
-		    strcpy(ncache, name);
-		    icache = entry->if_index;
-		}
-	    }
-	}
+            /*
+             * Make sure the message is ok
+             */
+            if (n->nlmsg_type == NLMSG_ERROR) {
+                struct nlmsgerr *err = (struct nlmsgerr*) NLMSG_DATA(n);
+                if (n->nlmsg_len < NLMSG_LENGTH(sizeof(struct nlmsgerr)))
+                    snmp_log(LOG_ERR, "kernel netlink error truncated\n");
+                else
+                    snmp_log(LOG_ERR, "kernel netlink error %s\n",
+                             strerror(-err->error));
+                rc = -1;
+                break;
+            }
 
-        /*
-         * arbitrary index
-         */
-        entry->ns_rt_index = ++(*index);
+            /*
+             * End of message, we're done
+             */
+            if (n->nlmsg_type & NLMSG_DONE) {
+                end_of_message = 1;
+                break;
+            }
 
-        mask = htonl(tmp_mask);
+            if (n->nlmsg_type != RTM_NEWROUTE) {
+                snmp_log(LOG_ERR, "unexpected message of type %d in nlmsg\n",
+                         n->nlmsg_type);
+                continue;
+            }
 
-#ifdef USING_IP_FORWARD_MIB_IPCIDRROUTETABLE_IPCIDRROUTETABLE_MODULE
-        entry->rt_mask = mask;
-        /** entry->rt_tos = XXX; */
-        /** rt info ?? */
-#endif
-        /*
-         * copy dest & next hop
-         */
-        entry->rt_dest_type = INETADDRESSTYPE_IPV4;
-        entry->rt_dest_len = 4;
-        memcpy(entry->rt_dest, &dest, 4);
+            rtm = NLMSG_DATA(n);
+            if (rtm->rtm_family != family) {
+                snmp_log(LOG_ERR, "Wrong family in netlink response %d\n",
+                         rtm->rtm_family);
+                break;
+            }
 
-        entry->rt_nexthop_type = INETADDRESSTYPE_IPV4;
-        entry->rt_nexthop_len = 4;
-        memcpy(entry->rt_nexthop, &nexthop, 4);
+            if (rtm->rtm_table != RT_TABLE_MAIN)
+                    continue;
+            /*
+             * insert into container
+             */
+            entry = entry_from_rtm(rtm, RTM_PAYLOAD(n), index);
 
-        /*
-         * count bits in mask
-         */
-        entry->rt_pfx_len = netsnmp_ipaddress_ipv4_prefix_len(mask);
-
-#ifdef USING_IP_FORWARD_MIB_INETCIDRROUTETABLE_INETCIDRROUTETABLE_MODULE
-        /*
-    inetCidrRoutePolicy OBJECT-TYPE 
-        SYNTAX     OBJECT IDENTIFIER 
-        MAX-ACCESS not-accessible 
-        STATUS     current 
-        DESCRIPTION 
-               "This object is an opaque object without any defined 
-                semantics.  Its purpose is to serve as an additional 
-                index which may delineate between multiple entries to 
-                the same destination.  The value { 0 0 } shall be used 
-                as the default value for this object."
-        */
-        /*
-         * on linux, default routes all look alike, and would have the same
-         * indexed based on dest and next hop. So we use the if index
-         * as the policy, to distinguise between them. Hopefully this is
-         * unique.
-         * xxx-rks: It should really only be for the duplicate case, but that
-         *     would be more complicated thanI want to get into now. Fix later.
-         */
-        if (0 == nexthop) {
-            entry->rt_policy = &entry->if_index;
-            entry->rt_policy_len = 1;
-            entry->flags |= NETSNMP_ACCESS_ROUTE_POLICY_STATIC;
+            if (CONTAINER_INSERT(container, entry) < 0)
+            {
+                DEBUGMSGTL(("access:route:container",
+                            "error with route_entry: insert into container failed.\n"));
+                netsnmp_access_route_entry_free(entry);
+                rc = -1;
+                break;
+            }
         }
-#endif
 
-        /*
-         * get protocol and type from flags
-         */
-        entry->rt_type = _type_from_flags(flags);
-        
-        entry->rt_proto = (flags & RTF_DYNAMIC)
-            ? IANAIPROUTEPROTOCOL_ICMP : IANAIPROUTEPROTOCOL_LOCAL;
+        if (rc < 0)
+            break;
 
-        /*
-         * insert into container
-         */
-        if (CONTAINER_INSERT(container, entry) < 0)
-        {
-            DEBUGMSGTL(("access:route:container", "error with route_entry: insert into container failed.\n"));
-            netsnmp_access_route_entry_free(entry);
-            continue;
-        }
-    }
+    } while (!end_of_message);
 
-    fclose(in);
-    close(fd);
-    return 0;
+    close(nlsk);
+    return rc;
 }
-
-#ifdef NETSNMP_ENABLE_IPV6
-static int
-_load_ipv6(netsnmp_container* container, u_long *index )
-{
-    FILE           *in;
-    char            line[256];
-    netsnmp_route_entry *entry = NULL;
-    char            name[16];
-    static int      log_open_err = 1;
-
-    DEBUGMSGTL(("access:route:container",
-                "route_container_arch_load ipv6\n"));
-
-    netsnmp_assert(NULL != container);
-
-    /*
-     * fetch routes from the proc file-system:
-     */
-    if (!(in = fopen("/proc/net/ipv6_route", "r"))) {
-        if (1 == log_open_err) {
-            NETSNMP_LOGONCE((LOG_ERR, "cannot open /proc/net/ipv6_route\n"));
-            log_open_err = 0;
-        }
-        return -2;
-    }
-    /*
-     * if we turned off logging of open errors, turn it back on now that
-     * we have been able to open the file.
-     */
-    if (0 == log_open_err)
-        log_open_err = 1;
-    fgets(line,sizeof(line),in); /* skip header */
-    while (fgets(line, sizeof(line), in)) {
-        char            c_name[IFNAMSIZ+1];
-        char            c_dest[33], c_src[33], c_next[33];
-        int             rc;
-        unsigned int    dest_pfx, flags;
-        size_t          buf_len, buf_offset;
-        u_char          *temp_uchar_ptr;
-
-        entry = netsnmp_access_route_entry_create();
-
-        /*
-         * based on /usr/src/linux/net/ipv6/route.c, kernel 2.6.7:
-         *
-         * [        Dest addr /         plen ]
-         * fe80000000000000025056fffec00008 80 \
-         *
-         * [ (?subtree) : src addr/plen : 0/0]
-         * 00000000000000000000000000000000 00 \
-         *
-         * [        next hop              ][ metric ][ref ctn][ use   ]
-         * 00000000000000000000000000000000 00000000 00000000 00000000 \
-         *
-         * [ flags ][dev name]
-         * 80200001       lo
-         */
-        rc = sscanf(line, "%32s %2x %32s %*x %32s %x %*x %*x %x %"
-                    SNMP_MACRO_VAL_TO_STR(IFNAMSIZ) "s\n",
-                    c_dest, &dest_pfx, c_src, /*src_pfx,*/ c_next,
-                    &entry->rt_metric1, /** ref,*/ /* use, */ &flags, c_name);
-        DEBUGMSGTL(("9:access:route:container", "line |%s|\n", line));
-        if (7 != rc) {
-            snmp_log(LOG_ERR,
-                     "/proc/net/ipv6_route data format error (%d!=8), "
-                     "line ==|%s|", rc, line);
-            continue;
-        }
-
-        /*
-         * temporary null terminated name
-         */
-        c_name[ sizeof(c_name)-1 ] = 0;
-        entry->if_index = se_find_value_in_slist("interfaces", c_name);
-        if(SE_DNE == entry->if_index) {
-            snmp_log(LOG_ERR,"unknown interface in /proc/net/ipv6_route "
-                     "('%s')\n", name);
-            netsnmp_access_route_entry_free(entry);
-            continue;
-        }
-        /*
-         * arbitrary index
-         */
-        entry->ns_rt_index = ++(*index);
-
-#ifdef USING_IP_FORWARD_MIB_IPCIDRROUTETABLE_IPCIDRROUTETABLE_MODULE
-        /** entry->rt_mask = mask; */ /* IPv4 only */
-        /** entry->rt_tos = XXX; */
-        /** rt info ?? */
-#endif
-        /*
-         * convert hex addresses to binary
-         */
-        entry->rt_dest_type = INETADDRESSTYPE_IPV6;
-        entry->rt_dest_len = 16;
-        buf_len = sizeof(entry->rt_dest);
-        buf_offset = 0;
-        temp_uchar_ptr = entry->rt_dest;
-        netsnmp_hex_to_binary(&temp_uchar_ptr, &buf_len, &buf_offset, 0,
-                              c_dest, NULL);
-
-        entry->rt_nexthop_type = INETADDRESSTYPE_IPV6;
-        entry->rt_nexthop_len = 16;
-        buf_len = sizeof(entry->rt_nexthop);
-        buf_offset = 0;
-        temp_uchar_ptr = entry->rt_nexthop;
-        netsnmp_hex_to_binary(&temp_uchar_ptr, &buf_len, &buf_offset, 0,
-                              c_next, NULL);
-
-        entry->rt_pfx_len = dest_pfx;
-
-#ifdef USING_IP_FORWARD_MIB_INETCIDRROUTETABLE_INETCIDRROUTETABLE_MODULE
-        /*
-    inetCidrRoutePolicy OBJECT-TYPE 
-        SYNTAX     OBJECT IDENTIFIER 
-        MAX-ACCESS not-accessible 
-        STATUS     current 
-        DESCRIPTION 
-               "This object is an opaque object without any defined 
-                semantics.  Its purpose is to serve as an additional 
-                index which may delineate between multiple entries to 
-                the same destination.  The value { 0 0 } shall be used 
-                as the default value for this object."
-        */
-        /*
-         * on linux, default routes all look alike, and would have the same
-         * indexed based on dest and next hop. So we use our arbitrary index
-         * as the policy, to distinguise between them.
-         */
-        entry->rt_policy = &entry->ns_rt_index;
-        entry->rt_policy_len = 1;
-        entry->flags |= NETSNMP_ACCESS_ROUTE_POLICY_STATIC;
-#endif
-
-        /*
-         * get protocol and type from flags
-         */
-        entry->rt_type = _type_from_flags(flags);
-        
-        entry->rt_proto = (flags & RTF_DYNAMIC)
-            ? IANAIPROUTEPROTOCOL_ICMP : IANAIPROUTEPROTOCOL_LOCAL;
-
-        /*
-         * insert into container
-         */
-        CONTAINER_INSERT(container, entry);
-    }
-
-    fclose(in);
-    return 0;
-}
-#endif
 
 /** arch specific load
  * @internal
@@ -383,19 +313,13 @@ netsnmp_access_route_container_arch_load(netsnmp_container* container,
         return -1;
     }
 
-    rc = _load_ipv4(container, &count);
+    rc = _load_netlink(container, AF_INET, &count);
     
 #ifdef NETSNMP_ENABLE_IPV6
     if((0 != rc) || (load_flags & NETSNMP_ACCESS_ROUTE_LOAD_IPV4_ONLY))
         return rc;
 
-    /*
-     * load ipv6. ipv6 module might not be loaded,
-     * so ignore -2 err (file not found)
-     */
-    rc = _load_ipv6(container, &count);
-    if (-2 == rc)
-        rc = 0;
+    rc = _load_netlink(container, AF_INET6, &count);
 #endif
 
     return rc;
