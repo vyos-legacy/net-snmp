@@ -140,9 +140,9 @@ netsnmp_arch_interface_init(void)
 #ifdef HAVE_PCI_LOOKUP_NAME
     pci_access = pci_alloc();
     if (pci_access)
-	pci_init(pci_access);
+        pci_init(pci_access);
     else
-	snmp_log(LOG_ERR, "Unable to create pci access method\n");
+        snmp_log(LOG_ERR, "Unable to create pci access method\n");
 #endif
 }
 
@@ -260,7 +260,7 @@ static int sysfs_get_id(const char *path, unsigned short *id)
     if (!(fin = fopen(path, "r"))) {
         DEBUGMSGTL(("access:interface",
                     "Failed to open %s\n", path));
-	return 0;
+        return 0;
     }
 
     n = fscanf(fin, "%hx", id);
@@ -279,36 +279,46 @@ static int sysfs_get_id(const char *path, unsigned short *id)
 static void
 _arch_interface_description_get(netsnmp_interface_entry *entry)
 {
-    const char *descr;
-    char buf[256];
     unsigned short vendor_id, device_id;
+    int cc;
+    char devbuf[128], lbuf[128], slot[64], buf[256];
 
     if (!pci_access)
-	return;
+        return;
 
     snprintf(buf, sizeof(buf),
-	     "/sys/class/net/%s/device/vendor", entry->name);
+             "/sys/class/net/%s/device", entry->name);
+
+    /* read sysfs link to get "../../../0000:07:00.0" */
+    cc = readlink(buf, lbuf, sizeof(lbuf));
+    if (cc < 0) {
+        DEBUGMSGTL(("access:interface",
+                    "readlink %s failed", buf));
+        return;
+    }
+    lbuf[cc] = 0;
+
+    snprintf(buf, sizeof(buf),
+             "/sys/class/net/%s/device/vendor", entry->name);
 
     if (!sysfs_get_id(buf, &vendor_id))
-	return;
+        return;
 
     snprintf(buf, sizeof(buf),
-	     "/sys/class/net/%s/device/device", entry->name);
+             "/sys/class/net/%s/device/device", entry->name);
 
     if (!sysfs_get_id(buf, &device_id))
-	return;
+        return;
 
-    descr = pci_lookup_name(pci_access, buf, sizeof(buf),
-			    PCI_LOOKUP_VENDOR | PCI_LOOKUP_DEVICE,
-			    vendor_id, device_id);
-    if (descr) {
-	free(entry->descr);
-	entry->descr = strdup(descr);
-    } else {
-        DEBUGMSGTL(("access:interface",
-                    "Failed pci_lookup_name vendor=%#hx device=%#hx\n",
-		    vendor_id, device_id));
-    }
+    /* Produce "000:08:00.0 Mycontroller Group 91010 Ethernet Controller" */
+    snprintf(buf, sizeof(buf), "%s %s", basename(lbuf),
+             pci_lookup_name(pci_access, devbuf, sizeof(devbuf),
+                             PCI_LOOKUP_VENDOR | PCI_LOOKUP_DEVICE,
+                             vendor_id, device_id));
+    if (entry->descr)
+            free(entry->descr);
+
+    entry->descr = strdup(buf);
 }
 #endif
 
@@ -693,7 +703,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
         entry->ns_flags = flags; /* initial flags; we'll set more later */
 
 #ifdef HAVE_PCI_LOOKUP_NAME
-	_arch_interface_description_get(entry);
+        _arch_interface_description_get(entry);
 #endif
 
 
@@ -904,8 +914,8 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name,
     speed |= edata.speed_hi << 16;
 #endif
     if (speed == 0 || speed == (__u16)(-1) || speed == (__u32)(-1)) {
-	DEBUGMSGTL(("mibII/interfaces", "speed is not known for %s\n",
-			ifr.ifr_name));
+        DEBUGMSGTL(("mibII/interfaces", "speed is not known for %s\n",
+                        ifr.ifr_name));
         /* try MII */
         return netsnmp_linux_interface_get_if_speed_mii(fd,name,defaultspeed);
     }
@@ -965,7 +975,7 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name,
         if(ioctl(fd, SIOCGMIIREG, &ifr) <0){
             DEBUGMSGTL(("mibII/interfaces", "SIOCGMIIREG on %s failed\n", ifr.ifr_name));
         }
-        mii_val[mii_reg] = data[3];		
+        mii_val[mii_reg] = data[3];             
     }
     /*Parsing of mii values*/
     /*Invalid basic mode control register*/
@@ -974,10 +984,10 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name,
         return retspeed;
     }
     /* Descriptive rename. */
-    bmcr = mii_val[0]; 	  /*basic mode control register*/
-    bmsr = mii_val[1]; 	  /* basic mode status register*/
+    bmcr = mii_val[0];    /*basic mode control register*/
+    bmsr = mii_val[1];    /* basic mode status register*/
     nway_advert = mii_val[4]; /* autonegotiation advertisement*/
-    lkpar = mii_val[5]; 	  /*link partner ability*/
+    lkpar = mii_val[5];           /*link partner ability*/
     
     /*Check for link existence, returns 0 if link is absent*/
     if ((bmsr & 0x0016) != 0x0004){
@@ -991,13 +1001,13 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name,
         retspeed = bmcr & 0x2000 ? 100000000 : 10000000;
         return retspeed;
     }
-    /* Link partner got our advertised abilities */	
+    /* Link partner got our advertised abilities */     
     if (lkpar & 0x4000) {
         int negotiated = nway_advert & lkpar & 0x3e0;
         int max_capability = 0;
         /* Scan for the highest negotiated capability, highest priority
            (100baseTx-FDX) to lowest (10baseT-HDX). */
-        int media_priority[] = {8, 9, 7, 6, 5}; 	/* media_names[i-5] */
+        int media_priority[] = {8, 9, 7, 6, 5};         /* media_names[i-5] */
         for (i = 0; media_priority[i]; i++){
             if (negotiated & (1 << media_priority[i])) {
                 max_capability = media_priority[i];
