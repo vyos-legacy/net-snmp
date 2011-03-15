@@ -1,3 +1,10 @@
+net-snmp (5.6-vyatta5+mendocino3) unstable; urgency=low
+
+  * Fix bug in link speed determination
+  * Add pci slot info to ifDescr
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Tue, 15 Mar 2011 16:33:14 -0700
+
 net-snmp (5.6-vyatta5+mendocino2) unstable; urgency=low
 
   * Fix bug in link speed determination
