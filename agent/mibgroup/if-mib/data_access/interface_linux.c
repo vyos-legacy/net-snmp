@@ -280,6 +280,7 @@ static void
 _arch_interface_description_get(netsnmp_interface_entry *entry)
 {
     unsigned short vendor_id, device_id;
+    int cc;
     char devbuf[128], lbuf[128], slot[64], buf[256];
 
     if (!pci_access)
@@ -289,11 +290,13 @@ _arch_interface_description_get(netsnmp_interface_entry *entry)
              "/sys/class/net/%s/device", entry->name);
 
     /* read sysfs link to get "../../../0000:07:00.0" */
-    if (readlink(buf, lbuf, sizeof(lbuf)) < 0) {
+    cc = readlink(buf, lbuf, sizeof(lbuf));
+    if (cc < 0) {
         DEBUGMSGTL(("access:interface",
                     "readlink %s failed", buf));
         return;
     }
+    lbuf[cc] = 0;
 
     snprintf(buf, sizeof(buf),
              "/sys/class/net/%s/device/vendor", entry->name);
