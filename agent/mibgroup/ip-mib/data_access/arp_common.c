@@ -42,12 +42,13 @@ netsnmp_access_arp_container_init(u_int flags)
     DEBUGMSGTL(("access:arp:container", "init\n"));
 
     /*
-     * create the containers. one indexed by ifIndex, the other
-     * indexed by ifName.
+     * create the container
      */
-    container1 = netsnmp_container_find("access_arp:table_container");
+    container1 = netsnmp_container_find("access_arp:fifo");
     if (NULL == container1)
         return NULL;
+
+    container1->container_name = strdup("arp");
     return container1;
 }
 
@@ -63,7 +64,7 @@ netsnmp_access_arp_container_load(netsnmp_container* container, u_int load_flags
     DEBUGMSGTL(("access:arp:container", "load\n"));
 
     if (NULL == container) {
-        container = netsnmp_container_find("access:arp:table_container");
+        container = netsnmp_container_find("access:arp:fifo");
         if (container)
             container->container_name = strdup("arp");
     }
