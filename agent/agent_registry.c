@@ -408,6 +408,7 @@ void
 clear_context(void) {
 
     subtree_context_cache *ptr = NULL, *next = NULL;
+    netsnmp_subtree *t, *u;
 
     DEBUGMSGTL(("agent_registry", "clear context\n"));
 
@@ -415,8 +416,9 @@ clear_context(void) {
     while (ptr) {
 	next = ptr->next;
 
-	if (ptr->first_subtree) {
-	    clear_subtree(ptr->first_subtree);
+	for (t = ptr->first_subtree; t; t = u) {
+            u = t->next;
+	    clear_subtree(t);
 	}
 
         free(NETSNMP_REMOVE_CONST(char*, ptr->context_name));
@@ -939,17 +941,14 @@ netsnmp_subtree_load(netsnmp_subtree *new_sub, const char *context_name)
 void
 clear_subtree (netsnmp_subtree *sub) {
 
-    netsnmp_subtree *nxt;
+    netsnmp_subtree *c;
     
     if (sub == NULL)
 	return;
 
-    for(nxt = sub; nxt;) {
-        if (nxt->children != NULL) {
-            clear_subtree(nxt->children);
-        }
-        sub = nxt;
-        nxt = nxt->next;
+    for(c = sub; c;) {
+        sub = c;
+        c = c->children;
         netsnmp_subtree_free(sub);
     }
 

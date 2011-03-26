@@ -481,6 +481,9 @@ netsnmp_openssl_cert_get_fingerprint(X509 *ocert, int alg)
     const EVP_MD    *digest;
     char            *result = NULL;
 
+    if (NULL == ocert)
+        return NULL;
+
     nid = OBJ_obj2nid(ocert->sig_alg->algorithm);
     DEBUGMSGT(("9:openssl:fingerprint", "alg %d, cert nid %d (%d)\n", alg, nid,
                _nid2ht(nid)));
@@ -599,7 +602,7 @@ netsnmp_openssl_get_cert_chain(SSL *ssl)
 
     /** check for a chain to a CA */
     ochain = SSL_get_peer_cert_chain(ssl);
-    if ((NULL == ochain) || (0 == sk_num(ochain))) {
+    if ((NULL == ochain) || (0 == sk_num((const void *)ochain))) {
         DEBUGMSGT(("ssl:cert:chain", "peer has no cert chain\n"));
     }
     else {
@@ -607,8 +610,8 @@ netsnmp_openssl_get_cert_chain(SSL *ssl)
          * loop over chain, adding fingerprint / cert for each
          */
         DEBUGMSGT(("ssl:cert:chain", "examining cert chain\n"));
-        for(i = 0; i < sk_num(ochain); ++i) {
-            ocert_tmp = (X509*)sk_value(ochain,i);
+        for(i = 0; i < sk_num((const void *)ochain); ++i) {
+            ocert_tmp = (X509*)sk_value((const void *)ochain,i);
             fingerprint = netsnmp_openssl_cert_get_fingerprint(ocert_tmp,
                                                                NS_HASH_SHA1);
             if (NULL == fingerprint)
@@ -626,7 +629,7 @@ netsnmp_openssl_get_cert_chain(SSL *ssl)
         /*
          * if we broke out of loop before finishing, clean up
          */
-        if (i < sk_num(ochain)) 
+        if (i < sk_num((const void *)ochain)) 
             CONTAINER_FREE_ALL(chain_map, NULL);
     } /* got peer chain */
 
@@ -748,8 +751,8 @@ netsnmp_openssl_extract_secname(netsnmp_cert_map *cert_map,
         return NULL;
 
     DEBUGMSGT(("openssl:secname:extract",
-               "checking san of type %d for %s\n",
-               cert_map->mapType, peer_cert->fingerprint));
+               "checking priority %d, san of type %d for %s\n",
+               cert_map->priority, cert_map->mapType, peer_cert->fingerprint));
 
     switch(cert_map->mapType) {
         case TSNM_tlstmCertSpecified:
@@ -782,11 +785,17 @@ netsnmp_openssl_extract_secname(netsnmp_cert_map *cert_map,
             break;
     } /* switch mapType */
 
-   if (rtn)
+    if (rtn) {
         DEBUGMSGT(("openssl:secname:extract",
-                   "found map of type %d for %s: %s\n",
+                   "found map %d, type %d for %s: %s\n", cert_map->priority,
                    cert_map->mapType, peer_cert->fingerprint, rtn));
-   else
+        if (strlen(rtn) >32) {
+            DEBUGMSGT(("openssl:secname:extract",
+                       "secName longer than 32 chars! dropping...\n"));
+            SNMP_FREE(rtn);
+        }
+    }
+    else
         DEBUGMSGT(("openssl:secname:extract",
                    "no map of type %d for %s\n",
                    cert_map->mapType, peer_cert->fingerprint));
@@ -808,6 +817,57 @@ netsnmp_openssl_err_log(const char *prefix)
         snmp_log(LOG_ERR,"%s: %ld\n", prefix ? prefix: "openssl error", err);
         snmp_log(LOG_ERR, "library=%d, function=%d, reason=%d\n",
                  ERR_GET_LIB(err), ERR_GET_FUNC(err), ERR_GET_REASON(err));
+    }
+}
+
+void
+netsnmp_openssl_null_checks(SSL *ssl, int *null_auth, int *null_cipher)
+{
+    const SSL_CIPHER *cipher;
+    char           *description, tmp_buf[128], *cipher_alg, *auth_alg;
+
+    if (null_auth)
+        *null_auth = -1; /* unknown */
+    if (null_cipher)
+        *null_cipher = -1; /* unknown */
+    if (NULL == ssl)
+        return;
+
+    cipher = SSL_get_current_cipher(ssl);
+    if (NULL == cipher) {
+        DEBUGMSGTL(("ssl:cipher", "no cipher yet\n"));
+        return;
+    }
+    description = SSL_CIPHER_description(NETSNMP_REMOVE_CONST(SSL_CIPHER *, cipher), tmp_buf, sizeof(tmp_buf));
+    /** no \n since tmp_buf already has one */
+    DEBUGMSGTL(("ssl:cipher", "current cipher: %s", tmp_buf));
+
+    /*
+     * run "openssl ciphers -v eNULL" and "openssl ciphers -v aNULL"
+     * to see NULL encryption/authentication algorithms. e.g.
+     *
+     * EXP-ADH-RC4-MD5 SSLv3 Kx=DH(512) Au=None Enc=RC4(40) Mac=MD5  export
+     * NULL-SHA        SSLv3 Kx=RSA     Au=RSA  Enc=None    Mac=SHA1
+     */
+    if (null_cipher) {
+        cipher_alg = strstr(tmp_buf, "Enc=");
+        if (cipher_alg) {
+            cipher_alg += 4;
+            if (strncmp(cipher_alg,"None", 4) == 0)
+                *null_cipher = 1;
+            else
+                *null_cipher = 0;
+        }
+    }
+    if (null_auth) {
+        auth_alg = strstr(tmp_buf, "Au=");
+        if (auth_alg) {
+            auth_alg += 3;
+            if (strncmp(auth_alg,"None", 4) == 0)
+                *null_auth = 1;
+            else
+                *null_auth = 0;
+        }
     }
 }
 

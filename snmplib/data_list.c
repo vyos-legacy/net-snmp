@@ -1,7 +1,7 @@
 /*
  * netsnmp_data_list.c
  *
- * $Id: data_list.c 18301 2010-03-14 21:03:29Z rstory $
+ * $Id: data_list.c 19639 2010-11-07 21:14:21Z magfr $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -61,6 +61,10 @@ netsnmp_create_data_list(const char *name, void *data,
     if (!node)
         return NULL;
     node->name = strdup(name);
+    if (!node->name) {
+      free(node);
+      return NULL;
+    }
     node->data = data;
     node->free_func = beer;
     return node;

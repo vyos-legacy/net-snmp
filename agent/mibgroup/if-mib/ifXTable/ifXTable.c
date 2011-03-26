@@ -1492,7 +1492,7 @@ ifAlias_get(ifXTable_rowreq_ctx * rowreq_ctx, char **ifAlias_val_ptr_ptr,
         /*
          * allocate space for ifAlias data
          */
-        (*ifAlias_val_ptr_ptr) =
+        (*ifAlias_val_ptr_ptr) = (char*)
             malloc(rowreq_ctx->data.ifAlias_len *
                    sizeof(rowreq_ctx->data.ifAlias[0]));
         if (NULL == (*ifAlias_val_ptr_ptr)) {

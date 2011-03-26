@@ -111,6 +111,8 @@ netsnmp_swinst_arch_load( netsnmp_container *container, u_int flags)
 
         entry->swName_len = snprintf( entry->swName, sizeof(entry->swName),
                                       "%s-%s", dp->d_name, v );
+	if (entry->swName_len >= sizeof(entry->swName))
+	    entry->swName_len = sizeof(entry->swName)-1;
         entry->swType = (NULL != strstr( c, "system"))
                         ? 2      /* operatingSystem */
                         : 4;     /*  application    */
@@ -119,6 +121,8 @@ netsnmp_swinst_arch_load( netsnmp_container *container, u_int flags)
 #else
         entry->swName_len = snprintf( entry->swName, sizeof(entry->swName),
                                       "%s", dp->d_name );
+	if (entry->swName_len >= sizeof(entry->swName))
+	    entry->swName_len = sizeof(entry->swName)-1;
 
         /* no information about O/S vs application packages ??? */
 #endif
@@ -133,7 +137,7 @@ netsnmp_swinst_arch_load( netsnmp_container *container, u_int flags)
     closedir( d );
 
     DEBUGMSGTL(("swinst:load:arch"," loaded %d entries\n",
-                CONTAINER_SIZE(container)));
+                (int)CONTAINER_SIZE(container)));
 
     return 0;
 }

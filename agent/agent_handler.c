@@ -680,10 +680,6 @@ netsnmp_handler_free(netsnmp_mib_handler *handler)
             netsnmp_handler_free(handler->next);
             handler->next = NULL;
         }
-        /** XXX : segv here at shutdown if SHUTDOWN_AGENT_CLEANLY
-         *  defined. About 30 functions down the stack, starting
-         *  in clear_context() -> clear_subtree()
-         */
         if ((handler->myvoid != NULL) && (handler->data_free != NULL))
         {
             handler->data_free(handler->myvoid);
@@ -752,7 +748,7 @@ netsnmp_handler_registration_free(netsnmp_handler_registration *reginfo)
     }
 }
 
-/** Dulpicates handler registration object and all subsequent handlers.
+/** Duplicates handler registration object and all subsequent handlers.
  *  Creates a copy of the handler registration object and all its data.
  *
  *  @param handler is the handler registration object to be duplicated

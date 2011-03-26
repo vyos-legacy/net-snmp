@@ -63,7 +63,7 @@ typedef struct netsnmp_sql_globals_t {
     char        *password;        /* password (def=none) */
     u_int        port_num;        /* port number (built-in value) */
     char        *socket_name;     /* socket name (built-in value) */
-    char        *db_name;         /* database name (def=none) */
+    const char  *db_name;         /* database name (def=none) */
     u_int        flags;           /* connection flags (none) */
     MYSQL       *conn;            /* connection */
     u_char       connected;       /* connected flag */
@@ -145,7 +145,7 @@ typedef struct sql_vb_buf_t {
     u_char    *val;
     u_long     val_len;
 
-    u_int16_t  type;
+    uint16_t   type;
 
 } sql_vb_buf;
 
@@ -161,14 +161,14 @@ typedef struct sql_buf_t {
     u_long     user_len;
 
     MYSQL_TIME time;
-    u_int16_t  version, type;
-    u_int32_t  reqid;
+    uint16_t   version, type;
+    uint32_t   reqid;
 
     char      *transport;
     u_long     transport_len;
 
-    u_int16_t  security_level, security_model;
-    u_int32_t  msgid;
+    uint16_t   security_level, security_model;
+    uint32_t   msgid;
 
     char      *context;
     u_long     context_len;
@@ -1078,7 +1078,7 @@ _sql_process_queue(u_int dontcare, void *meeither)
         return;
 
     DEBUGMSGT(("sql:process", "processing %d queued traps\n",
-               CONTAINER_SIZE(_sql.queue)));
+               (int)CONTAINER_SIZE(_sql.queue)));
 
     /*
      * if we don't have a database connection, try to reconnect. We

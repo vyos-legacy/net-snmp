@@ -1,7 +1,7 @@
 /*
  *  ipSystemStatsTable and ipIfStatsTable interface MIB architecture support
  *
- * $Id: systemstats_linux.c 18483 2010-04-08 10:55:42Z jsafranek $
+ * $Id: systemstats_linux.c 19699 2010-11-30 04:58:34Z hardaker $
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -254,8 +254,13 @@ _systemstats_v4(netsnmp_container* container, u_int load_flags)
         /*
          * add to container
          */
-        CONTAINER_INSERT(container, entry);
+        if (CONTAINER_INSERT(container, entry) < 0)
+        {
+            DEBUGMSGTL(("access:systemstats:container","error with systemstats_entry: insert into container failed.\n"));
+            netsnmp_access_systemstats_entry_free(entry);
+        }
     }
+
     return 0;
 }
     
@@ -558,7 +563,12 @@ _systemstats_v6_load_systemstats(netsnmp_container* container, u_int load_flags)
     /*
      * add to container
      */
-    CONTAINER_INSERT(container, entry);
+        if (CONTAINER_INSERT(container, entry) < 0)
+        {
+            DEBUGMSGTL(("access:systemstats:container","error with systemstats_entry: insert into container failed.\n"));
+            netsnmp_access_systemstats_entry_free(entry);
+        }
+
 
     return rc;
 }

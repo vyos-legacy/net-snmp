@@ -198,7 +198,16 @@ netsnmp_cache_free(netsnmp_cache *cache)
 
     for (pos = cache_head; pos; pos = pos->next) {
         if (pos == cache) {
-            snmp_log(LOG_WARNING, "not freeing cache (still in list)\n");
+            size_t          out_len = 0;
+            size_t          buf_len = 0;
+            char           *buf = NULL;
+
+            sprint_realloc_objid((u_char **) &buf, &buf_len, &out_len,
+                                 1, pos->rootoid, pos->rootoid_len);
+            snmp_log(LOG_WARNING,
+		     "not freeing cache with root OID %s (still in list)\n",
+		     buf);
+            free(buf);
             return SNMP_ERR_GENERR;
         }
     }
@@ -224,12 +233,13 @@ netsnmp_cache_remove(netsnmp_cache *cache)
 {
     netsnmp_cache  *cur,*prev;
 
-    if (NULL == cache)
+    if (!cache || !cache_head)
         return -1;
 
     if (cache == cache_head) {
         cache_head = cache_head->next;
-        cache_head->prev = NULL;
+        if (cache_head)
+            cache_head->prev = NULL;
         return 0;
     }
 
@@ -238,7 +248,8 @@ netsnmp_cache_remove(netsnmp_cache *cache)
     for (; cur; prev = cur, cur = cur->next) {
         if (cache == cur) {
             prev->next = cur->next;
-            cur->next->prev = cur->prev;
+            if (cur->next)
+                cur->next->prev = cur->prev;
             return 0;
         }
     }
@@ -494,6 +505,8 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
                              netsnmp_agent_request_info * reqinfo,
                              netsnmp_request_info * requests)
 {
+    char addrstr[32];
+
     netsnmp_cache  *cache = NULL;
     netsnmp_handler_args cache_hint;
 
@@ -513,6 +526,10 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
                    "cache not found, disabled or had no load method\n"));
         return SNMP_ERR_NOERROR;
     }
+    snprintf(addrstr,sizeof(addrstr), "%ld", cache);
+    DEBUGMSGTL(("helper:cache_handler", "using cache %s: ", addrstr));
+    DEBUGMSGOID(("helper:cache_handler", cache->rootoid, cache->rootoid_len));
+    DEBUGMSG(("helper:cache_handler", "\n"));
 
     /*
      * Make the handler-chain parameters available to
@@ -539,7 +556,7 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
          * a previous (delegated) request is still using the cache.
          * maybe use a reference counter?
          */
-        if (netsnmp_cache_is_valid(reqinfo, reginfo->handlerName))
+        if (netsnmp_cache_is_valid(reqinfo, addrstr))
             break;
 
         /*
@@ -547,7 +564,7 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
          * If it's not already there, add to reqinfo
          */
         netsnmp_cache_check_and_reload(cache);
-        netsnmp_cache_reqinfo_insert(cache, reqinfo, reginfo->handlerName);
+        netsnmp_cache_reqinfo_insert(cache, reqinfo, addrstr);
         /** next handler called automatically - 'AUTO_NEXT' */
         break;
 
@@ -555,7 +572,7 @@ netsnmp_cache_helper_handler(netsnmp_mib_handler * handler,
     case MODE_SET_FREE:
     case MODE_SET_ACTION:
     case MODE_SET_UNDO:
-        netsnmp_assert(netsnmp_cache_is_valid(reqinfo, reginfo->handlerName));
+        netsnmp_assert(netsnmp_cache_is_valid(reqinfo, addrstr));
         /** next handler called automatically - 'AUTO_NEXT' */
         break;
 

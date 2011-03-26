@@ -261,6 +261,7 @@ start_new_cached_connection(netsnmp_transport *t,
     if (!cachep->write_bio) {
         DIEHERE("failed to create the openssl write_bio");
         BIO_free(cachep->read_bio);
+        cachep->read_bio = NULL;
     }
 
     BIO_set_mem_eof_return(cachep->read_bio, -1);
@@ -283,6 +284,8 @@ start_new_cached_connection(netsnmp_transport *t,
     if (!tlsdata->ssl) {
         BIO_free(cachep->read_bio);
         BIO_free(cachep->write_bio);
+        cachep->read_bio = NULL;
+        cachep->write_bio = NULL;
         DIEHERE("failed to create the SSL session structure");
     }
         
@@ -382,7 +385,7 @@ _netsnmp_send_queued_dtls_pkts(netsnmp_transport *t, bio_cache *cachep) {
                                  outbuf, outsize);
 #else
         rc2 = sendto(t->sock, outbuf, outsize, 0,
-                     &cachep->sockaddr, sizeof(struct sockaddr));
+                     (struct sockaddr *)&cachep->sockaddr, sizeof(struct sockaddr));
 #endif /* linux && IP_PKTINFO */
 
         if (rc2 == -1) {
@@ -608,6 +611,17 @@ netsnmp_dtlsudp_recv(netsnmp_transport *t, void *buf, int size,
         return -1;
     }
     tlsdata = cachep->tlsdata;
+    if (NULL == tlsdata->ssl) {
+        /*
+         * this happens when the server starts but doesn't have an
+         * identity and a client connects...
+         */
+        snmp_log(LOG_ERR,
+                 "DTLSUDP: missing tlsdata!\n");
+        /*snmp_increment_statistic( XXX-rks ??? );*/
+        SNMP_FREE(tmStateRef);
+        return -1;
+    }
 
     /* Implementation notes:
        - we use the t->data memory pointer as the session ID
@@ -634,7 +648,22 @@ netsnmp_dtlsudp_recv(netsnmp_transport *t, void *buf, int size,
        net-snmp select loop because it's already been pulled
        out; need to deal with this) */
     rc = SSL_read(tlsdata->ssl, buf, size);
-            
+
+    /*
+     * currently netsnmp_tlsbase_wrapup_recv is where we check for
+     * algorithm compliance, but we (sometimes) know the algorithms
+     * at this point, so we could bail earlier...
+     */
+#if 0 /* moved checks to netsnmp_tlsbase_wrapup_recv */
+    netsnmp_openssl_null_checks(tlsdata->ssl, &no_auth, NULL);
+    if (no_auth == 1) { /* null/unknown authentication */
+        /* xxx-rks: snmp_increment_statistic(STAT_???); */
+        snmp_log(LOG_ERR, "dtlsudp: connection with NULL authentication\n");
+        SNMP_FREE(tmStateRef);
+        return -1;
+    }
+#endif
+
     while (rc == -1) {
         int errnum = SSL_get_error(tlsdata->ssl, rc);
         int bytesout;
@@ -1093,7 +1122,7 @@ netsnmp_dtlsudp_send(netsnmp_transport *t, void *buf, int size,
        received it from (addr_pair) */
     rc = netsnmp_udpbase_sendto(t->sock, &cachep->sockaddr  remote  addr_pair ? &(addr_pair->local_addr) : NULL, to, outbuf, rc);
 #else
-    rc = sendto(t->sock, outbuf, rc, 0, &cachep->sockaddr,
+    rc = sendto(t->sock, outbuf, rc, 0, (struct sockaddr *)&cachep->sockaddr,
                 sizeof(struct sockaddr));
 #endif /* linux && IP_PKTINFO */
 

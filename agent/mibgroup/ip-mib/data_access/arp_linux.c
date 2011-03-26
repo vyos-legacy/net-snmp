@@ -30,14 +30,14 @@
 #define NIP6_FMT "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x"
 #endif
 
-static int _load_v4(netsnmp_container *container, int idx_offset);
+int _load_v4(netsnmp_container *container, int idx_offset);
 #ifdef NETSNMP_ENABLE_IPV6
 static int _load_v6(netsnmp_container *container, int idx_offset);
 #endif
 #ifdef HAVE_LINUX_RTNETLINK_H
-static int get_translation_table_info (int sd, int *status, 
+int get_translation_table_info (int sd, int *status, 
                                 char *buff, size_t size);
-static int fillup_entry_info(netsnmp_arp_entry *entry,
+int fillup_entry_info(netsnmp_arp_entry *entry,
                       struct nlmsghdr *nlmp);
 #endif
 /**
@@ -74,7 +74,7 @@ netsnmp_access_arp_container_arch_load(netsnmp_container *container)
 
 /**
  */
-static int
+int
 _load_v4(netsnmp_container *container, int idx_offset)
 {
     FILE           *in;
@@ -259,8 +259,8 @@ _load_v6(netsnmp_container *container, int idx_offset)
          }
          entry->ns_arp_index = ++idx_offset;
          if(fillup_entry_info (entry, nlmp) < 0) {
-            NETSNMP_LOGONCE((LOG_ERR, "filling entry info failed\n"));
-            DEBUGMSGTL(("access:arp:load_v6", "filling entry info failed\n"));
+            DEBUGMSGTL(("access:arp:load_v6", "skipping netlink message that"
+                        " did not contain valid ARP information\n"));
             netsnmp_access_arp_entry_free(entry);
             status -= NLMSG_ALIGN(len);
             nlmp = (struct nlmsghdr*)((char*)nlmp + NLMSG_ALIGN(len));
@@ -280,7 +280,7 @@ _load_v6(netsnmp_container *container, int idx_offset)
     return idx_offset;
 }
 #if defined(HAVE_LINUX_RTNETLINK_H)
-static int 
+int 
 get_translation_table_info (int sd, int *status, char *buff, size_t size)
 {
     struct {
@@ -314,121 +314,133 @@ get_translation_table_info (int sd, int *status, char *buff, size_t size)
     return 0;
 }
 
-static int
+int
 fillup_entry_info(netsnmp_arp_entry *entry, struct nlmsghdr *nlmp)
 {
-    struct ndmsg    *rtmp;
+    struct ndmsg   *rtmp;
     struct in6_addr *in6p;
-    struct rtattr   *tb[NDA_MAX+1], *rta;
+    struct rtattr  *tb[NDA_MAX + 1], *rta;
     size_t          in_len, out_len;
     unsigned int    i;
     int             length;
     char            addr[40];
-    u_char          *buf;
-    u_char          *hwaddr;
+    u_char         *buf;
+    u_char         *hwaddr;
 
-    rtmp = (struct ndmsg *)NLMSG_DATA(nlmp);
+    rtmp = (struct ndmsg *) NLMSG_DATA(nlmp);
     if (nlmp->nlmsg_type != RTM_NEWNEIGH) {
-	snmp_log(LOG_ERR, "fillup_entry_info not NEWNEIGH: %08x",
-		 nlmp->nlmsg_type);
+        snmp_log(LOG_ERR, "Wrong netlink message type %d\n", nlmp->nlmsg_type);
         return -1;
     }
 
-    if(rtmp->ndm_state != NUD_NOARP) {
-       memset(tb, 0, sizeof(struct rtattr *) * (NDA_MAX + 1));
-       length = nlmp->nlmsg_len - NLMSG_LENGTH(sizeof(*rtmp));
-       if (length < 0) {
-	   snmp_log(LOG_ERR, "fillup_entry_info msg too short %d", length);
-	   return -1;
-       }
-       /* this is what the kernel-removed NDA_RTA define did */
-       rta = ((struct rtattr*)(((char*)(rtmp)) +
-                               NLMSG_ALIGN(sizeof(struct ndmsg))));
-       while (RTA_OK(rta, length)) {
-              if (rta->rta_type <= NDA_MAX)
-                  tb[rta->rta_type] = rta;
-              rta = RTA_NEXT(rta,length);
-       }
-       if (length) {
-	   snmp_log(LOG_ERR, "fillup_entry_info extra %d", length);
-	   return -1;
-       }
-
-       /* Fill up the index */
-       entry->if_index = rtmp->ndm_ifindex;
-       /* Fill up ip address */
-       if (tb[NDA_DST]) {
-           memset(&addr, '\0', sizeof(addr));
-           in6p = (struct in6_addr *)RTA_DATA(tb[NDA_DST]);
-           sprintf(addr, NIP6_FMT, NIP6(*in6p));
-           in_len = entry->arp_ipaddress_len = sizeof(entry->arp_ipaddress);
-           netsnmp_assert(16 == in_len);
-           out_len = 0;
-           buf = entry->arp_ipaddress;
-           if(1 != netsnmp_hex_to_binary(&buf, &in_len,
-                                         &out_len, 0, addr, ":")) {
-              snmp_log(LOG_ERR,"error parsing '%s', skipping\n",
-                     entry->arp_ipaddress);
-              return -1;
-           }
-           netsnmp_assert(16 == out_len);
-           entry->arp_ipaddress_len = out_len;
-       }
-       if (tb[NDA_LLADDR]) {
-           memset(&addr, '\0', sizeof(addr));
-           hwaddr = RTA_DATA(tb[NDA_LLADDR]);
-           entry->arp_physaddress_len = RTA_PAYLOAD(tb[NDA_LLADDR]);
-           buf = entry->arp_physaddress;
-           for (i = 0; i < entry->arp_physaddress_len; i++)
+    if (rtmp->ndm_state != NUD_NOARP) {
+        memset(tb, 0, sizeof(struct rtattr *) * (NDA_MAX + 1));
+        length = nlmp->nlmsg_len - NLMSG_LENGTH(sizeof(*rtmp));
+        if (length < 0) {
+            snmp_log(LOG_ERR, "netlink message length %d < %d is invalid\n",
+                     nlmp->nlmsg_len, NLMSG_LENGTH(sizeof(*rtmp)));
+            return -1;
+        }
+        /*
+         * this is what the kernel-removed NDA_RTA define did 
+         */
+        rta = ((struct rtattr *) (((char *) (rtmp)) +
+                                  NLMSG_ALIGN(sizeof(struct ndmsg))));
+        while (RTA_OK(rta, length)) {
+            if (rta->rta_type <= NDA_MAX)
+                tb[rta->rta_type] = rta;
+            rta = RTA_NEXT(rta, length);
+        }
+        if (length) {
+            snmp_log(LOG_ERR, "Received uneven number of netlink"
+                        " messages - %d bytes remaining\n", length);
+            return -1;
+        }
+        /*
+         * Fill up the index
+         */
+        entry->if_index = rtmp->ndm_ifindex;
+        /*
+         * Fill up ip address 
+         */
+        if (tb[NDA_DST]) {
+            memset(&addr, '\0', sizeof(addr));
+            in6p = (struct in6_addr *) RTA_DATA(tb[NDA_DST]);
+            sprintf(addr, NIP6_FMT, NIP6(*in6p));
+            in_len = entry->arp_ipaddress_len =
+                sizeof(entry->arp_ipaddress);
+            netsnmp_assert(16 == in_len);
+            out_len = 0;
+            buf = entry->arp_ipaddress;
+            if (1 != netsnmp_hex_to_binary(&buf, &in_len,
+                                           &out_len, 0, addr, ":")) {
+                snmp_log(LOG_ERR, "error parsing '%s', skipping\n",
+                         entry->arp_ipaddress);
+                return -1;
+            }
+            netsnmp_assert(16 == out_len);
+            entry->arp_ipaddress_len = out_len;
+        }
+        if (tb[NDA_LLADDR]) {
+            memset(&addr, '\0', sizeof(addr));
+            hwaddr = RTA_DATA(tb[NDA_LLADDR]);
+            entry->arp_physaddress_len = RTA_PAYLOAD(tb[NDA_LLADDR]);
+            buf = entry->arp_physaddress;
+            for (i = 0; i < entry->arp_physaddress_len; i++)
                 entry->arp_physaddress[i] = hwaddr[i];
-       }
+        }
 
-       switch (rtmp->ndm_state) {
+        switch (rtmp->ndm_state) {
         case NUD_INCOMPLETE:
-             entry->arp_state = INETNETTOMEDIASTATE_INCOMPLETE;
-             break;
+            entry->arp_state = INETNETTOMEDIASTATE_INCOMPLETE;
+            break;
         case NUD_REACHABLE:
         case NUD_PERMANENT:
-             entry->arp_state = INETNETTOMEDIASTATE_REACHABLE;
-             break;
+            entry->arp_state = INETNETTOMEDIASTATE_REACHABLE;
+            break;
         case NUD_STALE:
-             entry->arp_state = INETNETTOMEDIASTATE_STALE;
-             break;
+            entry->arp_state = INETNETTOMEDIASTATE_STALE;
+            break;
         case NUD_DELAY:
-             entry->arp_state = INETNETTOMEDIASTATE_DELAY;
-             break;
+            entry->arp_state = INETNETTOMEDIASTATE_DELAY;
+            break;
         case NUD_PROBE:
-             entry->arp_state = INETNETTOMEDIASTATE_PROBE;
-             break;
+            entry->arp_state = INETNETTOMEDIASTATE_PROBE;
+            break;
         case NUD_FAILED:
             entry->arp_state = INETNETTOMEDIASTATE_INVALID;
-             break;
+            break;
         case NUD_NONE:
-             entry->arp_state = INETNETTOMEDIASTATE_UNKNOWN;
-             break;
-       }
-
-       switch (rtmp->ndm_state) {
-        case NUD_INCOMPLETE:
-        case NUD_FAILED    :
-        case NUD_NONE      :
-             entry->arp_type = INETNETTOMEDIATYPE_INVALID;
-             break;
-        case NUD_REACHABLE:
-        case NUD_STALE    :
-        case NUD_DELAY    :
-        case NUD_PROBE    :
-             entry->arp_type = INETNETTOMEDIATYPE_DYNAMIC;
-             break;
-        case NUD_PERMANENT:
-             entry->arp_type = INETNETTOMEDIATYPE_STATIC;
-             break;
+            entry->arp_state = INETNETTOMEDIASTATE_UNKNOWN;
+            break;
         default:
-             entry->arp_type = INETNETTOMEDIATYPE_LOCAL;
-             break;
-       }      
+            snmp_log(LOG_ERR, "Unrecognized ARP entry state %d", rtmp->ndm_state);
+            break;
+        }
+
+        switch (rtmp->ndm_state) {
+        case NUD_INCOMPLETE:
+        case NUD_FAILED:
+        case NUD_NONE:
+            entry->arp_type = INETNETTOMEDIATYPE_INVALID;
+            break;
+        case NUD_REACHABLE:
+        case NUD_STALE:
+        case NUD_DELAY:
+        case NUD_PROBE:
+            entry->arp_type = INETNETTOMEDIATYPE_DYNAMIC;
+            break;
+        case NUD_PERMANENT:
+            entry->arp_type = INETNETTOMEDIATYPE_STATIC;
+            break;
+        default:
+            entry->arp_type = INETNETTOMEDIATYPE_LOCAL;
+            break;
+        }
+    } else {
+        return -1;              /* could not create data for this interface */
     }
-    
+
     return 0;
 }
 #endif

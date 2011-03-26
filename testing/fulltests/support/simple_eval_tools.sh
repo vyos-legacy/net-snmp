@@ -118,18 +118,11 @@ ISDEFINED() {
 }
 
 SKIPIFNOT() {
-	if ISDEFINED "$1" ; then
-            true
-        else
-	    SKIP "$1 is not defined"
-	fi
+	ISDEFINED "$1" || SKIP "$1 is not defined"
 }
 
 SKIPIF() {
-        ISDEFINED "$1"
-	if ISDEFINED "$1" ; then
-	    SKIP "$1 is defined"
-	fi
+	ISDEFINED "$1" && SKIP "$1 is defined"
 }
 
 #------------------------------------ -o-
@@ -178,15 +171,34 @@ REMOVETESTDATA() {
 	rm -rf $SNMP_TMPDIR
 }
 
-
+#------------------------------------ -o-
+#
+OUTPUTENVVARS() {
+    echo "SNMPCONFPATH=$SNMPCONFPATH" >> $1
+    echo "SNMP_PERSISTENT_DIR=$SNMP_PERSISTENT_DIR" >> $1
+    echo "MIBDIRS=$MIBDIRS" >> $1
+    echo "PATH=$PATH" >> $1
+    echo "export SNMPCONFPATH" >> $1
+    echo "export SNMP_PERSISTENT_DIR" >> $1
+    echo "export MIBDIRS" >> $1
+    echo "export PATH" >> $1
+}
+    
 #------------------------------------ -o-
 # Captures output from command, and returns the command's exit code.
 loggedvars=0
 CAPTURE() {	# <command_with_arguments_to_execute>
+    NEWOUTPUTFILE
+
+    # track invoked command per test when verbose
+    if [ $SNMP_VERBOSE -gt 0 ]; then
+        OUTPUTENVVARS $junkoutputfile.invoked
+        echo $* >> $junkoutputfile.invoked
+    fi
+
     if [ $loggedvars = 0 ]; then
-	echo "SNMPCONFPATH=$SNMPCONFPATH" >> $SNMP_TMPDIR/invoked
-	echo "SNMP_PERSISTENT_DIR=$SNMP_PERSISTENT_DIR" >> $SNMP_TMPDIR/invoked
-	loggedvars=1
+        OUTPUTENVVARS $SNMP_TMPDIR/invoked
+        loggedvars=1
     fi
     echo $* >> $SNMP_TMPDIR/invoked
 
@@ -198,7 +210,6 @@ EXECUTING: $*
 KNORG
 
 	fi
-	NEWOUTPUTFILE
 	echo "RUNNING: $*" > $junkoutputfile
 	( $* 2>&1 ) >> $junkoutputfile 2>&1
 	RC=$?
@@ -340,6 +351,28 @@ CHECKAGENTCOUNT() {
     count=$1
     shift
     CHECKFILECOUNT $SNMP_SNMPD_LOG_FILE $count $@
+}
+
+WAITFORAGENTSHUTTINGDOWN() {
+    if [ "x$OSTYPE" != "xmsys" ]; then
+        WAITFORAGENT "shutting down"
+    else
+	CAN_USLEEP
+	if [ $SNMP_CAN_USLEEP = 1 ] ; then
+	  sleeptime=`expr $SNMP_SLEEP '*' 50`
+	else 
+	  sleeptime=`expr $SNMP_SLEEP '*' 5`
+	fi
+        snmpd_pid=`cat $SNMP_SNMPD_PID_FILE`
+        while [ $sleeptime -gt 0 ] && kill -0 "$snmpd_pid" 2>/dev/null; do
+            if [ $SNMP_CAN_USLEEP = 1 ]; then
+                sleep .1
+            else
+                sleep 1
+            fi
+            sleeptime=`expr $sleeptime - 1`
+        done
+    fi
 }
 
 WAITFORAGENT() {
@@ -508,6 +541,10 @@ STARTPROG() {
 	echo "running: $COMMAND"
     fi
     echo $COMMAND >> $SNMP_TMPDIR/invoked
+    if [ $SNMP_VERBOSE -gt 0 ]; then
+        OUTPUTENVVARS $LOG_FILE.command
+        echo $COMMAND >> $LOG_FILE.command
+    fi
     if [ "x$OSTYPE" = "xmsys" ]; then
       $COMMAND > $LOG_FILE.stdout 2>&1 &
       ## COMMAND="cmd.exe //c start //min $COMMAND"
@@ -595,9 +632,7 @@ STOPPROG() {
 STOPAGENT() {
     SAVE_RESULTS
     STOPPROG $SNMP_SNMPD_PID_FILE
-    if [ "x$OSTYPE" != "xmsys" ]; then
-        WAITFORAGENT "shutting down"
-    fi
+    WAITFORAGENTSHUTTINGDOWN
     if [ $SNMP_VERBOSE -gt 1 ]; then
 	echo "Agent Output:"
 	echo "$separator [stdout]"
@@ -665,7 +700,7 @@ FINISHED() {
 	fi
     done
 
-    # retuport the number of tests done
+    # report the number of tests done
     GOOD "got to FINISHED"
     echo "1..$testnum"
 

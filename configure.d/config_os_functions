@@ -32,15 +32,47 @@ AC_CHECK_FUNCS([lrand48         rand          random    ] dnl
                [signal          sigset                  ] )
 
 #  Library:
-AC_CHECK_FUNCS([closedir        fork          gai_strerror     ] dnl
-               [getaddrinfo     gethostname   gethostbyname    ] dnl
-               [getipnodebyname               gettimeofday     ] dnl
-               [if_nametoindex  mkstemp       opendir          ] dnl
-               [readdir         regcomp                        ] dnl
-               [setenv          setitimer     setlocale        ] dnl
-               [setsid          snprintf      strcasestr       ] dnl
-               [strdup          strerror      strncasecmp      ] dnl
-               [sysconf         times         vsnprintf        ] )
+AC_CHECK_FUNCS([closedir        fork            getipnodebyname  ] dnl
+               [gettimeofday    if_nametoindex  mkstemp          ] dnl
+               [opendir         readdir         regcomp          ] dnl
+               [setenv          setitimer       setlocale        ] dnl
+               [setsid          snprintf        strcasestr       ] dnl
+               [strdup          strerror        strncasecmp      ] dnl
+               [sysconf         times           vsnprintf        ] )
+
+# IPv4/IPv6 function checks. AC_CHECK_FUNC() can't find these on MinGW
+# since these functions have the __cdecl calling convention on MinGW.
+case x$target_os in
+  xmingw*)
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([#include <ws2tcpip.h>],
+    [ gai_strerror(0); ])],
+    [ ac_cv_func_gai_strerror=yes
+      AS_ECHO "#define HAVE_GAI_STRERROR 1" >>confdefs.h
+    ], [ ])
+
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([#include <ws2tcpip.h>],
+    [ getaddrinfo(NULL, NULL, NULL, NULL); ])],
+    [ ac_cv_func_getaddrinfo=yes
+      AS_ECHO "#define HAVE_GETADDRINFO 1" >>confdefs.h
+    ], [ ])
+
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([#include <winsock2.h>],
+    [ gethostbyname(NULL); ])],
+    [ ac_cv_func_gethostbyname=yes
+      AS_ECHO "#define HAVE_GETHOSTBYNAME 1" >>confdefs.h
+    ], [ ])
+
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([#include <winsock2.h>],
+    [ gethostname(NULL, 0); ])],
+    [ ac_cv_func_gethostname=yes
+      AS_ECHO "#define HAVE_GETHOSTNAME 1" >>confdefs.h
+    ], [ ])
+    ;;
+
+  *)
+    AC_CHECK_FUNCS([gai_strerror getaddrinfo gethostbyname gethostname])
+    ;;
+esac
 
 AC_CONFIG_LIBOBJ_DIR([snmplib])
 
@@ -52,7 +84,7 @@ AC_REPLACE_FUNCS([getopt        inet_ntop     inet_pton        ] dnl
 AC_CHECK_FUNCS([cgetnext        chown          execv           ] dnl
                [gai_strerror                   getgrnam        ] dnl
                [gethostname     getloadavg                     ] dnl
-               [getpid          getpwnam      getvfsstat       ] dnl
+               [getpid          getpwnam                       ] dnl
                [hasmntopt       initgroups                     ] dnl
                [if_nameindex    if_nametoindex localtime_r     ] dnl
                [mkstemp         mktime                         ] dnl
@@ -84,8 +116,7 @@ AC_CHECK_FUNCS([if_freenameindex              getpagesize      ] dnl
 
 #       rpmGetPath check needs clean LIBS environment   (Linux)
 #
-if test "x$with_rpm" != "xno" && \
-        echo " $module_list " | $GREP " host/hr_swinst " > /dev/null; then
+if test "x$with_rpm" != "xno"; then
     OLDLIBS=$LIBS
     LIBS=$LMIBLIBS
     AC_CHECK_FUNCS(rpmGetPath)
@@ -263,3 +294,24 @@ esac
 AC_MSG_RESULT($netsnmp_PRI32)
 AC_DEFINE_UNQUOTED([NETSNMP_PRI32], ["$netsnmp_PRI32"],
                    [Size prefix to use to printf a uint32_t])
+
+# check to see if the openssl is good enough for DTLS
+# (BIO_dgram_get_peer is a macro, not a true function)
+if echo " $transport_result_list " | $GREP "DTLS" > /dev/null; then
+    AC_CACHE_VAL(
+       netsnmp_cv_bio_dgram_get_peer,
+       AC_MSG_CHECKING([[for BIO_dgram_get_peer]])
+       [
+        oldLIBS="$LIBS"
+        LIBS="$LIBS -lcrypto"
+        AC_TRY_LINK(
+         [#include <openssl/bio.h>],
+         [BIO_dgram_get_peer(NULL, NULL);],,
+         AC_MSG_ERROR([DTLS support requires a newer version of OpenSSL]))
+
+        LIBS="$oldLIBS"
+       ]
+       AC_MSG_RESULT(yes)
+    )
+fi
+

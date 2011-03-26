@@ -159,8 +159,8 @@ void
 _setup_trusted_certs(void)
 {
     _trusted_certs = netsnmp_container_find("trusted_certs:fifo");
-    if (NULL == _keys) {
-        snmp_log(LOG_ERR, "could not create container for trusted keys\n");
+    if (NULL == _trusted_certs) {
+        snmp_log(LOG_ERR, "could not create container for trusted certs\n");
         netsnmp_certs_shutdown();
         return;
     }
@@ -169,27 +169,26 @@ _setup_trusted_certs(void)
     _trusted_certs->compare = (netsnmp_container_compare*) strcmp;
 }
 
+/*
+ * secname mapping for servers.
+ */
+void
+netsnmp_certs_agent_init(void)
+{
+    _init_tlstmCertToTSN();
+    _init_tlstmParams();
+    _init_tlstmAddr();
+}
+
 void
 netsnmp_certs_init(void)
 {
     const char *trustCert_help = TRUSTCERT_CONFIG_TOKEN
         " FINGERPRINT|FILENAME";
 
-    char *app = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
-                                      NETSNMP_DS_LIB_APPTYPE);
-
     register_config_handler("snmp", TRUSTCERT_CONFIG_TOKEN,
                             _parse_trustcert, _netsnmp_release_trustcerts,
                             trustCert_help);
-    /*
-     * secname mapping only makes sense for servers.
-     * Is there a better way than apptype to determine that?
-     */
-    if ((strcmp(app, "snmpd") == 0) || (strcmp(app, "snmptrapd") == 0)) {
-        _init_tlstmCertToTSN();
-        _init_tlstmParams();
-        _init_tlstmAddr();
-    }
     _setup_containers();
 
     /** add certificate type mapping */
@@ -1715,6 +1714,8 @@ netsnmp_cert_find(int what, int where, void *hint)
         switch (what) {
             case NS_CERT_IDENTITY: /* want my ID */
                 tmp = (ptrdiff_t)hint;
+                DEBUGMSGT(("cert:find:params", " hint = %s\n",
+                           tmp ? "server" : "client"));
                 fp =
                     netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
                                           tmp ? NETSNMP_DS_LIB_X509_SERVER_PUB :
@@ -1751,6 +1752,7 @@ netsnmp_cert_find(int what, int where, void *hint)
         }
     }
     else if (NS_CERTKEY_FINGERPRINT == where) {
+        DEBUGMSGT(("cert:find:params", " hint = %s\n", (char *)hint));
         result = _cert_find_fp((char *)hint);
     }
     else if (NS_CERTKEY_TARGET_PARAM == where) {
@@ -1784,6 +1786,7 @@ netsnmp_cert_find(int what, int where, void *hint)
         char               *filename = (char*)hint;
         netsnmp_void_array *matching;
 
+        DEBUGMSGT(("cert:find:params", " hint = %s\n", (char *)hint));
         matching = _cert_find_subset_fn( filename, NULL );
         if (!matching)
             return NULL;
@@ -1920,7 +1923,7 @@ netsnmp_tls_fingerprint_parse(const u_char *binary_fp, int fp_len,
  */
 int
 netsnmp_tls_fingerprint_build(int hash_type, const char *hex_fp,
-                                   u_char **tls_fp, u_int *tls_fp_len,
+                                   u_char **tls_fp, size_t *tls_fp_len,
                                    int realloc)
 {
     int     hex_fp_len, rc;
@@ -2520,7 +2523,7 @@ netsnmp_cert_map_container_create(int with_fp)
     fp = netsnmp_container_find("cert2sn_fp:binary_array");
     if (NULL == fp) {
         snmp_log(LOG_ERR,
-                 "error creating sub-containter for tlstmCertToTSNTable\n");
+                 "error creating sub-container for tlstmCertToTSNTable\n");
         CONTAINER_FREE(chain_map);
         return NULL;
     }
@@ -2832,7 +2835,7 @@ _init_tlstmParams(void)
     _tlstmParams = netsnmp_container_find("tlstmParams:string");
     if (NULL == _tlstmParams)
         snmp_log(LOG_ERR,
-                 "error creating sub-containter for tlstmParamsTable\n");
+                 "error creating sub-container for tlstmParamsTable\n");
     else
         _tlstmParams->container_name = strdup("tlstmParams");
 
@@ -3034,7 +3037,7 @@ _init_tlstmAddr(void)
     _tlstmAddr = netsnmp_container_find("tlstmAddr:string");
     if (NULL == _tlstmAddr)
         snmp_log(LOG_ERR,
-                 "error creating sub-containter for tlstmAddrTable\n");
+                 "error creating sub-container for tlstmAddrTable\n");
     else
         _tlstmAddr->container_name = strdup("tlstmAddr");
 

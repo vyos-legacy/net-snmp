@@ -8,6 +8,10 @@
 #ifndef _TOOLS_H
 #define _TOOLS_H
 
+#ifdef HAVE_INTTYPES_H
+#include <inttypes.h> /* uintptr_t */
+#endif
+
 #ifdef __cplusplus
 extern          "C" {
 #endif
@@ -73,6 +77,8 @@ extern          "C" {
 
 
 /**
+ * @def NETSNMP_REMOVE_CONST(t, e)
+ *
  * Cast away constness without that gcc -Wcast-qual prints a compiler warning,
  * similar to const_cast<> in C++.
  *
@@ -81,7 +87,7 @@ extern          "C" {
  */
 #if defined(__GNUC__)
 #define NETSNMP_REMOVE_CONST(t, e)                                      \
-    (__extension__ ({ const t tmp = e; (t)(unsigned long)tmp; }))
+    (__extension__ ({ const t tmp = (e); (t)(uintptr_t)tmp; }))
 #else
 #define NETSNMP_REMOVE_CONST(t, e) ((t)(uintptr_t)(e))
 #endif

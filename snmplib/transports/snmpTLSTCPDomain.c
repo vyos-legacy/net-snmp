@@ -130,7 +130,7 @@ netsnmp_tlstcp_copy(netsnmp_transport *oldt, netsnmp_transport *newt)
     if (oldtlsdata->trust_cert)
         newtlsdata->trust_cert = strdup(oldtlsdata->trust_cert);
     if (oldtlsdata->remote_addr)
-        memdup(&newtlsdata->remote_addr, oldtlsdata->remote_addr,
+        memdup((u_char**)&newtlsdata->remote_addr, oldtlsdata->remote_addr,
                sizeof(netsnmp_indexed_addr_pair));
 
     return 0;
@@ -488,7 +488,6 @@ netsnmp_tlstcp_close(netsnmp_transport *t)
 static int
 netsnmp_tlstcp_accept(netsnmp_transport *t)
 {
-    char           *str = NULL;
     BIO            *accepted_bio;
     int             rc;
     SSL_CTX *ctx;
@@ -522,6 +521,8 @@ netsnmp_tlstcp_accept(netsnmp_transport *t)
     ssl = tlsdata->ssl = SSL_new(ctx);
     if (!tlsdata->ssl) {
         snmp_log(LOG_ERR, "TLSTCP: Failed to create a SSL BIO\n");
+        BIO_free(accepted_bio);
+        tlsdata->accepted_bio = NULL;
         return -1;
     }
         
@@ -530,8 +531,30 @@ netsnmp_tlstcp_accept(netsnmp_transport *t)
     if ((rc = SSL_accept(ssl)) <= 0) {
         snmp_log(LOG_ERR, "TLSTCP: Failed SSL_accept\n");
         _openssl_log_error(rc, ssl, "SSL_accept");
+        SSL_shutdown(tlsdata->ssl);
+        SSL_free(tlsdata->ssl);
+        tlsdata->accepted_bio = NULL; /* freed by SSL_free */
+        tlsdata->ssl = NULL;
         return -1;
     }   
+
+    /*
+     * currently netsnmp_tlsbase_wrapup_recv is where we check for
+     * algorithm compliance, but for tls we know the algorithms
+     * at this point, so we could bail earlier...
+     */
+#if 0 /* moved checks to netsnmp_tlsbase_wrapup_recv */
+    netsnmp_openssl_null_checks(tlsdata->ssl, &no_auth, NULL);
+    if (no_auth != 0) { /* null/unknown authentication */
+        /* xxx-rks: snmp_increment_statistic(STAT_???); */
+        snmp_log(LOG_ERR, "tlstcp: connection with NULL authentication\n");
+        SSL_shutdown(tlsdata->ssl);
+        SSL_free(tlsdata->ssl);
+        tlsdata->accepted_bio = NULL; /* freed by SSL_free */
+        tlsdata->ssl = NULL;
+        return -1;
+    }
+#endif
 
     /* RFC5953 Section 5.3.2: Accepting a Session as a Server
        A (D)TLS server should accept new session connections from any client
@@ -577,15 +600,17 @@ netsnmp_tlstcp_accept(netsnmp_transport *t)
         /* XXX: free needed memory */
         snmp_log(LOG_ERR, "TLSTCP: Falied checking client certificate\n");
         snmp_increment_statistic(STAT_TLSTM_SNMPTLSTMSESSIONINVALIDCLIENTCERTIFICATES);
+        SSL_shutdown(tlsdata->ssl);
+        SSL_free(tlsdata->ssl);
+        tlsdata->accepted_bio = NULL; /* freed by SSL_free */
+        tlsdata->ssl = NULL;
         return -1;
     }
 
 
     /* XXX: check acceptance criteria here */
 
-    DEBUGMSGTL(("tlstcp", "accept succeeded (from %s) on sock %d\n",
-                str, t->sock));
-    free(str);
+    DEBUGMSGTL(("tlstcp", "accept succeeded on sock %d\n", t->sock));
 
     /* RFC5953 Section 5.1.2 step 1, part2::
      * If this is the first message received through this session and
@@ -966,7 +991,7 @@ netsnmp_tlstcp_create_tstring(const char *str, int local,
         str = default_target + 1; /* drop the leading : */
     else if (!strchr(str, ':')) {
         /* it's either :port or :address.  Try to guess which. */
-        char *cp;
+        const char *cp;
         int isport = 1;
         for(cp = str; *cp != '\0'; cp++) {
             /* if ALL numbers, it must be just a port */

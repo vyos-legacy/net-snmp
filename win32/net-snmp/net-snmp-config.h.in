@@ -5,11 +5,12 @@
 #define NET_SNMP_CONFIG_H
 
 /* _MSC_VER values
-   1500 = 9.0 (2008)
-   1400 = 8.0 (2005)
-   1310 = 7.1 (2003)
-   1300 = 7.0 (2002)
-   1200 = 6.0
+   1600 = 10.0 (2010)
+   1500 =  9.0 (2008)
+   1400 =  8.0 (2005)
+   1310 =  7.1 (2003)
+   1300 =  7.0 (2002)
+   1200 =  6.0
 */
 
 #ifdef _MSC_VER
@@ -1562,13 +1563,28 @@ typedef unsigned short   uint16_t;
 /* (u)intptr_t should only be needed for MSVC 6 32-bit. */
 /* SDK has it for 64-bit and newer MSVC should also have it in stddef.h. */
 #ifndef _INTPTR_T_DEFINED
-typedef int            intptr_t;
+#ifdef _M_X64
+typedef __int64          intptr_t;
+#else
+typedef int              intptr_t;
+#endif
 #define _INTPTR_T_DEFINED
 #endif
 
 #ifndef _UINTPTR_T_DEFINED
-typedef unsigned int   uintptr_t;
+#ifdef _M_X64
+typedef unsigned __int64 uintptr_t;
+#else
+typedef unsigned int     uintptr_t;
+#endif
 #define _UINTPTR_T_DEFINED
+#endif
+
+#ifndef __cplusplus
+enum {
+    netsnmp_compile_time_uintptr_t_size_check
+        = sizeof(struct netsnmp_compile_time_uintptr_t_size_check_s { int:-!(sizeof(uintptr_t) == sizeof(void*)); })
+};
 #endif
 
 /* Define if you have the closesocket function.  */
@@ -1586,7 +1602,9 @@ typedef unsigned int   uintptr_t;
 #endif
 #define snprintf  _snprintf
 
+#if _MSC_VER < 1600
 #define EADDRINUSE	WSAEADDRINUSE
+#endif
 
 /* Define NETSNMP_USE_DLL when building or using netsnmp.DLL */
 /* #undef NETSNMP_USE_DLL */

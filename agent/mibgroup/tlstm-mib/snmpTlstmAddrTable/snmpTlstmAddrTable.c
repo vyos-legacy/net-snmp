@@ -347,7 +347,7 @@ tlstmAddrTable_handler(netsnmp_mib_handler *handler,
                        netsnmp_request_info *requests)
 {
 
-    netsnmp_request_info *request;
+    netsnmp_request_info *request = NULL;
     netsnmp_table_request_info *table_info;
     netsnmp_tdata  *table_data;
     netsnmp_tdata_row *table_row;
@@ -1293,7 +1293,7 @@ _tlstmAddrTable_save_rows(int majorID, int minorID, void *serverarg,
 
     netsnmp_container *mib_addrs = (netsnmp_container *) clientarg;
     netsnmp_container *active_addrs = netsnmp_tlstmAddr_container();
-    netsnmp_iterator  *tbl_itr, *addrs_itr;
+    netsnmp_iterator  *tbl_itr, *addrs_itr = NULL;
     netsnmp_tdata_row *row;
     snmpTlstmAddr     *addr;
     tlstmAddrTable_entry *entry;
@@ -1365,7 +1365,7 @@ _tlstmAddrTable_row_restore_mib(const char *token, char *buf)
 {
     char                   name[SNMPADMINLENGTH + 1], id[SNMPADMINLENGTH + 1],
                            fingerprint[SNMPTLSFINGERPRINT_MAX_LEN + 1];
-    u_int                  name_len = sizeof(name), id_len = sizeof(id),
+    size_t                 name_len = sizeof(name), id_len = sizeof(id),
                            fp_len = sizeof(fingerprint);
     u_char                 hashType, rowStatus;
     int                    rc;

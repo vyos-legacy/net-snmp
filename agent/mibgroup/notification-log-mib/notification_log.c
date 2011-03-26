@@ -218,15 +218,6 @@ initialize_table_nlmLogVariableTable(const char * context)
     netsnmp_table_dataset_add_index(table_set, ASN_UNSIGNED);
 
     /*
-     * adding column nlmLogVariableIndex of type ASN_UNSIGNED and access
-     * of NoAccess 
-     */
-    DEBUGMSGTL(("initialize_table_nlmLogVariableTable",
-                "adding column nlmLogVariableIndex (#1) of type ASN_UNSIGNED to table nlmLogVariableTable\n"));
-    netsnmp_table_set_add_default_row(table_set,
-                                      COLUMN_NLMLOGVARIABLEINDEX,
-                                      ASN_UNSIGNED, 0, NULL, 0);
-    /*
      * adding column nlmLogVariableID of type ASN_OBJECT_ID and access of
      * ReadOnly 
      */
@@ -585,6 +576,7 @@ log_notification(netsnmp_pdu *pdu, netsnmp_transport *transport)
     u_long          vbcount = 0;
     u_long          tmpul;
     int             col;
+    netsnmp_pdu    *orig_pdu = pdu;
 
     if (!nlmLogVarTable
         || netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
@@ -651,13 +643,14 @@ log_notification(netsnmp_pdu *pdu, netsnmp_transport *transport)
     netsnmp_set_row_column(row, COLUMN_NLMLOGCONTEXTNAME, ASN_OCTET_STR,
                            pdu->contextName, pdu->contextNameLen);
 
+    if (pdu->command == SNMP_MSG_TRAP)
+	pdu = convert_v1pdu_to_v2(orig_pdu);
     for (vptr = pdu->variables; vptr; vptr = vptr->next_variable) {
         if (snmp_oid_compare(snmptrapoid, snmptrapoid_len,
                              vptr->name, vptr->name_length) == 0) {
             netsnmp_set_row_column(row, COLUMN_NLMLOGNOTIFICATIONID,
                                    ASN_OBJECT_ID, vptr->val.string,
                                    vptr->val_len);
-
         } else {
             netsnmp_table_row *myrow;
             myrow = netsnmp_create_table_data_row();
@@ -748,6 +741,9 @@ log_notification(netsnmp_pdu *pdu, netsnmp_transport *transport)
             netsnmp_table_dataset_add_row(nlmLogVarTable, myrow);
         }
     }
+
+    if (pdu != orig_pdu)
+        snmp_free_pdu( pdu );
 
     /*
      * store the row 

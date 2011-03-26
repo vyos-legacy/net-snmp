@@ -46,7 +46,7 @@
 #include <net-snmp/library/snmp_transport.h>
 #include <net-snmp/library/snmp_secmod.h>
 
-#define LOGANDDIE(msg) { snmp_log(LOG_ERR, "%s\n", msg); return 0; }
+#define LOGANDDIE(msg) do { snmp_log(LOG_ERR, "%s\n", msg); return 0; } while(0)
 
 int openssl_local_index;
 
@@ -123,7 +123,7 @@ int verify_callback(int ok, X509_STORE_CTX *ctx) {
 }
 
 #define VERIFIED_FINGERPRINT      0
-#define NO_FINGERPNINT_AVAILABLE  1
+#define NO_FINGERPRINT_AVAILABLE  1
 #define FAILED_FINGERPRINT_VERIFY 2
 
 static int
@@ -170,14 +170,14 @@ _netsnmp_tlsbase_verify_remote_fingerprint(X509 *remote_cert,
         netsnmp_fp_lowercase_and_strip_colon(tlsdata->their_fingerprint);
         if (0 != strcmp(tlsdata->their_fingerprint, fingerprint)) {
             snmp_log(LOG_ERR, "The fingerprint from the remote side's certificate didn't match the expected\n");
-            snmp_log(LOG_ERR, "  %s != %s\n",
+            snmp_log(LOG_ERR, "  got %s, expected %s\n",
                      fingerprint, tlsdata->their_fingerprint);
             free(fingerprint);
             return FAILED_FINGERPRINT_VERIFY;
         }
     } else {
         DEBUGMSGTL(("tls_x509:verify", "No fingerprint for the remote entity available to verify\n"));
-        return NO_FINGERPNINT_AVAILABLE;
+        return NO_FINGERPRINT_AVAILABLE;
     }
 
     free(fingerprint);
@@ -212,7 +212,7 @@ netsnmp_tlsbase_verify_server_cert(SSL *ssl, _netsnmpTLSBaseData *tlsdata) {
     case FAILED_FINGERPRINT_VERIFY:
         return SNMPERR_GENERR;
 
-    case NO_FINGERPNINT_AVAILABLE:
+    case NO_FINGERPRINT_AVAILABLE:
         if (tlsdata->their_hostname && tlsdata->their_hostname[0] != '\0') {
             GENERAL_NAMES      *onames;
             const GENERAL_NAME *oname = NULL;
@@ -341,7 +341,7 @@ netsnmp_tlsbase_verify_client_cert(SSL *ssl, _netsnmpTLSBaseData *tlsdata) {
         DEBUGMSGTL(("tls_x509:verify", "failed to verify a client fingerprint\n"));
         return SNMPERR_GENERR;
 
-    case NO_FINGERPNINT_AVAILABLE:
+    case NO_FINGERPRINT_AVAILABLE:
         DEBUGMSGTL(("tls_x509:verify", "no known fingerprint available (not a failure case)\n"));
         return SNMPERR_SUCCESS;
 
@@ -474,22 +474,24 @@ _sslctx_common_setup(SSL_CTX *the_ctx, _netsnmpTLSBaseData *tlsbase) {
 
     cipherList = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
                                        NETSNMP_DS_LIB_TLS_ALGORITMS);
-    if (NULL != cipherList)
+    if (NULL != cipherList) {
         if (SSL_CTX_set_cipher_list(the_ctx, cipherList) != 1)
             LOGANDDIE("failed to set the cipher list to the requested value");
-
+        else
+            snmp_log(LOG_INFO,"set SSL cipher list to '%s'\n", cipherList);
+    }
     return the_ctx;
 }
 
 SSL_CTX *
-sslctx_client_setup(SSL_METHOD *method, _netsnmpTLSBaseData *tlsbase) {
+sslctx_client_setup(const SSL_METHOD *method, _netsnmpTLSBaseData *tlsbase) {
     netsnmp_cert *id_cert, *peer_cert;
     SSL_CTX      *the_ctx;
 
     /***********************************************************************
      * Set up the client context
      */
-    the_ctx = SSL_CTX_new(method);
+    the_ctx = SSL_CTX_new(NETSNMP_REMOVE_CONST(SSL_METHOD *, method));
     if (!the_ctx) {
         snmp_log(LOG_ERR, "ack: %p\n", the_ctx);
         LOGANDDIE("can't create a new context");
@@ -557,14 +559,14 @@ sslctx_client_setup(SSL_METHOD *method, _netsnmpTLSBaseData *tlsbase) {
 }
 
 SSL_CTX *
-sslctx_server_setup(SSL_METHOD *method) {
+sslctx_server_setup(const SSL_METHOD *method) {
     netsnmp_cert *id_cert;
 
     /***********************************************************************
      * Set up the server context
      */
     /* setting up for ssl */
-    SSL_CTX *the_ctx = SSL_CTX_new(method);
+    SSL_CTX *the_ctx = SSL_CTX_new(NETSNMP_REMOVE_CONST(SSL_METHOD *, method));
     if (!the_ctx) {
         LOGANDDIE("can't create a new context");
     }
@@ -810,9 +812,32 @@ void netsnmp_tlsbase_free_tlsdata(_netsnmpTLSBaseData *tlsbase) {
 int netsnmp_tlsbase_wrapup_recv(netsnmp_tmStateReference *tmStateRef,
                                 _netsnmpTLSBaseData *tlsdata,
                                 void **opaque, int *olength) {
+    int no_auth, no_priv;
+
+    if (NULL == tlsdata)
+        return SNMPERR_GENERR;
+
     /* RFC5953 Section 5.1.2 step 2: tmSecurityLevel */
-    /* XXX: disallow NULL auth/encr algs in our implementations */
-    tmStateRef->transportSecurityLevel = SNMP_SEC_LEVEL_AUTHPRIV;
+    /*
+     * Don't accept null authentication. Null encryption ok.
+     *
+     * XXX: this should actually check for a configured list of encryption
+     *      algorithms to map to NOPRIV, but for the moment we'll
+     *      accept any encryption alogrithms that openssl is using.
+     */
+    netsnmp_openssl_null_checks(tlsdata->ssl, &no_auth, &no_priv);
+    if (no_auth == 1) { /* null/unknown authentication */
+        /* xxx-rks: snmp_increment_statistic(STAT_???); */
+        snmp_log(LOG_ERR, "tls connection with NULL authentication\n");
+        SNMP_FREE(tmStateRef);
+        return SNMPERR_GENERR;
+    }
+    else if (no_priv == 1) /* null/unknown encryption */
+        tmStateRef->transportSecurityLevel = SNMP_SEC_LEVEL_AUTHNOPRIV;
+    else
+        tmStateRef->transportSecurityLevel = SNMP_SEC_LEVEL_AUTHPRIV;
+    DEBUGMSGTL(("tls:secLevel", "SecLevel %d\n",
+                tmStateRef->transportSecurityLevel));
 
     /* use x509 cert to do lookup to secname if DNE in cachep yet */
 

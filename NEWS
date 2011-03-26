@@ -3,6 +3,17 @@ Please see the CHANGES file for a more detailed list of specific bugs/patches
 that have been fixed/applied, and the ChangeLog file for a comprehensive
 listing of all changes made to the code.
 
+*5.6.1*
+    General:
+      - The DTLS and TLS transports and the TSM security model are no
+        longer "beta" (they've undergone rigorous interoperability testing).
+      - Many Bug Fixes (see the CHANGES and ChangeLog files for full details)
+
+    snmpd:
+      - 0 Patch 3141462: from fenner: fix agentx subagent issues with
+	multiple-object requests
+      - Patch from Niels to fix VACM persistant storage.
+
 *5.6*
 
     all:
