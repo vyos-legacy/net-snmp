@@ -1,3 +1,9 @@
+net-snmp (5.6.1-vyatta3) unstable; urgency=low
+
+  * new branch
+
+ -- Deepti Kulkarni <deepti@vyatta.com>  Thu, 07 Jul 2011 20:53:40 -0700
+
 net-snmp (5.6.1-vyatta2) unstable; urgency=low
 
   * Restore Vyatta optimizations to binary_array
