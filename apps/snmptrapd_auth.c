@@ -27,7 +27,6 @@
 #endif
 
 #include <net-snmp/agent/agent_trap.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
 
 /**
  * initializes the snmptrapd authorization code registering needed
