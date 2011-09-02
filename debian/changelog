@@ -1,3 +1,12 @@
+net-snmp (5.6.1.1-vyatta+3) unstable; urgency=low
+
+  * Fix snmp MIB search path
+  * This patch ignores interfaces without statistics.
+  * Patch documentation files to change paths to Debian specific
+    locations.
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Fri, 02 Sep 2011 12:02:34 -0700
+
 net-snmp (5.6.1.1-vyatta+2) unstable; urgency=low
 
   * Update version in autoconf
