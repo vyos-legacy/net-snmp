@@ -1,9 +1,5 @@
 # This file controls the activity of snmpd and snmptrapd
 
-# Don't load any MIBs by default.
-# You might comment this lines once you have the MIBs downloaded.
-export MIBS=
-
 # snmpd control (yes means start daemon).
 SNMPDRUN=yes
 
