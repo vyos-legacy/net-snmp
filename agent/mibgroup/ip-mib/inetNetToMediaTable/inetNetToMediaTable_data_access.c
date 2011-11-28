@@ -178,7 +178,8 @@ _add_or_update_arp_entry(netsnmp_arp_entry *arp_entry,
 
     default:
         netsnmp_access_arp_entry_free(arp_entry);
-        snmp_log(LOG_ERR, "unsupported address type\n");
+        snmp_log(LOG_ERR, "unsupported address type len=%u\n",
+                 arp_entry->arp_ipaddress_len);
         return;
     }
 
