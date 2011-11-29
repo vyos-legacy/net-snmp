@@ -34,7 +34,7 @@
 #ifdef SUPPORT_PREFIX_FLAGS
 extern prefix_cbx *prefix_head_list;
 #endif
-int _load_v6(netsnmp_container *container, int idx_offset);
+static int _load_v6(netsnmp_container *container, int idx_offset);
 #ifdef HAVE_LINUX_RTNETLINK_H
 int
 netsnmp_access_ipaddress_extra_prefix_info(int index,
@@ -193,7 +193,7 @@ netsnmp_arch_ipaddress_container_load(netsnmp_container *container,
 #if defined (NETSNMP_ENABLE_IPV6)
 /**
  */
-int
+static int
 _load_v6(netsnmp_container *container, int idx_offset)
 {
 #ifndef HAVE_LINUX_RTNETLINK_H
