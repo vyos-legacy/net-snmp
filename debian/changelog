@@ -1,3 +1,11 @@
+net-snmp (5.6.1.1-vyatta+5) unstable; urgency=low
+
+  * show address length in case of ARP error
+  * ip-mib: make load_ipv6 static
+  * snmpd: disable logging of debug messages
+
+ -- Stephen Hemminger <shemminger@vyatta.com>  Tue, 29 Nov 2011 09:46:27 -0800
+
 net-snmp (5.6.1.1-vyatta+4) unstable; urgency=low
 
   * Load default mibs in snmp daemon
