@@ -1,3 +1,9 @@
+net-snmp (5.6.1.1-vyatta+6) unstable; urgency=low
+
+  * snmpd: fix typo in disable logging
+
+ -- Stephen Hemminger <shemminger@vyatta.com>  Fri, 02 Dec 2011 14:21:39 -0800
+
 net-snmp (5.6.1.1-vyatta+5) unstable; urgency=low
 
   * show address length in case of ARP error
