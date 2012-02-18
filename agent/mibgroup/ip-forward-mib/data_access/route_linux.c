@@ -70,6 +70,10 @@ entry_from_rtm(struct rtmsg *r, int rtcount, u_long *index)
     DEBUGMSGTL(("access:route", "route index %u type %u proto %u\n",
                 entry->ns_rt_index, entry->rt_type, entry->rt_proto));
 
+    /* absence of destination, implies default route (all-zeros) */
+    entry->rt_pfx_len = r->rtm_dst_len;
+    entry->rt_nexthop_len = (r->rtm_family == AF_INET) ? 4 : 16;
+
     while (RTA_OK(rta, rtcount)) {
         size_t len = RTA_PAYLOAD(rta);
         char b[INET6_ADDRSTRLEN];
@@ -86,8 +90,6 @@ entry_from_rtm(struct rtmsg *r, int rtcount, u_long *index)
             entry->rt_dest_type = addresstype;
             entry->rt_dest_len = len;
             memcpy(entry->rt_dest, RTA_DATA(rta), len);
-
-            entry->rt_pfx_len = r->rtm_dst_len;
 
             DEBUGMSGTL(("access:route","    to %s/%u\n",
                         inet_ntop(r->rtm_family, entry->rt_dest,
