@@ -1,3 +1,14 @@
+net-snmp (5.6.1.1-vyatta+7) unstable; urgency=low
+
+  * ip-forward-mib: fully initialize route table structure
+  * remove unnecessary container clear operations
+  * ip-forward-mib: turn off allow duplicates
+  * optimize insertion of binary array container
+  * inetCidrRouteTable: remove allow duplicates hack
+  * Set route type correctly when parsing with netlink
+
+ -- Stephen Hemminger <shemminger@vyatta.com>  Mon, 20 Feb 2012 20:49:33 -0800
+
 net-snmp (5.6.1.1-vyatta+6) unstable; urgency=low
 
   * snmpd: fix typo in disable logging
