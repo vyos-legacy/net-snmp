@@ -27,19 +27,6 @@
 #define SNDBUF_SIZE 512
 
 static int
-_addresstype_from_family(int family)
-{
-    switch (family) {
-    case AF_INET:
-        return INETADDRESSTYPE_IPV4;
-    case AF_INET6:
-        return INETADDRESSTYPE_IPV6;
-    default:
-        return INETADDRESSTYPE_UNKNOWN;
-    }
-}
-
-static int
 _type_from_rtm(const struct rtmsg *r)
 {
     switch (r->rtm_type) {
@@ -50,7 +37,7 @@ _type_from_rtm(const struct rtmsg *r)
     case RTN_LOCAL:
         return INETCIDRROUTETYPE_LOCAL;
     default:
-        return INETCIDRROUTETYPE_OTHER;
+        return 0;
     }
 }
 
@@ -59,7 +46,6 @@ entry_from_rtm(struct rtmsg *r, int rtcount, u_long *index)
 {
     netsnmp_route_entry *entry;
     struct rtattr *rta  = RTM_RTA(r);
-    u_char addresstype = _addresstype_from_family(r->rtm_family);
 
     entry = netsnmp_access_route_entry_create();
     entry->ns_rt_index = ++(*index);
@@ -67,12 +53,26 @@ entry_from_rtm(struct rtmsg *r, int rtcount, u_long *index)
     entry->rt_proto = (r->rtm_flags & RTF_DYNAMIC)
         ? IANAIPROUTEPROTOCOL_ICMP : IANAIPROUTEPROTOCOL_LOCAL;
 
-    DEBUGMSGTL(("access:route", "route index %u type %u proto %u\n",
-                entry->ns_rt_index, entry->rt_type, entry->rt_proto));
+    DEBUGMSGTL(("access:route", "route type %u proto %u\n",
+                entry->rt_type, entry->rt_proto));
 
-    /* absence of destination, implies default route (all-zeros) */
+#ifdef NETSNMP_ENABLE_IPV6
+    if (r->rtm_family == AF_INET6) {
+        entry->rt_dest_type = INETADDRESSTYPE_IPV6;
+        entry->rt_dest_len = 16;
+
+        entry->rt_nexthop_type = INETADDRESSTYPE_IPV6;
+        entry->rt_nexthop_len = 16;
+    } else
+#endif
+    {
+        entry->rt_dest_type = INETADDRESSTYPE_IPV4;
+        entry->rt_dest_len = 4;
+
+        entry->rt_nexthop_type = INETADDRESSTYPE_IPV4;
+        entry->rt_nexthop_len = 4;
+    }
     entry->rt_pfx_len = r->rtm_dst_len;
-    entry->rt_nexthop_len = (r->rtm_family == AF_INET) ? 4 : 16;
 
     while (RTA_OK(rta, rtcount)) {
         size_t len = RTA_PAYLOAD(rta);
@@ -87,10 +87,7 @@ entry_from_rtm(struct rtmsg *r, int rtcount, u_long *index)
             break;
 
         case RTA_DST:
-            entry->rt_dest_type = addresstype;
-            entry->rt_dest_len = len;
             memcpy(entry->rt_dest, RTA_DATA(rta), len);
-
             DEBUGMSGTL(("access:route","    to %s/%u\n",
                         inet_ntop(r->rtm_family, entry->rt_dest,
                                   b, sizeof(b)),
@@ -98,10 +95,8 @@ entry_from_rtm(struct rtmsg *r, int rtcount, u_long *index)
             break;
 
         case RTA_GATEWAY:
-            entry->rt_nexthop_type = addresstype;
-            entry->rt_nexthop_len = len;
+            entry->rt_type = INETCIDRROUTETYPE_REMOTE;
             memcpy(entry->rt_nexthop, RTA_DATA(rta), len);
-
             DEBUGMSGTL(("access:route","    via %s\n",
                         inet_ntop(r->rtm_family, entry->rt_nexthop,
                                   b, sizeof(b))));
@@ -139,13 +134,13 @@ entry_from_rtm(struct rtmsg *r, int rtcount, u_long *index)
     /*
      * on linux, many routes all look alike, and would have the same
      * indexed based on dest and next hop. So we use the if index
-     * routing protocol and metric as the policy,
+     * routing protocol and scope as the policy,
      * to distinguise between them. Hopefully this is unique.
      */
     entry->rt_policy = calloc(3, sizeof(oid));
     entry->rt_policy[0] = entry->if_index;
     entry->rt_policy[1] = r->rtm_protocol;
-    entry->rt_policy[2] = entry->rt_metric1;
+    entry->rt_policy[2] = r->rtm_scope;
     entry->rt_policy_len = sizeof(oid) * 3;
 #endif
 
