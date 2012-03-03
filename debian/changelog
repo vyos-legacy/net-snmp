@@ -1,3 +1,9 @@
+net-snmp (5.6.1.1-vyatta+8) unstable; urgency=low
+
+  * new branch
+
+ -- Deepti Kulkarni <deepti@vyatta.com>  Sat, 03 Mar 2012 02:24:53 -0800
+
 net-snmp (5.6.1.1-vyatta+7) unstable; urgency=low
 
   * ip-forward-mib: fully initialize route table structure
