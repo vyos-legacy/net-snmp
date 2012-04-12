@@ -1,3 +1,10 @@
+net-snmp (5.6.1.1-vyatta+10) unstable; urgency=low
+
+  * Fix interface selection to use routing table
+  * 5.6.1.1-vyatta+9
+
+ -- James Davidson <jamesd@vyatta.com>  Thu, 12 Apr 2012 11:49:10 -0700
+
 net-snmp (5.6.1.1-vyatta+9) unstable; urgency=low
 
   * Fix interface selection to use routing table
