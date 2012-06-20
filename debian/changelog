@@ -1,3 +1,12 @@
+net-snmp (5.6.1.1-vyatta+7+oxnard4) unstable; urgency=low
+
+  [ Stephen Hemminger ]
+  * CVE-2012-2141: fix DoS via SNMP GET with non-existent entry
+
+  [ James Davidson ]
+
+ -- James Davidson <james.davidson@vyatta.com>  Tue, 19 Jun 2012 17:33:16 -0700
+
 net-snmp (5.6.1.1-vyatta+7+oxnard3) unstable; urgency=low
 
   [ James Davidson ]
