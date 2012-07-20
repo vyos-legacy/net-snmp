@@ -774,7 +774,7 @@ subagent_open_master_session(void)
                      socket ? socket : "[NIL]");
             if (!netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
                                         NETSNMP_DS_AGENT_NO_ROOT_ACCESS)) {
-                netsnmp_sess_log_error(LOG_WARNING, buf, &sess);
+                netsnmp_sess_log_error(LOG_DEBUG, buf, &sess);
             } else {
                 snmp_sess_perror(buf, &sess);
             }
