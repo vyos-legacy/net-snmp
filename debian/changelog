@@ -1,3 +1,13 @@
+net-snmp (5.6.1.1-vyatta+13) unstable; urgency=low
+
+  [ Jan Safranek ]
+  * CHANGES: snmpd: fixed the agent writing 'looks like a 64bit wrap,
+    but prev!=new' in syslog when computing ipSystemStats
+
+  [ James Davidson ]
+
+ -- James Davidson <james.davidson@vyatta.com>  Sat, 28 Jul 2012 13:58:00 -0700
+
 net-snmp (5.6.1.1-vyatta+12) unstable; urgency=low
 
   * Bugfix 8172:
