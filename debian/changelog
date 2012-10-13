@@ -1,3 +1,9 @@
+net-snmp (5.6.1.1-vyatta+13+pacifica2) unstable; urgency=low
+
+  * new branch
+
+ -- John Southworth <john.southworth@vyatta.com>  Fri, 12 Oct 2012 18:44:17 -0700
+
 net-snmp (5.6.1.1-vyatta+13+pacifica1) unstable; urgency=low
 
   * new branch
