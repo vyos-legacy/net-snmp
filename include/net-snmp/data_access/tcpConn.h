@@ -1,7 +1,7 @@
 /*
  * tcpConn data access header
  *
- * $Id: tcpConn.h 15136 2006-09-01 17:50:29Z rstory $
+ * $Id$
  */
 #ifndef NETSNMP_ACCESS_TCPCONN_H
 #define NETSNMP_ACCESS_TCPCONN_H

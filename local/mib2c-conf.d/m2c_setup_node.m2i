@@ -1,6 +1,6 @@
 #############################################################  -*- c -*-
 ## Defaults
-## $Id: m2c_setup_node.m2i 12856 2005-09-27 15:58:00Z rstory $
+## $Id$
 ########################################################################
 @if "$m2c_node_name" ne "$node"@
 ## if $node.accessible != 1, might be inaccessible index node

@@ -54,6 +54,7 @@ extern          "C" {
     NETSNMP_IMPORT
     void            init_callbacks(void);
 
+    NETSNMP_IMPORT
     int             netsnmp_register_callback(int major, int minor,
                                               SNMPCallback * new_callback,
                                               void *arg, int priority);

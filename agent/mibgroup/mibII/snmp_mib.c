@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/sysORTable.h>
@@ -6,9 +7,13 @@
 #include "snmp_mib.h"
 #include "updates.h"
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(check_vb_truthvalue)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
+
 static const oid snmp_oid[] = { 1, 3, 6, 1, 2, 1, 11 };
 
-extern int snmp_enableauthentraps;
+extern long snmp_enableauthentraps;
 extern int snmp_enableauthentrapsset;
 
 static int
@@ -17,7 +22,7 @@ snmp_enableauthentraps_store(int a, int b, void *c, void *d)
     char            line[SNMP_MAXBUF_SMALL];
 
     if (snmp_enableauthentrapsset > 0) {
-        snprintf(line, SNMP_MAXBUF_SMALL, "pauthtrapenable %d",
+        snprintf(line, SNMP_MAXBUF_SMALL, "pauthtrapenable %ld",
                  snmp_enableauthentraps);
         snmpd_store_config(line);
     }
@@ -30,11 +35,13 @@ handle_truthvalue(netsnmp_mib_handler *handler,
                   netsnmp_agent_request_info *reqinfo,
                   netsnmp_request_info *requests)
 {
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     if (reqinfo->mode == MODE_SET_RESERVE1) {
         int res = netsnmp_check_vb_truthvalue(requests->requestvb);
         if (res != SNMP_ERR_NOERROR)
             netsnmp_request_set_error(requests, res);
     }
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
     return SNMP_ERR_NOERROR;
 }
 

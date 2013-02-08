@@ -9,7 +9,9 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
+#include <sys/types.h>
 #if HAVE_IO_H
 #include <io.h>
 #endif
@@ -20,7 +22,6 @@
 #if HAVE_MALLOC_H
 #include <malloc.h>
 #endif
-#include <sys/types.h>
 #ifdef __alpha
 #ifndef _BSD
 #define _BSD
@@ -96,6 +97,24 @@
 #define setPerrorstatus(x) snmp_log_perror(x)
 #endif
 
+netsnmp_feature_child_of(util_funcs, libnetsnmpmibs)
+
+netsnmp_feature_child_of(shell_command, util_funcs)
+netsnmp_feature_child_of(get_exten_instance, util_funcs)
+netsnmp_feature_child_of(clear_cache, util_funcs)
+netsnmp_feature_child_of(find_field, util_funcs)
+netsnmp_feature_child_of(parse_miboid, util_funcs)
+netsnmp_feature_child_of(string_append_int, util_funcs)
+netsnmp_feature_child_of(internal_mib_table, util_funcs)
+
+#if defined(HAVE_LINUX_RTNETLINK_H)
+netsnmp_feature_child_of(prefix_info_all, util_funcs)
+netsnmp_feature_child_of(prefix_info, prefix_info_all)
+netsnmp_feature_child_of(update_prefix_info, prefix_info_all)
+netsnmp_feature_child_of(delete_prefix_info, prefix_info_all)
+netsnmp_feature_child_of(find_prefix_info, prefix_info_all)
+netsnmp_feature_child_of(create_prefix_info, prefix_info_all)
+#endif /* HAVE_LINUX_RTNETLINK_H */
 
 #ifdef NETSNMP_EXCACHETIME
 static long     cachetime;
@@ -107,33 +126,10 @@ extern int      numprocs, numextens;
 const char *
 make_tempfile(void)
 {
-    static char     name[32];
-    int             fd = -1;
-
-    strcpy(name, get_temp_file_pattern());
-#ifdef HAVE_MKSTEMP
-    fd = mkstemp(name);
-#else
-    if (mktemp(name)) {
-# ifndef WIN32        
-        fd = open(name, O_CREAT | O_EXCL | O_WRONLY, S_IRUSR | S_IWUSR);
-# else
-        /*
-          Win32 needs _S_IREAD | _S_IWRITE to set permissions on file after closing
-        */
-        fd = _open(name, _O_CREAT | _O_EXCL | _O_WRONLY, _S_IREAD | _S_IWRITE);
-# endif
-    }
-#endif
-    if (fd >= 0) {
-        close(fd);
-        DEBUGMSGTL(("make_tempfile", "temp file created: %s\n", name));
-        return name;
-    }
-    snmp_log(LOG_ERR,"make_tempfile: error creating file %s\n", name);
-    return NULL;
+    return netsnmp_mktemp();
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_SHELL_COMMAND
 int
 shell_command(struct extensible *ex)
 {
@@ -167,6 +163,7 @@ shell_command(struct extensible *ex)
 #endif
     return (ex->result);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_SHELL_COMMAND */
 
 #define MAXOUTPUT 300
 
@@ -193,6 +190,7 @@ exec_command(struct extensible *ex)
     return (ex->result);
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_GET_EXTEN_INSTANCE
 struct extensible *
 get_exten_instance(struct extensible *exten, size_t inst)
 {
@@ -204,6 +202,7 @@ get_exten_instance(struct extensible *exten, size_t inst)
         exten = exten->next;
     return (exten);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_GET_EXTEN_INSTANCE */
 
 void
 wait_on_exec(struct extensible *ex)
@@ -212,7 +211,7 @@ wait_on_exec(struct extensible *ex)
   int rc;
   if (ex->tid != 0 && ex->pid != 0) {
     HANDLE hThread = ex->tid;
-    HANDLE hProcess = (HANDLE) ex->pid;
+    HANDLE hProcess = ex->pid;
     rc = WaitForSingleObject(hProcess, NETSNMP_TIMEOUT_WAITFORSINGLEOBJECT);
     DEBUGMSGT(("exec:wait_on_exec","WaitForSingleObject rc=(%d)\n",rc ));
     rc = CloseHandle( hThread );
@@ -273,7 +272,9 @@ get_exec_output(struct extensible *ex)
         if ((cfd = open(cachefile, O_WRONLY | O_TRUNC | O_CREAT, 0600)) < 0) {
                 snmp_log(LOG_ERR,"can not create cache file\n");
                 setPerrorstatus(cachefile);
+#ifdef NETSNMP_EXCACHETIME
                 cachetime = 0;
+#endif
                 return -1;
         }
         if (cachebytes > 0)
@@ -367,7 +368,7 @@ get_exec_output(struct extensible *ex)
     }
     
     /* Set global child process handle */
-    ex->pid = (int)pi.hProcess;
+    ex->pid = pi.hProcess;
     ex->tid = pi.hThread;
 
     /* Close pipe handles to make sure that no handles to the write end of the
@@ -393,7 +394,7 @@ get_exec_output(struct extensible *ex)
     return -1;
 }
 int
-get_exec_pipes(char *cmd, int *fdIn, int *fdOut, int *pid)
+get_exec_pipes(char *cmd, int *fdIn, int *fdOut, netsnmp_pid_t *pid)
 {
 /* 	Alexander Prömel, alexander@proemel.de 08/24/2006
 	The following code, is tested on picotux rev. 1.01.
@@ -626,7 +627,7 @@ get_exec_pipes(char *cmd, int *fdIn, int *fdOut, int *pid)
     DEBUGMSGTL(("util_funcs","child dwProcessId (task manager): %d\n",(int)pi.dwProcessId));
 
     /* Set global child process handle */
-    *pid = (int)pi.hProcess;
+    *pid = pi.hProcess;
 
     /* Cleanup */
     if (!CloseHandle(pi.hThread))
@@ -655,6 +656,7 @@ get_exec_pipes(char *cmd, int *fdIn, int *fdOut, int *pid)
     return 0;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_CLEAR_CACHE
 int
 clear_cache(int action,
             u_char * var_val,
@@ -677,6 +679,7 @@ clear_cache(int action,
     }
     return SNMP_ERR_NOERROR;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_CLEAR_CACHE */
 
 void
 print_mib_oid(oid name[], size_t len)
@@ -693,14 +696,12 @@ print_mib_oid(oid name[], size_t len)
 }
 
 void
-sprint_mib_oid(char *buf, oid name[], size_t len)
+sprint_mib_oid(char *buf, const oid *name, size_t len)
 {
     int             i;
-    for (i = 0; i < (int) len; i++) {
-        sprintf(buf, ".%d", (int) name[i]);
-        while (*buf != 0)
-            buf++;
-    }
+
+    for (i = 0; i < (int) len; i++)
+        buf += sprintf(buf, ".%" NETSNMP_PRIo "u", name[i]);
 }
 
 /*
@@ -719,6 +720,7 @@ checkmib(struct variable *vp, oid * name, size_t * length,
                                  write_method, max));
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_FIND_FIELD
 char           *
 find_field(char *ptr, int field)
 {
@@ -759,7 +761,9 @@ find_field(char *ptr, int field)
     }
     return (NULL);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_FIND_FIELD */
 
+#ifndef NETSNMP_FEATURE_REMOVE_PARSE_MIBOID
 int
 parse_miboid(const char *buf, oid * oidout)
 {
@@ -770,7 +774,10 @@ parse_miboid(const char *buf, oid * oidout)
     if (*buf == '.')
         buf++;
     for (i = 0; isdigit((unsigned char)(*buf)); i++) {
-        oidout[i] = atoi(buf);
+        /* Subidentifiers are unsigned values, up to 2^32-1
+         * so we need to use 'strtoul' rather than 'atoi'
+         */
+        oidout[i] = strtoul(buf, NULL, 10) & 0xffffffff;
         while (isdigit((unsigned char)(*buf++)));
         if (*buf == '.')
             buf++;
@@ -780,7 +787,9 @@ parse_miboid(const char *buf, oid * oidout)
      */
     return i;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_PARSE_MIBOID */
 
+#ifndef NETSNMP_FEATURE_REMOVE_STRING_APPEND_INT
 void
 string_append_int(char *s, int val)
 {
@@ -795,13 +804,16 @@ string_append_int(char *s, int val)
     strcpy(s, textVal);
     return;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_STRING_APPEND_INT */
+
+#ifndef NETSNMP_FEATURE_REMOVE_INTERNAL_MIB_TABLE
 
 struct internal_mib_table {
     int             max_size;   /* Size of the current data table */
     int             next_index; /* Index of the next free entry */
     int             current_index;      /* Index of the 'current' entry */
     int             cache_timeout;
-    marker_t        cache_marker;
+    marker_t        cache_markerM;
     RELOAD         *reload;     /* Routine to read in the data */
     COMPARE        *compare;    /* Routine to compare two entries */
     int             data_size;  /* Size of an individual entry */
@@ -822,7 +834,7 @@ Initialise_Table(int size, int timeout, RELOAD *reload, COMPARE *compare)
     t->next_index = 1;          /* Don't use index 0 */
     t->current_index = 1;
     t->cache_timeout = timeout;
-    t->cache_marker = NULL;
+    t->cache_markerM = NULL;
     t->reload = reload;
     t->compare = compare;
     t->data_size = size;
@@ -844,8 +856,9 @@ check_and_reload_table(struct internal_mib_table *table)
      * If the saved data is fairly recent,
      *    we don't need to reload it
      */
-    if (table->cache_marker &&
-        !(atime_ready(table->cache_marker, table->cache_timeout * 1000)))
+    if (table->cache_markerM &&
+        !(netsnmp_ready_monotonic(table->cache_markerM,
+                                  table->cache_timeout * 1000)))
         return 1;
 
 
@@ -855,15 +868,12 @@ check_and_reload_table(struct internal_mib_table *table)
      * N.B:  Update the cache marker *before* calling
      *   this routine, to avoid problems with recursion
      */
-    if (!table->cache_marker)
-        table->cache_marker = atime_newMarker();
-    else
-        atime_setMarker(table->cache_marker);
+    netsnmp_set_monotonic_marker(&table->cache_markerM);
 
     table->next_index = 1;
     if (table->reload((mib_table_t) table) < 0) {
-        free(table->cache_marker);
-        table->cache_marker = NULL;
+        free(table->cache_markerM);
+        table->cache_markerM = NULL;
         return 0;
     }
     table->current_index = 1;
@@ -973,8 +983,11 @@ Retrieve_Table_Data(mib_table_t t, int *max_idx)
     *max_idx = table->next_index - 1;
     return table->data;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_INTERNAL_MIB_TABLE */
 
 #if defined(HAVE_LINUX_RTNETLINK_H)
+
+#ifndef NETSNMP_FEATURE_REMOVE_CREATE_PREFIX_INFO
 prefix_cbx *net_snmp_create_prefix_info(unsigned long OnLinkFlag,
                                         unsigned long AutonomousFlag,
                                         char *in6ptr)
@@ -995,7 +1008,9 @@ prefix_cbx *net_snmp_create_prefix_info(unsigned long OnLinkFlag,
 
    return node;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_CREATE_PREFIX_INFO */
 
+#ifndef NETSNMP_FEATURE_REMOVE_FIND_PREFIX_INFO
 int net_snmp_find_prefix_info(prefix_cbx **head,
                               char *address,
                               prefix_cbx *node_to_find)
@@ -1016,7 +1031,9 @@ int net_snmp_find_prefix_info(prefix_cbx **head,
     } else
        return 0;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_FIND_PREFIX_INFO */
 
+#ifndef NETSNMP_FEATURE_REMOVE_UPDATE_PREFIX_INFO
 int net_snmp_update_prefix_info(prefix_cbx **head,
                                 prefix_cbx *node_to_update)
 {
@@ -1031,6 +1048,7 @@ int net_snmp_update_prefix_info(prefix_cbx **head,
     } else
        return 0;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_UPDATE_PREFIX_INFO */
 
 int net_snmp_search_update_prefix_info(prefix_cbx **head,
                                        prefix_cbx *node_to_use,
@@ -1079,6 +1097,7 @@ int net_snmp_search_update_prefix_info(prefix_cbx **head,
     }
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_DELETE_PREFIX_INFO
 int net_snmp_delete_prefix_info(prefix_cbx **head,
                                 char *address)
 {
@@ -1104,5 +1123,7 @@ int net_snmp_delete_prefix_info(prefix_cbx **head,
     }
     return 0;
 }
-#endif
+#endif /* NETSNMP_FEATURE_REMOVE_DELETE_PREFIX_INFO */
 
+#endif /* HAVE_LINUX_RTNETLINK_H */
+         

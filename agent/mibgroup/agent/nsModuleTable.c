@@ -4,9 +4,12 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include "nsModuleTable.h"
+
+netsnmp_feature_require(table_dataset)
 
 void
 nsModuleTable_free(void *context, netsnmp_iterator_info *dont_care)
@@ -72,10 +75,10 @@ initialize_table_nsModuleTable(void)
      */
     DEBUGMSGTL(("initialize_table_nsModuleTable",
                 "Registering table nsModuleTable as a table iterator\n"));
-    netsnmp_register_table_iterator(my_handler, iinfo);
+    netsnmp_register_table_iterator2(my_handler, iinfo);
 }
 
-/** Initialzies the nsModuleTable module */
+/** Initializes the nsModuleTable module */
 void
 init_nsModuleTable(void)
 {

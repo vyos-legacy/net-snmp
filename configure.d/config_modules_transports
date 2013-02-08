@@ -69,14 +69,15 @@ while test "x$new_transport_list" != "x"; do
       # build a pseudo include header that includes current config and
       # system symbols:
       rm -f conftest.$ac_ext module_tmp_header.h
-      AC_LANG_CONFTEST(AC_LANG_SOURCE([[
+      AC_LANG_CONFTEST([AC_LANG_SOURCE([[
 #include NETSNMP_SYSTEM_INCLUDE_FILE
+#undef NETSNMP_MINIMAL_CODE
 #define NET_SNMP_CONFIG_H
 #undef config_require
 #define config_require(foo) config_checkit_require(foo)
 #undef config_error
 #define config_error(foo) config_checkit_error(foo)
-#include "$rel_transport_hdr"]]))
+#include "$rel_transport_hdr"]])])
       mv conftest.$ac_ext module_tmp_header.h
 
       #
@@ -117,6 +118,7 @@ while test "x$new_transport_list" != "x"; do
 done # while new transports exist
 transport_obj_list=`echo " $transport_src_list " | $SED 's/\.c/\.o/g'`
 transport_lobj_list=`echo " $transport_src_list " | $SED 's/\.c/\.lo/g'`
+transport_ftobj_list=`echo " $transport_src_list " | $SED 's/\.c/\.ft/g'`
 for i in $tr_init_list ; do
    echo "$i();" >> $ctor_header
 done
@@ -126,6 +128,7 @@ if test "x$PARTIALTARGETOS" = "xmingw32" -o "x$PARTIALTARGETOS" = "xmingw32msvc"
   if echo "$transport_def_list" | $GREP "IPV6" >/dev/null; then
     transport_obj_list="$transport_obj_list inet_ntop.o inet_pton.o"
     transport_lobj_list="$transport_lobj_list inet_ntop.lo inet_pton.lo"
+    transport_ftobj_list="$transport_ftobj_list inet_ntop.ft inet_pton.ft"
   fi
 fi
 

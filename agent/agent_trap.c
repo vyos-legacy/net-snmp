@@ -18,6 +18,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #if HAVE_UNISTD_H
 #include <unistd.h>
@@ -64,6 +65,14 @@
 #include "agentx/protocol.h"
 #endif
 
+netsnmp_feature_child_of(agent_trap_all, libnetsnmpagent)
+
+netsnmp_feature_child_of(trap_vars_with_context, agent_trap_all)
+netsnmp_feature_child_of(remove_trap_session, agent_trap_all)
+
+netsnmp_feature_child_of(send_v3trap,netsnmp_unused)
+netsnmp_feature_child_of(send_trap_pdu,netsnmp_unused)
+
 struct trap_sink {
     netsnmp_session *sesp;
     struct trap_sink *next;
@@ -103,7 +112,7 @@ char           *snmp_trapcommunity = NULL;
 #define SNMP_AUTHENTICATED_TRAPS_ENABLED	1
 #define SNMP_AUTHENTICATED_TRAPS_DISABLED	2
 
-int             snmp_enableauthentraps = SNMP_AUTHENTICATED_TRAPS_DISABLED;
+long            snmp_enableauthentraps = SNMP_AUTHENTICATED_TRAPS_DISABLED;
 int             snmp_enableauthentrapsset = 0;
 
 /*
@@ -175,6 +184,7 @@ add_trap_session(netsnmp_session * ss, int pdutype, int confirm,
     return 1;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_REMOVE_TRAP_SESSION
 int
 remove_trap_session(netsnmp_session * ss)
 {
@@ -207,6 +217,7 @@ remove_trap_session(netsnmp_session * ss)
     }
     return 0;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_REMOVE_TRAP_SESSION */
 
 #if !defined(NETSNMP_DISABLE_SNMPV1) || !defined(NETSNMP_DISABLE_SNMPV2C)
 static int
@@ -454,7 +465,6 @@ netsnmp_pdu*
 convert_v1pdu_to_v2( netsnmp_pdu* template_v1pdu )
 {
     netsnmp_pdu           *template_v2pdu;
-    netsnmp_variable_list *first_vb;
     netsnmp_variable_list *var;
     oid                    enterprise[MAX_OID_LEN];
     size_t                 enterprise_len;
@@ -471,7 +481,6 @@ convert_v1pdu_to_v2( netsnmp_pdu* template_v1pdu )
         return NULL;
     }
     template_v2pdu->command = SNMP_MSG_TRAP2;
-    first_vb = template_v2pdu->variables;
 
     /*
      * Insert an snmpTrapOID varbind before the original v1 varbind list
@@ -792,6 +801,7 @@ netsnmp_send_traps(int trap, int specific,
 
     }
 
+    if (template_v2pdu) {
 	/* A context name was provided, so copy it and its length to the v2 pdu
 	 * template. */
 	if (context != NULL)
@@ -799,6 +809,7 @@ netsnmp_send_traps(int trap, int specific,
 		template_v2pdu->contextName    = strdup(context);
 		template_v2pdu->contextNameLen = strlen(context);
 	}
+    }
 
     /*
      *  Now loop through the list of trap sinks
@@ -893,8 +904,6 @@ send_trap_to_sess(netsnmp_session * sess, netsnmp_pdu *template_pdu)
 {
     netsnmp_pdu    *pdu;
     int            result;
-    int            len;
-
 
     if (!sess || !template_pdu)
         return;
@@ -928,7 +937,7 @@ send_trap_to_sess(netsnmp_session * sess, netsnmp_pdu *template_pdu)
                 (sess->securityEngineIDLen == 0)) {
             u_char          tmp[SPRINT_MAX_LEN];
 
-            len = snmpv3_get_engineID(tmp, sizeof(tmp));
+            int len = snmpv3_get_engineID(tmp, sizeof(tmp));
             memdup(&pdu->securityEngineID, tmp, len);
             pdu->securityEngineIDLen = len;
         }
@@ -956,6 +965,7 @@ send_trap_vars(int trap, int specific, netsnmp_variable_list * vars)
                                   OID_LENGTH(trap_version_id), vars);
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_TRAP_VARS_WITH_CONTEXT
 /* Send a trap under a context */
 void send_trap_vars_with_context(int trap, int specific, 
               netsnmp_variable_list *vars, const char *context)
@@ -970,6 +980,7 @@ void send_trap_vars_with_context(int trap, int specific,
 								  context, 0);
     	
 }
+#endif /* NETSNMP_FEATURE_REMOVE_TRAP_VARS_WITH_CONTEXT */
 
 /**
  * Sends an SNMPv1 trap (or the SNMPv2 equivalent) to the list of  
@@ -1041,18 +1052,22 @@ send_v2trap(netsnmp_variable_list * vars)
  *
  * @see send_v2trap
  */
+#ifndef NETSNMP_FEATURE_REMOVE_SEND_V3TRAP
 void send_v3trap(netsnmp_variable_list *vars, const char *context)
 {
     netsnmp_send_traps(-1, -1, 
                        trap_version_id, OID_LENGTH(trap_version_id),
                        vars, context, 0);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_SEND_V3TRAP */
 
+#ifndef NETSNMP_FEATURE_REMOVE_SEND_TRAP_PDU
 void
 send_trap_pdu(netsnmp_pdu *pdu)
 {
     send_trap_vars(-1, -1, pdu->variables);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_SEND_TRAP_PDU */
 
 
 
@@ -1200,7 +1215,7 @@ void
 snmpd_parse_config_trapsess(const char *word, char *cptr)
 {
     char           *argv[MAX_ARGS], *cp = cptr;
-    int             argn, arg, rc;
+    int             argn, rc;
     netsnmp_session session, *ss;
     netsnmp_transport *transport;
     size_t          len;
@@ -1221,11 +1236,15 @@ snmpd_parse_config_trapsess(const char *word, char *cptr)
         argv[argn] = strdup(tmp);
     }
 
-    arg = netsnmp_parse_args(argn, argv, &session, "C:", trapOptProc,
-                             NETSNMP_PARSE_ARGS_NOLOGGING |
-                             NETSNMP_PARSE_ARGS_NOZERO);
+    netsnmp_parse_args(argn, argv, &session, "C:", trapOptProc,
+                       NETSNMP_PARSE_ARGS_NOLOGGING |
+                       NETSNMP_PARSE_ARGS_NOZERO);
 
     transport = netsnmp_transport_open_client("snmptrap", session.peername);
+    if (transport == NULL) {
+        config_perror("snmpd: failed to parse this line.");
+        return;
+    }
     if ((rc = netsnmp_sess_config_and_open_transport(&session, transport))
         != SNMPERR_SUCCESS) {
         session.s_snmp_errno = rc;

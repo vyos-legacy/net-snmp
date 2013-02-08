@@ -8,6 +8,7 @@
  * This should always be included first before anything else 
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #if HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -17,6 +18,9 @@
 #include <strings.h>
 #endif
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(header_complex_find_entry)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /*
  * minimal include directives 
@@ -48,6 +52,7 @@ oid             mteObjectsTable_variables_oid[] =
  */
 
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 struct variable2 mteObjectsTable_variables[] = {
     /*
      * magic number        , variable type , ro/rw , callback fn  , L, oidsuffix 
@@ -63,6 +68,24 @@ struct variable2 mteObjectsTable_variables[] = {
      var_mteObjectsTable, 2, {1, 5}},
 
 };
+#else /* !NETSNMP_NO_WRITE_SUPPORT */
+struct variable2 mteObjectsTable_variables[] = {
+    /*
+     * magic number        , variable type , ro/rw , callback fn  , L, oidsuffix 
+     */
+#define   MTEOBJECTSID          5
+    {MTEOBJECTSID, ASN_OBJECT_ID, NETSNMP_OLDAPI_RONLY,
+     var_mteObjectsTable, 2, {1, 3}},
+#define   MTEOBJECTSIDWILDCARD  6
+    {MTEOBJECTSIDWILDCARD, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_mteObjectsTable, 2, {1, 4}},
+#define   MTEOBJECTSENTRYSTATUS  7
+    {MTEOBJECTSENTRYSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_mteObjectsTable, 2, {1, 5}},
+
+};
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
+
 /*
  * (L = length of the oidsuffix) 
  */
@@ -302,6 +325,10 @@ var_mteObjectsTable(struct variable *vp,
 
     DEBUGMSGTL(("mteObjectsTable",
                 "var_mteObjectsTable: Entering...  \n"));
+
+	/* set default value */
+	*write_method = NULL;
+
     /*
      * this assumes you have registered all your data properly
      */
@@ -320,17 +347,23 @@ var_mteObjectsTable(struct variable *vp,
 
 
     case MTEOBJECTSID:
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         *write_method = write_mteObjectsID;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
         *var_len = (StorageTmp->mteObjectsIDLen) * sizeof(oid);
         return (u_char *) StorageTmp->mteObjectsID;
 
     case MTEOBJECTSIDWILDCARD:
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         *write_method = write_mteObjectsIDWildcard;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
         *var_len = sizeof(StorageTmp->mteObjectsIDWildcard);
         return (u_char *) & StorageTmp->mteObjectsIDWildcard;
 
     case MTEOBJECTSENTRYSTATUS:
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         *write_method = write_mteObjectsEntryStatus;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
         *var_len = sizeof(StorageTmp->mteObjectsEntryStatus);
         return (u_char *) & StorageTmp->mteObjectsEntryStatus;
 
@@ -343,6 +376,7 @@ var_mteObjectsTable(struct variable *vp,
 
 
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 
 int
 write_mteObjectsID(int action,
@@ -788,6 +822,9 @@ write_mteObjectsEntryStatus(int action,
     }
     return SNMP_ERR_NOERROR;
 }
+
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
+
 
 void
 mte_add_objects(netsnmp_variable_list * vars,

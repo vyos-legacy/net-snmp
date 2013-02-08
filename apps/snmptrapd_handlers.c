@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #if HAVE_STDLIB_H
 #include <stdlib.h>
@@ -36,6 +37,8 @@
 #include "snmptrapd_auth.h"
 #include "snmptrapd_log.h"
 #include "notification-log-mib/notification_log.h"
+
+netsnmp_feature_child_of(add_default_traphandler, snmptrapd)
 
 char *syslog_format1 = NULL;
 char *syslog_format2 = NULL;
@@ -97,8 +100,12 @@ snmptrapd_parse_traphandle(const char *token, char *line)
         format = strdup( buf );
         cptr = copy_nword(cptr, buf, sizeof(buf));
     }
-    DEBUGMSGTL(("read_config:traphandle", "registering handler for: "));
+    if ( !cptr ) {
+        netsnmp_config_error("Missing traphandle command (%s)", buf);
+        return;
+    }
 
+    DEBUGMSGTL(("read_config:traphandle", "registering handler for: "));
     if (!strcmp(buf, "default")) {
         DEBUGMSG(("read_config:traphandle", "default"));
         traph = netsnmp_add_global_traphandler(NETSNMPTRAPD_DEFAULT_HANDLER,
@@ -396,6 +403,7 @@ netsnmp_add_global_traphandler(int list, Netsnmp_Trap_Handler *handler)
     return traph;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_ADD_DEFAULT_TRAPHANDLER
 /*
  * Register a new "default" traphandler, to be applied to all
  * traps with no specific trap handlers of their own.
@@ -405,6 +413,7 @@ netsnmp_add_default_traphandler(Netsnmp_Trap_Handler *handler) {
     return netsnmp_add_global_traphandler(NETSNMPTRAPD_DEFAULT_HANDLER,
                                           handler);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_ADD_DEFAULT_TRAPHANDLER */
 
 
 /*
@@ -798,8 +807,10 @@ int   command_handler( netsnmp_pdu           *pdu,
 	    v2_pdu = convert_v1pdu_to_v2(pdu);
 	else
 	    v2_pdu = pdu;
-        oldquick = snmp_get_quick_print();
-        snmp_set_quick_print(1);
+        oldquick = netsnmp_ds_get_boolean(NETSNMP_DS_LIBRARY_ID, 
+                                          NETSNMP_DS_LIB_QUICK_PRINT);
+        netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, 
+                               NETSNMP_DS_LIB_QUICK_PRINT, 1);
 
         /*
 	 * Format the trap and pass this string to the external command
@@ -838,7 +849,8 @@ int   command_handler( netsnmp_pdu           *pdu,
          *  and pass this formatted string to the command specified
          */
         run_shell_command(handler->token, (char*)rbuf, NULL, NULL);   /* Not interested in output */
-        snmp_set_quick_print(oldquick);
+        netsnmp_ds_set_boolean(NETSNMP_DS_LIBRARY_ID, 
+                               NETSNMP_DS_LIB_QUICK_PRINT, oldquick);
         if (pdu->command == SNMP_MSG_TRAP)
             snmp_free_pdu(v2_pdu);
         free(rbuf);

@@ -19,6 +19,7 @@
  ******************************************************************/
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #if HAVE_STDLIB_H
 #include <stdlib.h>
@@ -49,6 +50,8 @@
 #include "agutil_api.h"
 #include "row_api.h"
 
+netsnmp_feature_require(snprint_objid)
+
 /*
  * File scope definitions section 
  */
@@ -66,6 +69,7 @@
 #define EVENTOWNER            8
 #define EVENTSTATUS           9
 
+#define Leaf_event_index        1
 #define Leaf_event_description  2
 #define MIN_event_description   0
 #define MAX_event_description   127
@@ -125,6 +129,7 @@ typedef struct {
 
 static TABLE_DEFINTION_T EventCtrlTable;
 static TABLE_DEFINTION_T *table_ptr = &EventCtrlTable;
+static unsigned char zero_octet_string[1];
 
 /*
  * Control Table RowApi Callbacks 
@@ -259,7 +264,6 @@ write_eventControl(int action, u_char * var_val, u_char var_val_type,
     static int      prev_action = COMMIT;
     RMON_ENTRY_T   *hdr;
     CRTL_ENTRY_T   *cloned_body;
-    CRTL_ENTRY_T   *body;
 
     switch (action) {
     case RESERVE1:
@@ -280,8 +284,9 @@ write_eventControl(int action, u_char * var_val, u_char var_val_type,
         leaf_id = (int) name[eventEntryFirstIndexBegin - 1];
         hdr = ROWAPI_find(table_ptr, long_temp);        /* it MUST be OK */
         cloned_body = (CRTL_ENTRY_T *) hdr->tmp;
-        body = (CRTL_ENTRY_T *) hdr->body;
         switch (leaf_id) {
+        case Leaf_event_index:
+            return SNMP_ERR_NOTWRITABLE;
         case Leaf_event_description:
             char_temp = AGMALLOC(1 + MAX_event_description);
             if (!char_temp)
@@ -316,6 +321,8 @@ write_eventControl(int action, u_char * var_val, u_char var_val_type,
             }
             cloned_body->event_type = long_temp;
             break;
+        case Leaf_event_last_time_sent:
+            return SNMP_ERR_NOTWRITABLE;
         case Leaf_event_community:
             char_temp = AGMALLOC(1 + MAX_event_community);
             if (!char_temp)
@@ -403,7 +410,7 @@ var_eventTable(struct variable *vp,
             return (unsigned char *) theEntry.event_description;
         } else {
             *var_len = 0;
-            return (unsigned char *) "";
+            return zero_octet_string;
         }
     case EVENTTYPE:
         long_ret = theEntry.event_type;
@@ -414,7 +421,7 @@ var_eventTable(struct variable *vp,
             return (unsigned char *) theEntry.event_community;
         } else {
             *var_len = 0;
-            return (unsigned char *) "";
+            return zero_octet_string;
         }
     case EVENTLASTTIMESENT:
         long_ret = theEntry.event_last_time_sent;
@@ -425,7 +432,7 @@ var_eventTable(struct variable *vp,
             return (unsigned char *) hdr->owner;
         } else {
             *var_len = 0;
-            return (unsigned char *) "";
+            return zero_octet_string;
         }
     case EVENTSTATUS:
         long_ret = hdr->status;
@@ -454,7 +461,6 @@ var_logTable(struct variable *vp,
     static long     long_ret;
     static DATA_ENTRY_T theEntry;
     RMON_ENTRY_T   *hdr;
-    CRTL_ENTRY_T   *ctrl;
 
     *write_method = NULL;
     hdr = ROWDATAAPI_header_DataEntry(vp, name, length, exact, var_len,
@@ -463,8 +469,6 @@ var_logTable(struct variable *vp,
                                       sizeof(DATA_ENTRY_T), &theEntry);
     if (!hdr)
         return NULL;
-
-    ctrl = (CRTL_ENTRY_T *) hdr->body;
 
     *var_len = sizeof(long);    /* default */
 
@@ -484,7 +488,7 @@ var_logTable(struct variable *vp,
             return (unsigned char *) theEntry.log_description;
         } else {
             *var_len = 0;
-            return (unsigned char *) "";
+            return zero_octet_string;
         }
     default:
         ERROR_MSG("");
@@ -551,26 +555,6 @@ create_explanaition(CRTL_ENTRY_T * evptr, u_char is_rising,
     return descr;
 }
 
-static netsnmp_variable_list *
-oa_bind_var(netsnmp_variable_list * prev,
-            void *value, int type, size_t sz_val, oid * oid, size_t sz_oid)
-{
-    netsnmp_variable_list *var;
-
-    var = (netsnmp_variable_list *) malloc(sizeof(netsnmp_variable_list));
-    if (!var) {
-        ag_trace("FATAL: cannot malloc in oa_bind_var\n");
-        exit(-1);               /* Sorry :( */
-    }
-    memset(var, 0, sizeof(netsnmp_variable_list));
-    var->next_variable = prev;
-    snmp_set_var_objid(var, oid, sz_oid);
-    snmp_set_var_value(var, (u_char *) value, sz_val);
-    var->type = type;
-
-    return var;
-}
-
 static void
 event_send_trap(CRTL_ENTRY_T * evptr, u_char is_rising,
                 u_int alarm_index,
@@ -578,60 +562,65 @@ event_send_trap(CRTL_ENTRY_T * evptr, u_char is_rising,
                 oid * alarmed_var, size_t alarmed_var_length,
                 u_int sample_type)
 {
+    static oid      objid_snmptrap[] = { 1, 3, 6, 1, 6, 3, 1, 1, 4, 1, 0 };
     static oid      rmon1_trap_oid[] = { 1, 3, 6, 1, 2, 1, 16, 0, 0 };
     static oid      alarm_index_oid[] =
-        { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 1 };
+        { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 1, 0 };
     static oid      alarmed_var_oid[] =
-        { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 3 };
+        { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 3, 0 };
     static oid      sample_type_oid[] =
-        { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 4 };
-    static oid      value_oid[] = { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 5 };
-    static oid      threshold_oid[] = { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 7 };     /* rising case */
-    netsnmp_variable_list *top = NULL;
-    register int    iii;
+        { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 4, 0 };
+    static oid      value_oid[] = { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 5, 0 };
+    static oid      threshold_oid[] = { 1, 3, 6, 1, 2, 1, 16, 3, 1, 1, 7, 0 };     /* rising case */
+    netsnmp_variable_list *var_list = NULL;
 
     /*
      * set the last 'oid' : risingAlarm or fallingAlarm 
      */
     if (is_rising) {
-        iii = OID_LENGTH(rmon1_trap_oid);
-        rmon1_trap_oid[iii - 1] = 1;
-        iii = OID_LENGTH(threshold_oid);
-        threshold_oid[iii - 1] = 7;
+        rmon1_trap_oid[8] = 1;
+        threshold_oid[10] = 7;
     } else {
-        iii = OID_LENGTH(rmon1_trap_oid);
-        rmon1_trap_oid[iii - 1] = 0;
-        iii = OID_LENGTH(threshold_oid);
-        threshold_oid[iii - 1] = 8;
+        rmon1_trap_oid[8] = 2;
+        threshold_oid[10] = 8;
     }
+    alarm_index_oid[11] = alarm_index;
+    alarmed_var_oid[11] = alarm_index;
+    sample_type_oid[11] = alarm_index;
+    value_oid[11]       = alarm_index;
+    threshold_oid[11]   = alarm_index;
 
     /*
      * build the var list 
      */
-    top = oa_bind_var(top, &alarm_index, ASN_INTEGER, sizeof(u_int),
-                      alarm_index_oid, OID_LENGTH(alarm_index_oid));
+    snmp_varlist_add_variable(&var_list, objid_snmptrap,
+                              OID_LENGTH(objid_snmptrap),
+                              ASN_OBJECT_ID, (u_char *) rmon1_trap_oid,
+                              sizeof(rmon1_trap_oid));
+    snmp_varlist_add_variable(&var_list, alarm_index_oid,
+                              OID_LENGTH(alarm_index_oid),
+                              ASN_INTEGER, (u_char *) &alarm_index,
+                              sizeof(u_int));
+    snmp_varlist_add_variable(&var_list, alarmed_var_oid,
+                              OID_LENGTH(alarmed_var_oid),
+                              ASN_OBJECT_ID, (u_char *) alarmed_var,
+                              alarmed_var_length * sizeof(oid));
+    snmp_varlist_add_variable(&var_list, sample_type_oid,
+                              OID_LENGTH(sample_type_oid),
+                              ASN_INTEGER, (u_char *) &sample_type,
+                              sizeof(u_int));
+    snmp_varlist_add_variable(&var_list, value_oid,
+                              OID_LENGTH(value_oid),
+                              ASN_INTEGER, (u_char *) &value,
+                              sizeof(u_int));
+    snmp_varlist_add_variable(&var_list, threshold_oid,
+                              OID_LENGTH(threshold_oid),
+                              ASN_INTEGER, (u_char *) &the_threshold,
+                              sizeof(u_int));
 
-    top =
-        oa_bind_var(top, alarmed_var, ASN_OBJECT_ID,
-                    sizeof(oid) * alarmed_var_length, alarmed_var_oid,
-                    OID_LENGTH(alarmed_var_oid));
-
-    top = oa_bind_var(top, &sample_type, ASN_INTEGER, sizeof(u_int),
-                      sample_type_oid, OID_LENGTH(sample_type_oid));
-
-    top = oa_bind_var(top, &value, ASN_INTEGER, sizeof(u_int),
-                      value_oid, OID_LENGTH(value_oid));
-
-    top = oa_bind_var(top, &the_threshold, ASN_INTEGER, sizeof(u_int),
-                      threshold_oid, OID_LENGTH(threshold_oid));
-
-
-    send_enterprise_trap_vars(SNMP_TRAP_ENTERPRISESPECIFIC, 0,
-                              rmon1_trap_oid,
-                              OID_LENGTH(rmon1_trap_oid), top);
+    send_v2trap(var_list);
     ag_trace("rmon trap has been sent");
-    snmp_free_varbind(top);
-
+    snmp_free_varbind(var_list);
 }
 
 
@@ -670,7 +659,7 @@ event_api_send_alarm(u_char is_rising,
     CRTL_ENTRY_T   *evptr;
 
     if (!event_index)
-        return SNMP_ERR_NOSUCHNAME;
+        return SNMP_ERR_NOERROR;
 
 #if 0
     ag_trace("event_api_send_alarm(%d,%d,%d,'%s')",

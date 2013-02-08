@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <net-snmp/types.h>
 #include <net-snmp/library/snmp_transport.h>
@@ -17,6 +18,9 @@
 
 #include <ctype.h>
 
+#if HAVE_UNISTD_H
+#include <unistd.h>
+#endif
 #if HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
@@ -67,6 +71,11 @@
 #include <net-snmp/library/snmp_service.h>
 #include <net-snmp/library/read_config.h>
 
+netsnmp_feature_child_of(transport_all, libnetsnmp)
+
+netsnmp_feature_child_of(tdomain_support, transport_all)
+netsnmp_feature_child_of(tdomain_transport_oid, transport_all)
+netsnmp_feature_child_of(sockaddr_size, transport_all)
 
 /*
  * Our list of supported transport domains.  
@@ -96,9 +105,6 @@ size_t          netsnmpIPXDomain_len = OID_LENGTH(netsnmpIPXDomain);
 static void     netsnmp_tdomain_dump(void);
 
 
-/*
- * Make a deep copy of an netsnmp_transport.  
- */
 
 void
 init_snmp_transport(void)
@@ -109,16 +115,22 @@ init_snmp_transport(void)
                                NETSNMP_DS_LIB_DONT_LOAD_HOST_FILES);
 }
 
+/*
+ * Make a deep copy of an netsnmp_transport.  
+ */
 netsnmp_transport *
 netsnmp_transport_copy(netsnmp_transport *t)
 {
     netsnmp_transport *n = NULL;
 
-    n = (netsnmp_transport *) malloc(sizeof(netsnmp_transport));
+    if (t == NULL) {
+        return NULL;
+    }
+
+    n = SNMP_MALLOC_TYPEDEF(netsnmp_transport);
     if (n == NULL) {
         return NULL;
     }
-    memset(n, 0, sizeof(netsnmp_transport));
 
     if (t->domain != NULL) {
         n->domain = t->domain;
@@ -177,6 +189,7 @@ netsnmp_transport_copy(netsnmp_transport *t)
     n->f_fmtaddr = t->f_fmtaddr;
     n->sock = t->sock;
     n->flags = t->flags;
+    n->base_transport = netsnmp_transport_copy(t->base_transport);
 
     /* give the transport a chance to do "special things" */
     if (t->f_copy)
@@ -193,15 +206,11 @@ netsnmp_transport_free(netsnmp_transport *t)
     if (NULL == t)
         return;
 
-    if (t->local != NULL) {
-        SNMP_FREE(t->local);
-    }
-    if (t->remote != NULL) {
-        SNMP_FREE(t->remote);
-    }
-    if (t->data != NULL) {
-        SNMP_FREE(t->data);
-    }
+    SNMP_FREE(t->local);
+    SNMP_FREE(t->remote);
+    SNMP_FREE(t->data);
+    netsnmp_transport_free(t->base_transport);
+
     SNMP_FREE(t);
 }
 
@@ -227,6 +236,28 @@ netsnmp_transport_peer_string(netsnmp_transport *t, void *data, int len)
 
     return str;
 }
+
+#ifndef NETSNMP_FEATURE_REMOVE_SOCKADDR_SIZE
+int
+netsnmp_sockaddr_size(struct sockaddr *sa)
+{
+    if (NULL == sa)
+        return 0;
+
+    switch (sa->sa_family) {
+        case AF_INET:
+            return sizeof(struct sockaddr_in);
+        break;
+#ifdef NETSNMP_ENABLE_IPV6
+        case AF_INET6:
+            return sizeof(struct sockaddr_in6);
+            break;
+#endif
+    }
+
+    return 0;
+}
+#endif /* NETSNMP_FEATURE_REMOVE_SOCKADDR_SIZE */
     
 int
 netsnmp_transport_send(netsnmp_transport *t, void *packet, int length,
@@ -296,6 +327,7 @@ netsnmp_transport_recv(netsnmp_transport *t, void *packet, int length,
 
 
 
+#ifndef NETSNMP_FEATURE_REMOVE_TDOMAIN_SUPPORT
 int
 netsnmp_tdomain_support(const oid * in_oid,
                         size_t in_len,
@@ -314,7 +346,7 @@ netsnmp_tdomain_support(const oid * in_oid,
     }
     return 0;
 }
-
+#endif /* NETSNMP_FEATURE_REMOVE_TDOMAIN_SUPPORT */
 
 
 void
@@ -392,6 +424,8 @@ netsnmp_tdomain_register(netsnmp_tdomain *n)
 
 
 
+netsnmp_feature_child_of(tdomain_unregister, netsnmp_unused)
+#ifndef NETSNMP_FEATURE_REMOVE_TDOMAIN_UNREGISTER
 int
 netsnmp_tdomain_unregister(netsnmp_tdomain *n)
 {
@@ -412,6 +446,7 @@ netsnmp_tdomain_unregister(netsnmp_tdomain *n)
         return 0;
     }
 }
+#endif /* NETSNMP_FEATURE_REMOVE_TDOMAIN_UNREGISTER */
 
 
 static netsnmp_tdomain *
@@ -463,10 +498,6 @@ netsnmp_tdomain_transport_full(const char *application,
     const char * const *spec = NULL;
     int                 any_found = 0;
     char buf[SNMP_MAXPATH];
-    extern const char *curfilename;		/* from read_config.c */
-    const char        *prev_curfilename;
-
-    prev_curfilename = curfilename;
 
     DEBUGMSGTL(("tdomain",
                 "tdomain_transport_full(\"%s\", \"%s\", %d, \"%s\", \"%s\")\n",
@@ -486,6 +517,7 @@ netsnmp_tdomain_transport_full(const char *application,
 
         /* register a "transport" specifier */
         if (!have_added_handler) {
+            have_added_handler = 1;
             netsnmp_ds_register_config(ASN_OCTET_STR,
                                        "snmp", "transport",
                                        NETSNMP_DS_LIBRARY_ID,
@@ -514,7 +546,7 @@ netsnmp_tdomain_transport_full(const char *application,
         if (NULL !=
             (newhost = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
                                              NETSNMP_DS_LIB_HOSTNAME))) {
-            strncpy(buf, newhost, sizeof(buf)-1);
+            strlcpy(buf, newhost, sizeof(buf));
             str = buf;
         }
 
@@ -595,12 +627,15 @@ netsnmp_tdomain_transport_full(const char *application,
                         "default address \"%s\"\n",
                         match->prefix[0], addr ? addr : "[NIL]",
                         addr2 ? addr2 : "[NIL]"));
-            if (match->f_create_from_tstring)
+            if (match->f_create_from_tstring) {
+                NETSNMP_LOGONCE((LOG_WARNING,
+                                 "transport domain %s uses deprecated f_create_from_tstring\n",
+                                 match->prefix[0]));
                 t = match->f_create_from_tstring(addr, local);
+            }
             else
                 t = match->f_create_from_tstring_new(addr, local, addr2);
             if (t) {
-                curfilename = prev_curfilename;
                 return t;
             }
         }
@@ -612,7 +647,6 @@ netsnmp_tdomain_transport_full(const char *application,
     }
     if (!any_found)
         snmp_log(LOG_ERR, "No support for any checked transport domain\n");
-    curfilename = prev_curfilename;
     return NULL;
 }
 
@@ -626,6 +660,7 @@ netsnmp_tdomain_transport(const char *str, int local,
 }
 
 
+#ifndef NETSNMP_FEATURE_REMOVE_TDOMAIN_TRANSPORT_OID
 netsnmp_transport *
 netsnmp_tdomain_transport_oid(const oid * dom,
                               size_t dom_len,
@@ -650,6 +685,7 @@ netsnmp_tdomain_transport_oid(const oid * dom,
     snmp_log(LOG_ERR, "No support for requested transport domain\n");
     return NULL;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_TDOMAIN_TRANSPORT_OID */
 
 netsnmp_transport*
 netsnmp_transport_open(const char* application, const char* str, int local)

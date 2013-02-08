@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $Id: cvsup 16369 2007-05-15 15:55:31Z rstory $
+# $Id$
 #
 CVS_RSH=ssh; export CVS_RSH
 TAG=

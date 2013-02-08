@@ -31,7 +31,7 @@ extern          "C" {
  * ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
  * SOFTWARE.
  * 
- * $Id: libsnmp.h 18044 2010-01-24 11:41:03Z bvassche $
+ * $Id$
  * 
  **********************************************************************/
 
@@ -75,8 +75,6 @@ extern          "C" {
 #endif
 
 #ifdef UCD_SNMP_LIBRARY
-
-#define snmp_parse cmu_snmp_parse
 
 #include <ucd-snmp/asn1.h>
 #include <ucd-snmp/snmp_api.h>
@@ -135,7 +133,9 @@ extern          "C" {
 #define SNMP_MSG_GET GET_REQ_MSG
 #define SNMP_MSG_GETNEXT GETNEXT_REQ_MSG
 #define SNMP_MSG_RESPONSE GET_RSP_MSG
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 #define SNMP_MSG_SET SET_REQ_MSG
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
 #define SNMP_MSG_TRAP TRP_REQ_MSG
 #define SNMP_MSG_GETBULK    (ASN_CONTEXT | ASN_CONSTRUCTOR | 0x5)
 #define SNMP_MSG_INFORM     (ASN_CONTEXT | ASN_CONSTRUCTOR | 0x6)

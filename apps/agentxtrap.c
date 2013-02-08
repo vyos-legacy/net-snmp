@@ -1,4 +1,5 @@
- #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <errno.h>
 #include <signal.h>
@@ -8,11 +9,15 @@
 #endif
 
 #include <net-snmp/net-snmp-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
+#include <net-snmp/agent/ds_agent.h>
 
 #include "../agent/mibgroup/agentx/agentx_config.h"
 #include "../agent/mibgroup/agentx/client.h"
 #include "../agent/mibgroup/agentx/protocol.h"
+
+netsnmp_feature_require(snmp_split_pdu)
+netsnmp_feature_require(snmp_reset_var_types)
+
 
 #ifdef __GNUC__
 #define UNUSED __attribute__((unused))

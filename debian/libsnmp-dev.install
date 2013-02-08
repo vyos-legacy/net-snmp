@@ -1,8 +1,8 @@
-debian/tmp/etc/snmp/mib2c*.conf
-debian/tmp/usr/bin/mib2c
-debian/tmp/usr/bin/mib2c-update
-debian/tmp/usr/include
-debian/tmp/usr/lib/lib*.{a,so,la}
-debian/tmp/usr/share/man/man1/mib2c.1
-debian/tmp/usr/share/man/man1/mib2c-update.1
-debian/tmp/usr/share/man/man3/*
+etc/snmp/mib2c*.conf
+usr/bin/mib2c
+usr/bin/mib2c-update
+usr/include
+usr/lib/lib*.{a,so,la}
+usr/share/man/man1/mib2c.1
+usr/share/man/man1/mib2c-update.1
+usr/share/man/man3/*

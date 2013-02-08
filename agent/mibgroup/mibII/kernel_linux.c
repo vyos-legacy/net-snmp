@@ -4,6 +4,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -45,6 +46,10 @@ struct udp6_mib  cached_udp6_mib;
 #define ICMP6_STATS_PREFIX_LEN	5
 #define UDP6_STATS_PREFIX_LEN   4
 
+netsnmp_feature_child_of(linux_ip6_stat_all, libnetsnmpmibs)
+
+netsnmp_feature_child_of(linux_read_ip6_stat, linux_ip6_stat_all)
+
 int
 decode_icmp_msg(char *line, char *data, struct icmp4_msg_mib *msg)
 {
@@ -61,8 +66,8 @@ decode_icmp_msg(char *line, char *data, struct icmp4_msg_mib *msg)
      * getting modified. So we take a local copy for this purpose even though
      * its expensive.
      */
-    strncpy(line_cpy, line, sizeof(line_cpy));
-    strncpy(data_cpy, data, sizeof(data_cpy));
+    strlcpy(line_cpy, line, sizeof(line_cpy));
+    strlcpy(data_cpy, data, sizeof(data_cpy));
 
     lineptr = line_cpy;
     dataptr = data_cpy;
@@ -238,6 +243,7 @@ linux_read_ip_stat(struct ip_mib *ipstat)
     return 0;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_LINUX_READ_IP6_STAT
 int linux_read_ip6_stat( struct ip6_mib *ip6stat)
 {
 #ifdef NETSNMP_ENABLE_IPV6
@@ -346,6 +352,7 @@ int linux_read_ip6_stat( struct ip6_mib *ip6stat)
     memcpy((char *) ip6stat, (char *) &cached_ip6_mib, sizeof(*ip6stat));
     return 0;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_LINUX_READ_IP6_STAT */
 
 int
 linux_read_icmp_msg_stat(struct icmp_mib *icmpstat,
@@ -389,7 +396,7 @@ linux_read_icmp6_parse(struct icmp6_mib *icmp6stat,
     char            line[1024];
     char            name[255];
     unsigned long   stats;
-    char           *endp ,*token, *vals;
+    char           *endp, *vals;
     int             match;
 #endif
 
@@ -420,12 +427,12 @@ linux_read_icmp6_parse(struct icmp6_mib *icmp6stat,
         vals = name;
         if (NULL != icmp6msgstat) {
             if (0 == strncmp(name, "Icmp6OutType", 12)) {
-                token = strsep(&vals, "e");
+                strsep(&vals, "e");
                 icmp6msgstat->vals[atoi(vals)].OutType = stats;
                 *support = 1;
                 continue;
             } else if (0 == strncmp(name, "Icmp6InType", 11)) {
-                token = strsep(&vals, "e");
+                strsep(&vals, "e");
                 icmp6msgstat->vals[atoi(vals)].InType = stats;
                 *support = 1;
                 continue;

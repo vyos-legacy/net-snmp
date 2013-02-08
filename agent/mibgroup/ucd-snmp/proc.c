@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #ifdef solaris2
 #define _KMEMUSER               /* Needed by <sys/user.h> */
@@ -359,6 +360,7 @@ get_proc_instance(struct myproc *proc, oid inst)
 }
 
 #ifdef USING_HOST_DATA_ACCESS_SWRUN_MODULE
+netsnmp_feature_require(swrun_count_processes_by_name)
 int
 sh_count_procs(char *procname)
 {
@@ -378,8 +380,8 @@ sh_count_procs(char *procname)
  * these are for keeping track of the proc array 
  */
 
-static int      nproc = 0;
-static int      onproc = -1;
+static size_t   nproc = 0;
+static size_t   onproc = -1;
 static struct kinfo_proc *pbase = 0;
 
 int
@@ -435,8 +437,7 @@ sh_count_procs(char *procname)
     count = 0;
 
     while(getprocs(&pinfo, sizeof(pinfo), NULL, 0, &index, 1) == 1) {
-        strncpy(pinfo_name, pinfo.pi_comm, 256);
-        pinfo_name[255] = 0;
+        strlcpy(pinfo_name, pinfo.pi_comm, sizeof(pinfo_name));
         sep = strchr(pinfo_name, ' ');
         if(sep != NULL) *sep = 0;
         if(strcmp(procname, pinfo_name) == 0) count++;
@@ -486,7 +487,7 @@ sh_count_procs(char *procname)
           continue;
       if (fgets(cmdline, sizeof(cmdline), status) == NULL) {
           fclose(status);
-          break;
+          continue;
       }
       /* Grab the state of the process as well
        * (so we can ignore zombie processes)
@@ -813,6 +814,7 @@ sh_count_procs(char *procname)
 }
 #endif                          /* _SLASH_PROC_METHOD_ */
 #else
+netsnmp_feature_require(find_field)
 int
 sh_count_procs(char *procname)
 {

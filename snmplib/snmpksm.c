@@ -232,6 +232,10 @@ init_ksm(void)
     register_sec_mod(NETSNMP_SEC_MODEL_KSM, "ksm", def);
 }
 
+void shutdown_ksm(void)
+{
+}
+
 /*
  * These routines implement a simple cache for information we need to
  * process responses.  When we send out a request, it contains an AP_REQ;
@@ -996,7 +1000,7 @@ ksm_rgenerate_out_msg(struct snmp_secmod_outgoing_params *parms)
                                       parms->wholeMsgOffset, 1,
                                       (u_char) (ASN_UNIVERSAL |
                                                 ASN_PRIMITIVE |
-                                                ASN_OCTET_STR),
+                                                ASN_INTEGER),
                                       &tmp, sizeof(tmp));
 
     if (rc == 0) {

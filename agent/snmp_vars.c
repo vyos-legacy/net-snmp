@@ -62,6 +62,9 @@ PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <net-snmp/net-snmp-config.h>
+#if HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
 #if HAVE_STRING_H
 #include <string.h>
 #endif
@@ -71,6 +74,7 @@ PERFORMANCE OF THIS SOFTWARE.
 #include <sys/types.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #if TIME_WITH_SYS_TIME
 # include <sys/time.h>
@@ -143,6 +147,12 @@ PERFORMANCE OF THIS SOFTWARE.
 #include "agent_module_includes.h"
 #include "mib_module_includes.h"
 #include "net-snmp/library/container.h"
+
+#if defined(NETSNMP_USE_OPENSSL) && defined(HAVE_LIBSSL)
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
+#include <net-snmp/library/cert_util.h>
+#endif
 
 #include "snmp_perl.h"
 
@@ -283,7 +293,7 @@ init_agent(const char *app)
 			   NETSNMP_DS_LIB_ALARM_DONT_USE_SIG, 1);
 
 #ifdef NETSNMP_CAN_USE_NLIST
-    init_kmem("/dev/kmem");
+    r = init_kmem("/dev/kmem") ? 0 : -EACCES;
 #endif
 
     setup_tree();
@@ -366,7 +376,7 @@ shutdown_agent(void) {
     clear_sec_mod();
     clear_snmp_enum();
     clear_callback();
-    clear_user_list();
+    shutdown_secmod();
     netsnmp_addrcache_destroy();
 #ifdef NETSNMP_CAN_USE_NLIST
     free_kmem();

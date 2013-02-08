@@ -133,6 +133,12 @@ _fsys_type( char *typename )
               !strcmp(typename, MNTTYPE_TMPFS) ||
               !strcmp(typename, MNTTYPE_GFS) ||
               !strcmp(typename, MNTTYPE_GFS2) ||
+              !strcmp(typename, MNTTYPE_XFS) ||
+              !strcmp(typename, MNTTYPE_JFS) ||
+              !strcmp(typename, MNTTYPE_VXFS) ||
+              !strcmp(typename, MNTTYPE_REISERFS) ||
+              !strcmp(typename, MNTTYPE_OCFS2) ||
+              !strcmp(typename, MNTTYPE_CVFS) ||
               !strcmp(typename, MNTTYPE_LOFS))
        return NETSNMP_FS_TYPE_OTHER;
 
@@ -188,11 +194,9 @@ netsnmp_fsys_arch_load( void )
             continue;
         }
 
-        strncpy( entry->path,   m->NSFS_PATH,    sizeof( entry->path   ));
-        entry->path[sizeof(entry->path)-1] = '\0';
-        strncpy( entry->device, m->NSFS_DEV,     sizeof( entry->device ));
-        entry->device[sizeof(entry->device)-1] = '\0';
-        entry->type   = _fsys_type(  m->NSFS_TYPE );
+        strlcpy(entry->path, m->NSFS_PATH, sizeof(entry->path));
+        strlcpy(entry->device, m->NSFS_DEV, sizeof(entry->device));
+        entry->type = _fsys_type(m->NSFS_TYPE);
         if (!(entry->type & _NETSNMP_FS_TYPE_SKIP_BIT))
             entry->flags |= NETSNMP_FS_FLAG_ACTIVE;
 
@@ -224,7 +228,12 @@ netsnmp_fsys_arch_load( void )
                                    NETSNMP_DS_AGENT_SKIPNFSINHOSTRESOURCES))
             continue;
 
-        if ( NSFS_STATFS( entry->path, &stat_buf ) < 0 ) {
+#ifdef irix6
+        if ( NSFS_STATFS( entry->path, &stat_buf, sizeof(struct statfs), 0) < 0 )
+#else
+        if ( NSFS_STATFS( entry->path, &stat_buf ) < 0 )
+#endif
+        {
             snprintf( tmpbuf, sizeof(tmpbuf), "Cannot statfs %s\n", entry->path );
             snmp_log_perror( tmpbuf );
             continue;
@@ -232,9 +241,17 @@ netsnmp_fsys_arch_load( void )
         entry->units =  stat_buf.NSFS_SIZE;
         entry->size  =  stat_buf.f_blocks;
         entry->used  = (stat_buf.f_blocks - stat_buf.f_bfree);
-        entry->avail =  stat_buf.f_bavail;
+        /* entry->avail is currently unsigned, so protect against negative
+         * values!
+         * This should be changed to a signed field.
+         */
+        if (stat_buf.f_bavail < 0)
+            entry->avail = 0;
+        else
+            entry->avail =  stat_buf.f_bavail;
         entry->inums_total = stat_buf.f_files;
         entry->inums_avail = stat_buf.f_ffree;
+        netsnmp_fsys_calculate32(entry);
     }
     fclose( fp );
 }

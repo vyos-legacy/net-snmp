@@ -21,22 +21,14 @@ extern          "C" {
 #endif
 
 /*
- * Definitions
- */
-#ifdef  MSG_DONTWAIT
-#define NETSNMP_DONTWAIT MSG_DONTWAIT
-#else
-#define NETSNMP_DONTWAIT 0
-#endif
-
-/*
  * Prototypes
  */
 
     netsnmp_transport *netsnmp_udpipv4base_transport(struct sockaddr_in *addr,
                                                      int local);
 
-#if defined(linux) && defined(IP_PKTINFO)
+#if defined(linux) && defined(IP_PKTINFO) \
+    || defined(IP_RECVDSTADDR) && !defined(_MSC_VER)
     int netsnmp_udpipv4_recvfrom(int s, void *buf, int len,
                                  struct sockaddr *from, socklen_t *fromlen,
                                  struct sockaddr *dstip, socklen_t *dstlen,

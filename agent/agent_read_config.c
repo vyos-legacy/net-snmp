@@ -3,8 +3,13 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
+#if HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#else
 #include <sys/types.h>
+#endif
 #if HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -102,17 +107,18 @@
 #include "agent_module_includes.h"
 #include "mib_module_includes.h"
 
+netsnmp_feature_child_of(agent_read_config_all, libnetsnmpagent)
+
+netsnmp_feature_child_of(snmpd_unregister_config_handler, agent_read_config_all)
+
 #ifdef HAVE_UNISTD_H
 void
 snmpd_set_agent_user(const char *token, char *cptr)
 {
-#if defined(HAVE_GETPWNAM) && defined(HAVE_PWD_H)
-    struct passwd  *info;
-#endif
-
     if (cptr[0] == '#') {
         char           *ecp;
         int             uid;
+
         uid = strtoul(cptr + 1, &ecp, 10);
         if (*ecp != 0) {
             config_perror("Bad number");
@@ -120,47 +126,51 @@ snmpd_set_agent_user(const char *token, char *cptr)
 	    netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID, 
 			       NETSNMP_DS_AGENT_USERID, uid);
 	}
-    }
 #if defined(HAVE_GETPWNAM) && defined(HAVE_PWD_H)
-    else if ((info = getpwnam(cptr)) != NULL) {
-        netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID, 
-			   NETSNMP_DS_AGENT_USERID, info->pw_uid);
     } else {
-        config_perror("User not found in passwd database");
-    }
-    endpwent();
+        struct passwd  *info;
+
+        info = getpwnam(cptr);
+        if (info)
+            netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID, 
+                               NETSNMP_DS_AGENT_USERID, info->pw_uid);
+        else
+            config_perror("User not found in passwd database");
+        endpwent();
 #endif
+    }
 }
 
 void
 snmpd_set_agent_group(const char *token, char *cptr)
 {
-#if defined(HAVE_GETGRNAM) && defined(HAVE_GRP_H)
-    struct group   *info;
-#endif
-
     if (cptr[0] == '#') {
         char           *ecp;
         int             gid = strtoul(cptr + 1, &ecp, 10);
+
         if (*ecp != 0) {
             config_perror("Bad number");
 	} else {
             netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID, 
 			       NETSNMP_DS_AGENT_GROUPID, gid);
 	}
-    }
 #if defined(HAVE_GETGRNAM) && defined(HAVE_GRP_H)
-    else if ((info = getgrnam(cptr)) != NULL) {
-        netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID, 
-			   NETSNMP_DS_AGENT_GROUPID, info->gr_gid);
     } else {
-        config_perror("Group not found in group database");
-    }
-    endpwent();
+        struct group   *info;
+
+        info = getgrnam(cptr);
+        if (info)
+            netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID, 
+                               NETSNMP_DS_AGENT_GROUPID, info->gr_gid);
+        else
+            config_perror("Group not found in group database");
+        endgrent();
 #endif
+    }
 }
 #endif
 
+#ifndef NETSNMP_NO_LISTEN_SUPPORT
 void
 snmpd_set_agent_address(const char *token, char *cptr)
 {
@@ -177,15 +187,17 @@ snmpd_set_agent_address(const char *token, char *cptr)
         /*
          * append to the older specification string 
          */
-        snprintf(buf, SPRINT_MAX_LEN, "%s,%s", ptr, cptr);
+        snprintf(buf, sizeof(buf), "%s,%s", ptr, cptr);
+	buf[sizeof(buf) - 1] = '\0';
     } else {
-        strncpy(buf, cptr, SPRINT_MAX_LEN);
+        strlcpy(buf, cptr, sizeof(buf));
     }
 
     DEBUGMSGTL(("snmpd_ports", "port spec: %s\n", buf));
     netsnmp_ds_set_string(NETSNMP_DS_APPLICATION_ID, 
 			  NETSNMP_DS_AGENT_PORTS, buf);
 }
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
 
 void
 init_agent_read_config(const char *app)
@@ -243,9 +255,11 @@ init_agent_read_config(const char *app)
     register_app_config_handler("agentgroup",
                                 snmpd_set_agent_group, NULL, "groupid");
 #endif
+#ifndef NETSNMP_NO_LISTEN_SUPPORT
     register_app_config_handler("agentaddress",
                                 snmpd_set_agent_address, NULL,
                                 "SNMP bind address");
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
     netsnmp_ds_register_config(ASN_BOOLEAN, app, "quit", 
 			       NETSNMP_DS_APPLICATION_ID,
 			       NETSNMP_DS_AGENT_QUIT_IMMEDIATELY);
@@ -301,11 +315,17 @@ snmpd_register_const_config_handler(const char *token,
                                 releaser, help);
 }
 
+#ifdef NETSNMP_FEATURE_REQUIRE_SNMPD_UNREGISTER_CONFIG_HANDLER
+netsnmp_feature_require(unregister_app_config_handler)
+#endif /* NETSNMP_FEATURE_REQUIRE_SNMPD_UNREGISTER_CONFIG_HANDLER */
+
+#ifndef NETSNMP_FEATURE_REMOVE_SNMPD_UNREGISTER_CONFIG_HANDLER
 void
 snmpd_unregister_config_handler(const char *token)
 {
     unregister_app_config_handler(token);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_SNMPD_UNREGISTER_CONFIG_HANDLER */
 
 /*
  * this function is intended for use by mib-modules to store permenant

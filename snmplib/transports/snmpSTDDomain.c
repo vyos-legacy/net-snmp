@@ -154,11 +154,10 @@ netsnmp_std_transport(const char *instring, size_t instring_len,
 {
     netsnmp_transport *t;
 
-    t = (netsnmp_transport *) malloc(sizeof(netsnmp_transport));
+    t = SNMP_MALLOC_TYPEDEF(netsnmp_transport);
     if (t == NULL) {
         return NULL;
     }
-    memset(t, 0, sizeof(netsnmp_transport));
 
     t->domain = netsnmp_snmpSTDDomain;
     t->domain_length =
@@ -278,8 +277,9 @@ netsnmp_std_ctor(void)
     stdDomain.prefix = (const char **)calloc(2, sizeof(char *));
     stdDomain.prefix[0] = "std";
 
+    stdDomain.f_create_from_tstring     = NULL;
     stdDomain.f_create_from_tstring_new = netsnmp_std_create_tstring;
-    stdDomain.f_create_from_ostring = netsnmp_std_create_ostring;
+    stdDomain.f_create_from_ostring     = netsnmp_std_create_ostring;
 
     netsnmp_tdomain_register(&stdDomain);
 }

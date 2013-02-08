@@ -13,7 +13,7 @@
 # See the file "COPYING" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
-# $Id: smistrip 17593 2009-05-06 20:45:46Z nba $
+# $Id$
 #
 # NOTE, that this script relies on awk (tested with GNU awk) and getopts
 # (shell builtin like in bash or standalone).

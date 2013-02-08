@@ -40,6 +40,7 @@ SOFTWARE.
  *  @{
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <stdio.h>
 #include <errno.h>
@@ -92,11 +93,18 @@ SOFTWARE.
 #include <net-snmp/library/snmp_api.h>
 #include <net-snmp/library/snmp_client.h>
 #include <net-snmp/library/snmp_secmod.h>
+#include <net-snmp/library/snmpusm.h>
 #include <net-snmp/library/mib.h>
 #include <net-snmp/library/snmp_logging.h>
 #include <net-snmp/library/snmp_assert.h>
 #include <net-snmp/pdu_api.h>
 
+netsnmp_feature_child_of(snmp_client_all, libnetsnmp)
+
+netsnmp_feature_child_of(snmp_split_pdu, snmp_client_all)
+netsnmp_feature_child_of(snmp_reset_var_types, snmp_client_all)
+netsnmp_feature_child_of(query_set_default_session, snmp_client_all)
+netsnmp_feature_child_of(row_create, snmp_client_all)
 
 #ifndef BSD4_3
 #define BSD4_2
@@ -342,6 +350,7 @@ _clone_pdu_header(netsnmp_pdu *pdu)
 {
     netsnmp_pdu    *newpdu;
     struct snmp_secmod_def *sptr;
+    int ret;
 
     newpdu = (netsnmp_pdu *) malloc(sizeof(netsnmp_pdu));
     if (!newpdu)
@@ -381,6 +390,20 @@ _clone_pdu_header(netsnmp_pdu *pdu)
         snmp_free_pdu(newpdu);
         return NULL;
     }
+
+    if (pdu != NULL && pdu->securityStateRef &&
+        pdu->command == SNMP_MSG_TRAP2) {
+
+        ret = usm_clone_usmStateReference((struct usmStateReference *) pdu->securityStateRef,
+                (struct usmStateReference **) &newpdu->securityStateRef );
+
+        if (ret)
+        {
+            snmp_free_pdu(newpdu);
+            return 0;
+        }
+    }
+
     if ((sptr = find_sec_mod(newpdu->securityModel)) != NULL &&
         sptr->pdu_clone != NULL) {
         /*
@@ -466,8 +489,11 @@ _copy_pdu_vars(netsnmp_pdu *pdu,        /* source PDU */
                int skip_count,  /* !=0 number of variables to skip */
                int copy_count)
 {                               /* !=0 number of variables to copy */
-    netsnmp_variable_list *var, *oldvar;
-    int             ii, copied, drop_idx;
+    netsnmp_variable_list *var;
+#if TEMPORARILY_DISABLED
+    int             copied;
+#endif
+    int             drop_idx;
 
     if (!newpdu)
         return NULL;            /* where is PDU to copy to ? */
@@ -481,15 +507,17 @@ _copy_pdu_vars(netsnmp_pdu *pdu,        /* source PDU */
     while (var && (skip_count-- > 0))   /* skip over pdu variables */
         var = var->next_variable;
 
-    oldvar = NULL;
-    ii = 0;
+#if TEMPORARILY_DISABLED
     copied = 0;
     if (pdu->flags & UCD_MSG_FLAG_FORCE_PDU_COPY)
         copied = 1;             /* We're interested in 'empty' responses too */
+#endif
 
     newpdu->variables = _copy_varlist(var, drop_idx, copy_count);
+#if TEMPORARILY_DISABLED
     if (newpdu->variables)
         copied = 1;
+#endif
 
 #if ALSO_TEMPORARILY_DISABLED
     /*
@@ -566,6 +594,7 @@ snmp_clone_pdu(netsnmp_pdu *pdu)
  * Returns a pointer to the cloned PDU if successful.
  * Returns 0 if failure.
  */
+#ifndef NETSNMP_FEATURE_REMOVE_SNMP_SPLIT_PDU
 netsnmp_pdu    *
 snmp_split_pdu(netsnmp_pdu *pdu, int skip_count, int copy_count)
 {
@@ -576,6 +605,7 @@ snmp_split_pdu(netsnmp_pdu *pdu, int skip_count, int copy_count)
 
     return newpdu;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_SNMP_SPLIT_PDU */
 
 
 /*
@@ -714,6 +744,8 @@ count_varbinds(netsnmp_variable_list * var_ptr)
     return count;
 }
 
+netsnmp_feature_child_of(count_varbinds_of_type, netsnmp_unused)
+#ifndef NETSNMP_FEATURE_REMOVE_COUNT_VARBINDS_OF_TYPE
 int
 count_varbinds_of_type(netsnmp_variable_list * var_ptr, u_char type)
 {
@@ -725,7 +757,10 @@ count_varbinds_of_type(netsnmp_variable_list * var_ptr, u_char type)
 
     return count;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_COUNT_VARBINDS_OF_TYPE */
 
+netsnmp_feature_child_of(find_varind_of_type, netsnmp_unused)
+#ifndef NETSNMP_FEATURE_REMOVE_FIND_VARIND_OF_TYPE
 netsnmp_variable_list *
 find_varbind_of_type(netsnmp_variable_list * var_ptr, u_char type)
 {
@@ -734,6 +769,7 @@ find_varbind_of_type(netsnmp_variable_list * var_ptr, u_char type)
 
     return var_ptr;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_FIND_VARIND_OF_TYPE */
 
 netsnmp_variable_list*
 find_varbind_in_list( netsnmp_variable_list *vblist,
@@ -768,6 +804,11 @@ snmp_set_var_value(netsnmp_variable_list * vars,
     vars->val.string = NULL;
     vars->val_len = 0;
 
+    if (value == NULL && len > 0) {
+        snmp_log(LOG_ERR, "bad size for NULL value\n");
+        return 1;
+    }
+
     /*
      * use built-in storage for smaller values 
      */
@@ -787,84 +828,82 @@ snmp_set_var_value(netsnmp_variable_list * vars,
     case ASN_UNSIGNED:
     case ASN_TIMETICKS:
     case ASN_COUNTER:
-        if (value) {
-            if (vars->val_len == sizeof(int)) {
-                if (ASN_INTEGER == vars->type) {
-                    const int      *val_int 
-                        = (const int *) value;
-                    *(vars->val.integer) = (long) *val_int;
-                } else {
-                    const u_int    *val_uint
-                        = (const u_int *) value;
-                    *(vars->val.integer) = (unsigned long) *val_uint;
-                }
+    case ASN_UINTEGER:
+        if (vars->val_len == sizeof(int)) {
+            if (ASN_INTEGER == vars->type) {
+                const int      *val_int 
+                    = (const int *) value;
+                *(vars->val.integer) = (long) *val_int;
+            } else {
+                const u_int    *val_uint
+                    = (const u_int *) value;
+                *(vars->val.integer) = (unsigned long) *val_uint;
             }
+        }
 #if SIZEOF_LONG != SIZEOF_INT
-            else if (vars->val_len == sizeof(long)){
-                const u_long   *val_ulong
-                    = (const u_long *) value;
-                *(vars->val.integer) = *val_ulong;
-                if (*(vars->val.integer) > 0xffffffff) {
-                    snmp_log(LOG_ERR,"truncating integer value > 32 bits\n");
-                    *(vars->val.integer) &= 0xffffffff;
-                }
+        else if (vars->val_len == sizeof(long)){
+            const u_long   *val_ulong
+                = (const u_long *) value;
+            *(vars->val.integer) = *val_ulong;
+            if (*(vars->val.integer) > 0xffffffff) {
+                snmp_log(LOG_ERR,"truncating integer value > 32 bits\n");
+                *(vars->val.integer) &= 0xffffffff;
             }
+        }
 #endif
 #if defined(SIZEOF_LONG_LONG) && (SIZEOF_LONG != SIZEOF_LONG_LONG)
 #if !defined(SIZEOF_INTMAX_T) || (SIZEOF_LONG_LONG != SIZEOF_INTMAX_T)
-            else if (vars->val_len == sizeof(long long)){
-                const unsigned long long   *val_ullong
-                    = (const unsigned long long *) value;
-                *(vars->val.integer) = (long) *val_ullong;
-                if (*(vars->val.integer) > 0xffffffff) {
-                    snmp_log(LOG_ERR,"truncating integer value > 32 bits\n");
-                    *(vars->val.integer) &= 0xffffffff;
-                }
+        else if (vars->val_len == sizeof(long long)){
+            const unsigned long long   *val_ullong
+                = (const unsigned long long *) value;
+            *(vars->val.integer) = (long) *val_ullong;
+            if (*(vars->val.integer) > 0xffffffff) {
+                snmp_log(LOG_ERR,"truncating integer value > 32 bits\n");
+                *(vars->val.integer) &= 0xffffffff;
             }
+        }
 #endif
 #endif
 #if defined(SIZEOF_INTMAX_T) && (SIZEOF_LONG != SIZEOF_INTMAX_T)
-            else if (vars->val_len == sizeof(intmax_t)){
-                const uintmax_t *val_uintmax_t
-                    = (const uintmax_t *) value;
-                *(vars->val.integer) = (long) *val_uintmax_t;
-                if (*(vars->val.integer) > 0xffffffff) {
-                    snmp_log(LOG_ERR,"truncating integer value > 32 bits\n");
-                    *(vars->val.integer) &= 0xffffffff;
-                }
+        else if (vars->val_len == sizeof(intmax_t)){
+            const uintmax_t *val_uintmax_t
+                = (const uintmax_t *) value;
+            *(vars->val.integer) = (long) *val_uintmax_t;
+            if (*(vars->val.integer) > 0xffffffff) {
+                snmp_log(LOG_ERR,"truncating integer value > 32 bits\n");
+                *(vars->val.integer) &= 0xffffffff;
             }
+        }
 #endif
 #if SIZEOF_SHORT != SIZEOF_INT
-            else if (vars->val_len == sizeof(short)) {
-                if (ASN_INTEGER == vars->type) {
-                    const short      *val_short 
-                        = (const short *) value;
-                    *(vars->val.integer) = (long) *val_short;
-                } else {
-                    const u_short    *val_ushort
-                        = (const u_short *) value;
-                    *(vars->val.integer) = (unsigned long) *val_ushort;
-                }
+        else if (vars->val_len == sizeof(short)) {
+            if (ASN_INTEGER == vars->type) {
+                const short      *val_short 
+                    = (const short *) value;
+                *(vars->val.integer) = (long) *val_short;
+            } else {
+                const u_short    *val_ushort
+                    = (const u_short *) value;
+                *(vars->val.integer) = (unsigned long) *val_ushort;
             }
+        }
 #endif
-            else if (vars->val_len == sizeof(char)) {
-                if (ASN_INTEGER == vars->type) {
-                    const char      *val_char 
-                        = (const char *) value;
-                    *(vars->val.integer) = (long) *val_char;
-                } else {
+        else if (vars->val_len == sizeof(char)) {
+            if (ASN_INTEGER == vars->type) {
+                const char      *val_char 
+                    = (const char *) value;
+                *(vars->val.integer) = (long) *val_char;
+            } else {
                     const u_char    *val_uchar
-                        = (const u_char *) value;
-                    *(vars->val.integer) = (unsigned long) *val_uchar;
-                }
+                    = (const u_char *) value;
+                *(vars->val.integer) = (unsigned long) *val_uchar;
             }
-            else {
-                snmp_log(LOG_ERR,"bad size for integer-like type (%d)\n",
-                         (int)vars->val_len);
-                return (1);
-            }
-        } else
-            *(vars->val.integer) = 0;
+        }
+        else {
+            snmp_log(LOG_ERR,"bad size for integer-like type (%d)\n",
+                     (int)vars->val_len);
+            return (1);
+        }
         vars->val_len = sizeof(long);
         break;
 
@@ -974,6 +1013,7 @@ snmp_replace_var_types(netsnmp_variable_list * vbl, u_char old_type,
     }
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_SNMP_RESET_VAR_TYPES
 void
 snmp_reset_var_types(netsnmp_variable_list * vbl, u_char new_type)
 {
@@ -982,6 +1022,7 @@ snmp_reset_var_types(netsnmp_variable_list * vbl, u_char new_type)
         vbl = vbl->next_variable;
     }
 }
+#endif /* NETSNMP_FEATURE_REMOVE_SNMP_RESET_VAR_TYPES */
 
 int
 snmp_synch_response_cb(netsnmp_session * ss,
@@ -1189,12 +1230,16 @@ snmp_errstring(int errstat)
  *
  */
 #include <net-snmp/library/snmp_debug.h>
+
 static netsnmp_session *_def_query_session = NULL;
+
+#ifndef NETSNMP_FEATURE_REMOVE_QUERY_SET_DEFAULT_SESSION
 void
 netsnmp_query_set_default_session( netsnmp_session *sess) {
     DEBUGMSGTL(("iquery", "set default session %p\n", sess));
     _def_query_session = sess;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_QUERY_SET_DEFAULT_SESSION */
 
 /**
  * Return a pointer to the default internal query session.
@@ -1287,6 +1332,7 @@ retry:
                     DEBUGMSGVAR(("iquery:result", vtmp));
                 DEBUGMSG(("iquery:result", "\n"));
             }
+#ifndef NETSNMP_NO_WRITE_SUPPORT
             if (request != SNMP_MSG_SET &&
                 response->errindex != 0) {
                 DEBUGMSGTL(("iquery", "retrying query (%d, %ld)\n", ret, response->errindex));
@@ -1296,6 +1342,7 @@ retry:
                 if ( pdu != NULL )
                     goto retry;
             }
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
         } else {
             for (vb1 = response->variables, vb2 = list;
                  vb1;
@@ -1335,10 +1382,12 @@ int netsnmp_query_getnext(netsnmp_variable_list *list,
 }
 
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 int netsnmp_query_set(netsnmp_variable_list *list,
                       netsnmp_session       *session){
     return _query( list, SNMP_MSG_SET, session );
 }
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
 
 /*
  * A walk needs a bit more work.
@@ -1451,6 +1500,8 @@ netsnmp_state_machine_run( netsnmp_state_machine_input *input)
     return input->last_run->result;
 }
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+#ifndef NETSNMP_FEATURE_REMOVE_ROW_CREATE
 /** **************************************************************************
  *
  * row create state machine steps
@@ -1827,6 +1878,8 @@ netsnmp_row_create(netsnmp_session *sess, netsnmp_variable_list *vars,
 
     return SNMPERR_SUCCESS;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_ROW_CREATE */
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 
 /** @} */

@@ -66,6 +66,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -75,6 +76,9 @@
 
 #include "util_funcs/header_simple_table.h"
 #include <time.h>
+
+netsnmp_feature_require(table_container)
+
 
 /*
  * Load required drivers and libraries.
@@ -90,6 +94,7 @@
     #endif 
 #else
     #include <sensors/sensors.h>
+    #define CONFIG_FILE_NAME "/etc/sensors.conf"
 #endif
 
 #include "lmSensors.h"
@@ -326,7 +331,7 @@ var_lmSensorsTable(struct variable *vp,
     case LMFANSENSORSDEVICE:
     case LMVOLTSENSORSDEVICE:
     case LMMISCSENSORSDEVICE:
-        strncpy(string, s.name, SPRINT_MAX_LEN - 1);
+        strlcpy(string, s.name, sizeof(string));
         *var_len = strlen(string);
         ret = (unsigned char *) string;
         goto leaving;
@@ -352,7 +357,9 @@ sensor_init(void)
 {
     int             res;
 #ifndef solaris2
+    char            filename[] = CONFIG_FILE_NAME;
     time_t          t = time(NULL);
+    FILE            *fp = fopen(filename, "r");
     int             i = 0;
   
     DEBUGMSG(("ucd-snmp/lmSensors", "=> sensor_init\n"));
@@ -364,7 +371,13 @@ sensor_init(void)
         sensor_array[i].sensor = NULL;
     }
 
-    if (sensors_init(NULL))
+    if (!fp)
+    {
+        res = 1;
+        goto leaving;
+    }
+
+    if (sensors_init(fp))
     {
         res = 2;
         goto leaving;
@@ -382,7 +395,7 @@ static int
 sensor_load(void)
 {
     int rc = 0;
-    time_t        t = time(NULL);
+    time_t	   t = time(NULL);
 
     if (t > timestamp + 7) /* this may require some tuning - currently 7 seconds*/
     {
@@ -878,32 +891,32 @@ else{
                    DEBUGMSG(("ucd-snmp/lmSensors", "front panel value %d\n",enc_info->value));
                    typ = 3; /* misc */
                    sensor_array[typ].sensor[other].value = enc_info->value;
-                   strncpy(sensor_array[typ].sensor[other].name,"FSP",MAX_NAME-1);
-                   sensor_array[typ].sensor[other].name[MAX_NAME-1]='\0'; /* null terminate */
+                   strlcpy(sensor_array[typ].sensor[other].name, "FSP",
+                           MAX_NAME);
                    other++;
                    break;
                case ENVCTRL_ENCL_AMBTEMPR:
                    DEBUGMSG(("ucd-snmp/lmSensors", "ambient temp mC %d\n",enc_info->value*1000));
                    typ = 0; /* temperature sensor */
                    sensor_array[typ].sensor[temp].value = enc_info->value*1000;
-                   strncpy(sensor_array[typ].sensor[temp].name,"Ambient",MAX_NAME-1);
-                   sensor_array[typ].sensor[temp].name[MAX_NAME-1]='\0'; /* null terminate */
+                   strlcpy(sensor_array[typ].sensor[temp].name, "Ambient",
+                           MAX_NAME);
                    temp++;
                    break;
                case ENVCTRL_ENCL_BACKPLANE4:
                    DEBUGMSG(("ucd-snmp/lmSensors", "There is a backplane4\n"));
                    typ = 3; /* misc */
                    sensor_array[typ].sensor[other].value = enc_info->value;
-                   strncpy(sensor_array[typ].sensor[other].name,"Backplane4",MAX_NAME-1);
-                   sensor_array[typ].sensor[other].name[MAX_NAME-1]='\0'; /* null terminate */
+                   strlcpy(sensor_array[typ].sensor[other].name, "Backplane4",
+                           MAX_NAME);
                    other++;
                    break;
                case ENVCTRL_ENCL_BACKPLANE8:
                    DEBUGMSG(("ucd-snmp/lmSensors", "There is a backplane8\n"));
                    typ = 3; /* misc */
                    sensor_array[typ].sensor[other].value = enc_info->value;
-                   strncpy(sensor_array[typ].sensor[other].name,"Backplane8",MAX_NAME-1);
-                   sensor_array[typ].sensor[other].name[MAX_NAME-1]='\0'; /* null terminate */
+                   strlcpy(sensor_array[typ].sensor[other].name, "Backplane8",
+                           MAX_NAME);
                    other++;
                    break;
                case ENVCTRL_ENCL_CPUTEMPR:
@@ -934,8 +947,7 @@ else{
 #else /* end solaris2 only ie. ifdef everything else */
 
     const sensors_chip_name *chip;
-    const sensors_feature *feature;
-    const sensors_subfeature *subfeature;
+    const sensors_feature_data *data;
     int             chip_nr = 0;
     unsigned int    i = 0;
 
@@ -957,81 +969,78 @@ else{
         sensor_array[i].current_len = DEFAULT_SENSORS;
     } /* end for */
 
-    while ((chip = sensors_get_detected_chips(NULL, &chip_nr))) {
-        int             a = 0;
-        while ((feature = sensors_get_features(chip, &a))) {
-            int             b = 0;
-            while ((subfeature = sensors_get_all_subfeatures(chip,
-                    feature, &b))) {
-                char           *label = NULL;
-                double          val;
+    while ((chip = sensors_get_detected_chips(&chip_nr))) {
+	int             a = 0;
+	int             b = 0;
 
-                if ((subfeature->flags & SENSORS_MODE_R) &&
-                    (subfeature->mapping == 0) &&
-                    (label = sensors_get_label(chip, feature)) &&
-                    !sensors_get_value(chip, subfeature->number, &val)) {
-                    int             type = -1;
-                    float           mul;
-                    _sensor_array  *array;
+        while ((data = sensors_get_all_features(*chip, &a, &b))) {
+            char           *label = NULL;
+            double          val;
 
-                    /* The label, as determined for a given chip in
-                     * sensors.conf, is used to place each sensor in the
-                     * appropriate bucket.  Volt, Fan, Temp, and Misc.
-                     * If the text being looked for below is not in the
-                     * label of a given sensor (e.g., the temp1 sensor
-                     * has been labeled 'CPU' and not 'CPU temp') it
-                     * will end up being lumped in the MISC bucket. */
+            if ((data->mode & SENSORS_MODE_R) &&
+                (data->mapping == SENSORS_NO_MAPPING) &&
+                !sensors_get_label(*chip, data->number, &label) &&
+                !sensors_get_feature(*chip, data->number, &val)) {
+                int             type = -1;
+                float           mul = 0;
+                _sensor_array  *array;
 
-                    if (strstr(label, "V")) {
-                        type = VOLT_TYPE;
-                        mul = 1000.0;
-                    }
-                    if (strstr(label, "fan") || strstr(label, "Fan")) {
-                        type = FAN_TYPE;
-                        mul = 1.0;
-                    }
-                    if (strstr(label, "temp") || strstr(label, "Temp")) {
-                        type = TEMP_TYPE;
-                        mul = 1000.0;
-                    }
-                    if (type == -1) {
-                        type = MISC_TYPE;
-                        mul = 1000.0;
-                    }
+                /* The label, as determined for a given chip in sensors.conf,
+                 * is used to place each sensor in the appropriate bucket.
+                 * Volt, Fan, Temp, and Misc.  If the text being looked for below
+                 * is not in the label of a given sensor (e.g., the temp1 sensor
+                 * has been labeled 'CPU' and not 'CPU temp') it will end up being
+                 * lumped in the MISC bucket. */
 
-                    array = &sensor_array[type];
-                    if ( array->current_len <= array->n) {
-                        _sensor* old_buffer = array->sensor;
-                        size_t new_size = (sizeof(_sensor) * array->current_len) + (sizeof(_sensor) * DEFAULT_SENSORS);
-                        array->sensor = (_sensor*)realloc(array->sensor, new_size);
-                        if (array->sensor == NULL)
-                        {
-                           /* Continuing would be unsafe */
-                           snmp_log(LOG_ERR, "too many sensors to fit, and failed to alloc more, failing on %s\n", label);
-                           free(old_buffer);
-                           old_buffer = NULL;
-                           if (label) {
-                               free(label);
-                               label = NULL;
-                           } /* end if label */
-                           return 1;
-                        } /* end if array->sensor */
-                        array->current_len = new_size / sizeof(_sensor);
-                        DEBUGMSG(("ucd-snmp/lmSensors", "type #%d increased to %d elements\n", type, (int)array->current_len));
-                    } /* end if array->current */
-                    strncpy(array->sensor[array->n].name, label, MAX_NAME);
-                    array->sensor[array->n].value = (int) (val * mul);
-                    DEBUGMSGTL(("sensors","sensor %s, value %d\n",
-                                array->sensor[array->n].name,
-                                array->sensor[array->n].value));
-                    array->n++;
-                } /* end if data-mode */
-                if (label) {
-                    free(label);
-                    label = NULL;
-                } /* end if label */
-            } /* end while subfeature */
-        } /* end while feature */
+                if (strstr(label, "V")) {
+                    type = VOLT_TYPE;
+                    mul = 1000.0;
+                }
+                if (strstr(label, "fan") || strstr(label, "Fan")) {
+                    type = FAN_TYPE;
+                    mul = 1.0;
+                }
+                if (strstr(label, "temp") || strstr(label, "Temp")) {
+                    type = TEMP_TYPE;
+                    mul = 1000.0;
+                }
+                if (type == -1) {
+                    type = MISC_TYPE;
+                    mul = 1000.0;
+                }
+
+                array = &sensor_array[type];
+                if ( array->current_len <= array->n) {
+                    _sensor* old_buffer = array->sensor;
+                    size_t new_size = (sizeof(_sensor) * array->current_len) + (sizeof(_sensor) * DEFAULT_SENSORS);
+                    array->sensor = (_sensor*)realloc(array->sensor, new_size);
+                    if (array->sensor == NULL)
+                    {
+                       /* Continuing would be unsafe */
+                       snmp_log(LOG_ERR, "too many sensors to fit, and failed to alloc more, failing on %s\n", label);
+                       free(old_buffer);
+                       old_buffer = NULL;
+                       if (label) {
+                           free(label);
+                           label = NULL;
+                       } /* end if label */
+                       return 1;
+                    } /* end if array->sensor */
+                    array->current_len = new_size / sizeof(_sensor);
+                    DEBUGMSG(("ucd-snmp/lmSensors", "type #%d increased to %d elements\n", type, (int)array->current_len));
+                } /* end if array->current */
+                strlcpy(array->sensor[array->n].name, label, MAX_NAME);
+                array->sensor[array->n].value = (int) (val * mul);
+                DEBUGMSGTL(("sensors","sensor %s, value %d\n",
+                            array->sensor[array->n].name,
+                            array->sensor[array->n].value));
+                array->n++;
+            } /* end if data-mode */
+	    if (label) {
+		free(label);
+		label = NULL;
+	    } /* end if label */
+        } /* end while data */
     } /* end while chip */
     DEBUGMSG(("ucd-snmp/lmSensors", "<= sensor_load\n"));
 #endif  /* end else ie. ifdef everything else */

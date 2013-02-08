@@ -17,7 +17,6 @@ LIB32_OBJS= \
 	"$(INTDIR)\callback.obj" \
 	"$(INTDIR)\check_varbind.obj" \
 	"$(INTDIR)\closedir.obj" \
-	"$(INTDIR)\cmu_compat.obj" \
 	"$(INTDIR)\container.obj" \
 	"$(INTDIR)\container_binary_array.obj" \
 	"$(INTDIR)\container_iterator.obj" \
@@ -67,6 +66,7 @@ LIB32_OBJS= \
 	"$(INTDIR)\snmp_version.obj" \
 	"$(INTDIR)\snmpusm.obj" \
 	"$(INTDIR)\snmpv3.obj" \
+	"$(INTDIR)\strlcat.obj" \
 	"$(INTDIR)\strlcpy.obj" \
 	"$(INTDIR)\strtok_r.obj" \
 	"$(INTDIR)\strtoull.obj" \
@@ -94,9 +94,9 @@ CLEAN :
 
 CPP=cl.exe
 !IF  "$(CFG)" == "release"
-CPP_PROJ=/nologo /MD /W3 /EHsc /O2 /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /Fo"$(INTDIR)\\" /Fd"$(INTDIR)\\" /FD /c 
+CPP_PROJ=/nologo /MD /W3 /EHsc /Zi /O2 /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /Fo"$(INTDIR)\\" /Fd"$(INTDIR)\\$(PROGNAME).pdb" /FD /c 
 !ELSEIF  "$(CFG)" == "debug"
-CPP_PROJ=/nologo /MDd /W3 /Gm /EHsc /Zi /Od /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /Fo"$(INTDIR)\\" /Fd"$(INTDIR)\\" /FD /c 
+CPP_PROJ=/nologo /MDd /W3 /Gm /EHsc /Zi /Od /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /Fo"$(INTDIR)\\" /Fd"$(INTDIR)\\$(PROGNAME).pdb" /FD /c 
 !ENDIF
 
 .c{$(INTDIR)}.obj::
@@ -154,12 +154,6 @@ SOURCE=..\..\snmplib\check_varbind.c
 SOURCE=..\..\snmplib\closedir.c
 
 "$(INTDIR)\closedir.obj" : $(SOURCE) "$(INTDIR)"
-	$(CPP) $(CPP_PROJ) $(SOURCE)
-
-
-SOURCE=..\..\snmplib\cmu_compat.c
-
-"$(INTDIR)\cmu_compat.obj" : $(SOURCE) "$(INTDIR)"
 	$(CPP) $(CPP_PROJ) $(SOURCE)
 
 
@@ -472,6 +466,12 @@ SOURCE=..\..\snmplib\snmpusm.c
 SOURCE=..\..\snmplib\snmpv3.c
 
 "$(INTDIR)\snmpv3.obj" : $(SOURCE) "$(INTDIR)"
+	$(CPP) $(CPP_PROJ) $(SOURCE)
+
+
+SOURCE=..\..\snmplib\strlcat.c
+
+"$(INTDIR)\strlcat.obj" : $(SOURCE) "$(INTDIR)"
 	$(CPP) $(CPP_PROJ) $(SOURCE)
 
 

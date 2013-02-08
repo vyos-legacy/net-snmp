@@ -101,10 +101,6 @@ SOURCE=..\..\snmplib\closedir.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\snmplib\cmu_compat.c
-# End Source File
-# Begin Source File
-
 SOURCE=..\..\snmplib\container.c
 # End Source File
 # Begin Source File
@@ -317,6 +313,10 @@ SOURCE=..\..\snmplib\snmpv3.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\snmplib\strlcat.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\snmplib\strlcpy.c
 # End Source File
 # Begin Source File
@@ -362,10 +362,6 @@ SOURCE="..\..\include\net-snmp\library\callback.h"
 # Begin Source File
 
 SOURCE="..\..\include\net-snmp\library\check_varbind.h"
-# End Source File
-# Begin Source File
-
-SOURCE="..\..\include\net-snmp\library\cmu_compat.h"
 # End Source File
 # Begin Source File
 

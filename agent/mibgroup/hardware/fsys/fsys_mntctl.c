@@ -81,7 +81,7 @@ netsnmp_fsys_arch_init( void )
 void
 netsnmp_fsys_arch_load( void )
 {
-    int  ret  = 0;
+    int  ret  = 0, i = 0;
     uint size = 0;
 
     struct vmount *aixmnt, *aixcurr;
@@ -118,19 +118,19 @@ netsnmp_fsys_arch_load( void )
      * ... and insert this into the filesystem container.
      */
 
-    for ( aixcurr  = aixmnt;
-         (aixcurr-aixmnt) >= size;
-          aixcurr  = (char*)aixcurr + aixcurr->vmt_length ) {
+    for (i = 0;
+         i < ret;
+         i++, aixcurr = (struct vmount *) ((char*)aixcurr + aixcurr->vmt_length) ) {
 
-        path = vmt2dataptr( aixcurr, VMT_OBJECT );
+        path = vmt2dataptr( aixcurr, VMT_STUB );
         entry = netsnmp_fsys_by_path( path, NETSNMP_FS_FIND_CREATE );
         if (!entry) {
             continue;
         }
 
-        strncpy( entry->path,   path,    sizeof( entry->path   ));
-        strncpy( entry->device, vmt2dataptr( aixcurr, VMT_STUB),
-                                         sizeof( entry->device ));
+        strlcpy(entry->path, path, sizeof(entry->path));
+        strlcpy(entry->device, vmt2dataptr(aixcurr, VMT_OBJECT),
+                sizeof(entry->device));
         entry->type   = _fsys_type( aixcurr->vmt_gfstype );
 
         if (!(entry->type & _NETSNMP_FS_TYPE_SKIP_BIT))
@@ -144,8 +144,7 @@ netsnmp_fsys_arch_load( void )
          *  The root device is presumably bootable.
          *  Other partitions probably aren't!
          */
-        if ((entry->path[0] == '/') &&
-            (entry->path[1] == '\0'))
+        if ((entry->path[0] == '/') && (entry->path[1] == '\0'))
             entry->flags |= NETSNMP_FS_FLAG_BOOTABLE;
 
         /*
@@ -171,6 +170,7 @@ netsnmp_fsys_arch_load( void )
         entry->avail =  stat_buf.f_bavail;
         entry->inums_total = stat_buf.f_files;
         entry->inums_avail = stat_buf.f_ffree;
+        netsnmp_fsys_calculate32(entry);
     }
     free(aixmnt);
     aixmnt  = NULL;

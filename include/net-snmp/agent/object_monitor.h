@@ -3,7 +3,7 @@
  *
  * Contributed by: Robert Story <rstory@freesnmp.com>
  *
- * $Id: object_monitor.h 14169 2006-01-25 16:28:12Z dts12 $
+ * $Id$
  *
  * functions and data structures for cooperating code to monitor objects.
  *

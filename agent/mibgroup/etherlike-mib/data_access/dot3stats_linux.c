@@ -47,8 +47,8 @@ dot3stats_interface_name_list_get (struct ifname *list_head, int *retval)
                 *retval = -2;
                 return NULL;
             }
-            memset (list_head, 0, sizeof (struct ifname));
-            strncpy (list_head->name, p->ifa_name, IF_NAMESIZE);
+            memset(list_head, 0, sizeof (struct ifname));
+            strlcpy(list_head->name, p->ifa_name, IF_NAMESIZE);
             continue;
         }
 
@@ -69,8 +69,8 @@ dot3stats_interface_name_list_get (struct ifname *list_head, int *retval)
             return NULL;
         }
         nameptr2 = nameptr2->ifn_next;
-        memset (nameptr2, 0, sizeof (struct ifname));
-        strncpy (nameptr2->name, p->ifa_name, IF_NAMESIZE);
+        memset(nameptr2, 0, sizeof (struct ifname));
+        strlcpy(nameptr2->name, p->ifa_name, IF_NAMESIZE);
         continue;
 
     }
@@ -648,14 +648,14 @@ interface_ioctl_dot3stats_get (dot3StatsTable_rowreq_ctx *rowreq_ctx, int fd, co
     struct ethtool_gstrings *eth_strings;
     struct ethtool_stats *eth_stats;
     struct ifreq ifr; 
-    unsigned int nstats, size_str, size_stats, i;
+    unsigned int nstats, size_str, i;
     int err;
 
     DEBUGMSGTL(("access:dot3StatsTable:interface_ioctl_dot3Stats_get",
                 "called\n"));
 
     memset(&ifr, 0, sizeof(ifr));
-    strcpy(ifr.ifr_name, name);
+    strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 
     memset(&driver_info, 0, sizeof (driver_info));
     driver_info.cmd = ETHTOOL_GDRVINFO;
@@ -676,7 +676,6 @@ interface_ioctl_dot3stats_get (dot3StatsTable_rowreq_ctx *rowreq_ctx, int fd, co
     }
 
     size_str = nstats * ETH_GSTRING_LEN;
-    size_stats = nstats * sizeof(u64);
 
     eth_strings = malloc(size_str + sizeof (struct ethtool_gstrings));
     if (!eth_strings) {
@@ -731,8 +730,8 @@ interface_ioctl_dot3stats_get (dot3StatsTable_rowreq_ctx *rowreq_ctx, int fd, co
     for (i = 0; i < nstats; i++) {
         char s[ETH_GSTRING_LEN];
 
-        strncpy(s, (const char *) &eth_strings->data[i * ETH_GSTRING_LEN],
-            ETH_GSTRING_LEN);
+        strlcpy(s, (const char *) &eth_strings->data[i * ETH_GSTRING_LEN],
+                sizeof(s));
     
         if (DOT3STATSALIGNMENTERRORS(s)) {
             data->dot3StatsAlignmentErrors = (u_long)eth_stats->data[i];
@@ -912,8 +911,7 @@ _dot3Stats_ioctl_get(int fd, int which, struct ifreq *ifrq, const char* name)
         }
     }
 
-    strncpy(ifrq->ifr_name, name, sizeof(ifrq->ifr_name));
-    ifrq->ifr_name[ sizeof(ifrq->ifr_name)-1 ] = 0;
+    strlcpy(ifrq->ifr_name, name, sizeof(ifrq->ifr_name));
     rc = ioctl(fd, which, ifrq);
     if (rc < 0) {
         DEBUGMSGTL(("access:dot3StatsTable:ioctl",

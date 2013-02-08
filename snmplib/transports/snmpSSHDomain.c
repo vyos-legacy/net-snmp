@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <net-snmp/library/snmpSSHDomain.h>
 
@@ -60,6 +61,8 @@
 #include <net-snmp/library/snmpSocketBaseDomain.h>
 #include <net-snmp/library/read_config.h>
 
+netsnmp_feature_require(user_information)
+
 #define MAX_NAME_LENGTH 127
 
 #define NETSNMP_SSHTOSNMP_VERSION1      1
@@ -79,10 +82,6 @@ typedef struct netsnmp_ssh_addr_pair_s {
 
 const oid netsnmp_snmpSSHDomain[] = { TRANSPORT_DOMAIN_SSH_IP };
 static netsnmp_tdomain sshDomain;
-
-const char *keyfile1="/home/hardaker/.ssh/id_rsa.pub";
-const char *keyfile2="/home/hardaker/.ssh/id_rsa";
-const char *username="hardaker";
 
 #define SNMPSSHDOMAIN_USE_EXTERNAL_PIPE 1
 
@@ -237,9 +236,8 @@ netsnmp_ssh_recv(netsnmp_transport *t, void *buf, int size,
                                      user_pw->pw_name);
                             return -1;
                         }
-                        strncpy(addr_pair->username, user_pw->pw_name,
+                        strlcpy(addr_pair->username, user_pw->pw_name,
                                 sizeof(addr_pair->username));
-                        addr_pair->username[sizeof(addr_pair->username)-1] = '\0';
                     }
                     DEBUGMSGTL(("ssh", "Setting user name to %s\n",
                                 addr_pair->username));
@@ -310,9 +308,8 @@ netsnmp_ssh_recv(netsnmp_transport *t, void *buf, int size,
                          user_pw->pw_name);
                 return -1;
             }
-            strncpy(addr_pair->username, user_pw->pw_name,
+            strlcpy(addr_pair->username, user_pw->pw_name,
                     sizeof(addr_pair->username));
-            addr_pair->username[sizeof(addr_pair->username)-1] = '\0';
         }
         */
 
@@ -331,12 +328,12 @@ netsnmp_ssh_recv(netsnmp_transport *t, void *buf, int size,
     if (iamclient && 0) {
         /* XXX: we're on the client; we should have named the
            connection ourselves...  pull this from session somehow? */
-        strncpy(tmStateRef->securityName, addr_pair->username,
-                sizeof(tmStateRef->securityName)-1);
+        strlcpy(tmStateRef->securityName, addr_pair->username,
+                sizeof(tmStateRef->securityName));
     } else {
 #ifdef SNMPSSHDOMAIN_USE_EXTERNAL_PIPE
-        strncpy(tmStateRef->securityName, addr_pair->username,
-                sizeof(tmStateRef->securityName)-1);
+        strlcpy(tmStateRef->securityName, addr_pair->username,
+                sizeof(tmStateRef->securityName));
 #else /* we're called directly by sshd and use stdin/out */
         /* we're on the server... */
         /* XXX: this doesn't copy properly and can get pointer
@@ -350,8 +347,8 @@ netsnmp_ssh_recv(netsnmp_transport *t, void *buf, int size,
 
         /* XXX: detect and throw out overflow secname sizes rather
            than truncating. */
-        strncpy(tmStateRef->securityName, getenv("USER"),
-                sizeof(tmStateRef->securityName)-1);
+        strlcpy(tmStateRef->securityName, getenv("USER"),
+                sizeof(tmStateRef->securityName));
 #endif /* ! SNMPSSHDOMAIN_USE_EXTERNAL_PIPE */
     }
     tmStateRef->securityName[sizeof(tmStateRef->securityName)-1] = '\0';
@@ -390,9 +387,8 @@ netsnmp_ssh_send(netsnmp_transport *t, void *buf, int size,
 
     if (NULL != t && NULL != addr_pair && NULL != addr_pair->channel) {
         if (addr_pair->username[0] == '\0') {
-            strncpy(addr_pair->username, tmStateRef->securityName,
-                    sizeof(addr_pair->username)-1);
-            addr_pair->username[sizeof(addr_pair->username)-1] = '\0';
+            strlcpy(addr_pair->username, tmStateRef->securityName,
+                    sizeof(addr_pair->username));
         } else if (strcmp(addr_pair->username, tmStateRef->securityName) != 0 ||
                    strlen(addr_pair->username) != tmStateRef->securityNameLen) {
             /* error!  they must always match */
@@ -587,6 +583,11 @@ netsnmp_ssh_transport(struct sockaddr_in *addr, int local)
                               NETSNMP_DS_LIB_SSHTOSNMP_SOCKET);
     char tmpsockpath[MAXPATHLEN];
 
+#ifdef NETSNMP_NO_LISTEN_SUPPORT
+    if (local)
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
+
     if (addr == NULL || addr->sin_family != AF_INET) {
         return NULL;
     }
@@ -595,7 +596,6 @@ netsnmp_ssh_transport(struct sockaddr_in *addr, int local)
     if (t == NULL) {
         return NULL;
     }
-    memset(t, 0, sizeof(netsnmp_transport));
 
     t->domain = netsnmp_snmpSSHDomain;
     t->domain_length = netsnmp_snmpSSHDomain_len;
@@ -610,6 +610,7 @@ netsnmp_ssh_transport(struct sockaddr_in *addr, int local)
     t->data_length = sizeof(netsnmp_ssh_addr_pair);
 
     if (local) {
+#ifndef NETSNMP_NO_LISTEN_SUPPORT
 #ifdef SNMPSSHDOMAIN_USE_EXTERNAL_PIPE
 
         /* XXX: set t->local and t->local_length */
@@ -718,9 +719,42 @@ netsnmp_ssh_transport(struct sockaddr_in *addr, int local)
         /* XXX: verify we're inside ssh */
         t->sock = STDIN_FILENO;
 #endif /* ! SNMPSSHDOMAIN_USE_EXTERNAL_PIPE */
-
+#else /* NETSNMP_NO_LISTEN_SUPPORT */
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
     } else {
-        /* XXX: need an ipv6 friendly one too (sigh) */
+        char *username;
+        char *keyfilepub;
+        char *keyfilepriv;
+        
+        /* use the requested user name */
+        /* XXX: default to the current user name on the system like ssh does */
+        username = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
+                                         NETSNMP_DS_LIB_SSH_USERNAME);
+        if (!username || 0 == *username) {
+            snmp_log(LOG_ERR, "You must specify a ssh username to use.  See the snmp.conf manual page\n");
+            return NULL;
+        }
+
+        /* use the requested public key file */
+        keyfilepub = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
+                                           NETSNMP_DS_LIB_SSH_PUBKEY);
+        if (!keyfilepub || 0 == *keyfilepub) {
+            /* XXX: default to ~/.ssh/id_rsa.pub */
+            snmp_log(LOG_ERR, "You must specify a ssh public key file to use.  See the snmp.conf manual page\n");
+            return NULL;
+        }
+
+        /* use the requested private key file */
+        keyfilepriv = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
+                                            NETSNMP_DS_LIB_SSH_PRIVKEY);
+        if (!keyfilepriv || 0 == *keyfilepriv) {
+            /* XXX: default to keyfilepub without the .pub suffix */
+            snmp_log(LOG_ERR, "You must specify a ssh private key file to use.  See the snmp.conf manual page\n");
+            return NULL;
+        }
+
+        /* xxx: need an ipv6 friendly one too (sigh) */
 
         /* XXX: not ideal when structs don't actually match size wise */
         memcpy(&(addr_pair->remote_addr), addr, sizeof(struct sockaddr_in));
@@ -807,7 +841,7 @@ netsnmp_ssh_transport(struct sockaddr_in *addr, int local)
             /* public key */
             if (libssh2_userauth_publickey_fromfile(addr_pair->session,
                                                     username,
-                                                    keyfile1, keyfile2,
+                                                    keyfilepub, keyfilepriv,
                                                     NULL)) {
                 snmp_log(LOG_ERR,"Authentication by public key failed!\n");
                 goto shutdown;
@@ -945,8 +979,9 @@ netsnmp_ssh_ctor(void)
     sshDomain.prefix = (const char **)calloc(2, sizeof(char *));
     sshDomain.prefix[0] = "ssh";
 
+    sshDomain.f_create_from_tstring     = NULL;
     sshDomain.f_create_from_tstring_new = netsnmp_ssh_create_tstring;
-    sshDomain.f_create_from_ostring = netsnmp_ssh_create_ostring;
+    sshDomain.f_create_from_ostring     = netsnmp_ssh_create_ostring;
 
     register_config_handler("snmp", "sshtosnmpsocketperms",
                             &sshdomain_parse_socket, NULL,
@@ -955,6 +990,18 @@ netsnmp_ssh_ctor(void)
     netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "sshtosnmpsocket",
                                NETSNMP_DS_LIBRARY_ID,
                                NETSNMP_DS_LIB_SSHTOSNMP_SOCKET);
+
+    netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "sshusername",
+                               NETSNMP_DS_LIBRARY_ID,
+                               NETSNMP_DS_LIB_SSH_USERNAME);
+
+    netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "sshpublickey",
+                               NETSNMP_DS_LIBRARY_ID,
+                               NETSNMP_DS_LIB_SSH_PUBKEY);
+
+    netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "sshprivatekey",
+                               NETSNMP_DS_LIBRARY_ID,
+                               NETSNMP_DS_LIB_SSH_PRIVKEY);
 
     DEBUGMSGTL(("ssh", "registering the ssh domain\n"));
     netsnmp_tdomain_register(&sshDomain);

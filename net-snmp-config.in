@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $Id: net-snmp-config.in 19421 2010-10-13 09:58:34Z bvassche $
+# $Id$
 #
 # this shell script is designed to merely dump the configuration
 # information about how the net-snmp package was compiled.  The
@@ -47,17 +47,28 @@ includedir=@includedir@
 libdir=@libdir@
 datarootdir=@datarootdir@
 NSC_LDFLAGS="@LDFLAGS@"
+
+NSC_LIBS="@LIBS@"
 NSC_LNETSNMPLIBS="@LNETSNMPLIBS@"
+NSC_LAGENTLIBS="@LAGENTLIBS@ @PERLLDOPTS_FOR_APPS@"
+NSC_LMIBLIBS="@LMIBLIBS@"
+
 NSC_INCLUDEDIR=${includedir}
 NSC_LIBDIR=-L${libdir}
-NSC_LIBS="@LIBS@"
-NSC_AGENTLIBS="@AGENTLIBS@ @PERLLDOPTS_FOR_APPS@"
+
+NSC_SNMPLIBS="-lnetsnmp ${NSC_LNETSNMPLIBS}"
+NSC_SUBAGENTLIBS="-lnetsnmpagent ${NSC_LAGENTLIBS} ${NSC_SNMPLIBS}"
+NSC_AGENTLIBS="-lnetsnmpmibs ${NSC_LMIBLIBS} ${NSC_SUBAGENTLIBS}"
+
 NSC_PREFIX=$prefix
 NSC_EXEC_PREFIX=$exec_prefix
 NSC_SRCDIR=@srcdir@
 NSC_INCDIR=${NSC_PREFIX}/include
-NSC_BASE_SUBAGENT_LIBS="-lnetsnmpagent -lnetsnmp"
-NSC_BASE_AGENT_LIBS="-lnetsnmpagent -lnetsnmpmibs -lnetsnmp"
+
+NSC_BASE_SNMP_LIBS="-lnetsnmp"
+NSC_BASE_SUBAGENT_LIBS="-lnetsnmpagent ${NSC_BASE_SNMP_LIBS}"
+NSC_BASE_AGENT_LIBS="-lnetsnmpmibs ${NSC_BASE_SUBAGENT_LIBS}"
+
 NSC_SRC_LIBDIRS="agent/.libs snmplib/.libs"
 NSC_SRC_LIBDEPS="agent/.libs/libnetsnmpmibs.a agent/.libs/libnetsnmpagent.a snmplib/.libs/libnetsnmp.a"
 
@@ -177,30 +188,30 @@ else
     #################################################### client lib
     --libs)
       # use this one == --netsnmp-libs + --external-libs
-      echo $NSC_LDFLAGS $NSC_LIBDIR -lnetsnmp $NSC_LIBS $NSC_LNETSNMPLIBS
+      echo $NSC_LDFLAGS $NSC_LIBDIR $NSC_SNMPLIBS $NSC_LIBS
       ;;
     --netsnmp-libs)
-      echo $NSC_LIBDIR -lnetsnmp
+      echo $NSC_LIBDIR $NSC_BASE_SNMP_LIBS
       ;;
     --external-libs)
-      echo $NSC_LDFLAGS $NSC_LIBS $NSC_LNETSNMPLIBS
+      echo $NSC_LDFLAGS $NSC_LNETSNMPLIBS $NSC_LIBS @PERLLDOPTS_FOR_APPS@
       ;;
     #################################################### agent lib
     --base-agent-libs)
-      echo $NSC_BASE_AGENT_LIBS $NSC_LNETSNMPLIBS
+      echo $NSC_BASE_AGENT_LIBS
       ;;
     --base-subagent-libs)
       echo $NSC_BASE_SUBAGENT_LIBS
       ;;
     --agent-libs)
       # use this one == --netsnmp-agent-libs + --external-libs
-      echo $NSC_LDFLAGS $NSC_LIBDIR $NSC_BASE_AGENT_LIBS $NSC_AGENTLIBS
+      echo $NSC_LDFLAGS $NSC_LIBDIR $NSC_AGENTLIBS $NSC_LIBS
       ;;
     --netsnmp-agent-libs)
       echo $NSC_LIBDIR $NSC_BASE_AGENT_LIBS
       ;;
     --external-agent-libs)
-      echo $NSC_LDFLAGS $NSC_AGENTLIBS
+      echo $NSC_LDFLAGS $NSC_LMIBLIBS $NSC_LAGENTLIBS $NSC_LNETSNMPLIBS $NSC_LIBS
       ;;
     ####################################################
     --version|--ver*)
@@ -272,7 +283,7 @@ else
 	echo "Ack.  Can't create $tmpfile: already exists"
 	exit 1
       fi
-      echo "generating the tmporary code file: $tmpfile"
+      echo "generating the temporary code file: $tmpfile"
       rm -f $tmpfile
       cat > $tmpfile <<EOF
 /* generated from net-snmp-config */
@@ -582,7 +593,6 @@ EOF
   SOCK_CLEANUP;
   exit(0);
 }
-
 EOF
       if test "$?" != 0 -o ! -f "$tmpfile" ; then
         echo "Ack.  Can't create $tmpfile."
@@ -592,10 +602,10 @@ EOF
       echo "running: $cmd"
       `$cmd`
       if test "x$norm" != "x1" ; then
-        echo "removing the tmporary code file: $tmpfile"
+        echo "removing the temporary code file: $tmpfile"
         rm -f $tmpfile
       else
-        echo "leaving the tmporary code file: $tmpfile"
+        echo "leaving the temporary code file: $tmpfile"
       fi
       if test -f $outname ; then
         echo "subagent program $outname created"

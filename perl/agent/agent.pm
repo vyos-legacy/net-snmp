@@ -87,7 +87,7 @@ use vars qw(@ISA %EXPORT_TAGS @EXPORT_OK @EXPORT $VERSION $AUTOLOAD);
 	SNMP_ERR_AUTHORIZATIONERROR
 	SNMP_ERR_NOTWRITABLE
 );
-$VERSION = '5.06011';
+$VERSION = '5.0702';
 
 sub AUTOLOAD {
     # This AUTOLOAD is used to 'autoload' constants from the constant()
@@ -97,7 +97,8 @@ sub AUTOLOAD {
     my $constname;
     ($constname = $AUTOLOAD) =~ s/.*:://;
     croak "& not defined" if $constname eq 'constant';
-    my $val = constant($constname, @_ ? $_[0] : 0);
+    my $val;
+    ($!, $val) = constant($constname);
     if ($! != 0) {
 	if ($! =~ /Invalid/ || $!{EINVAL}) {
 	    $AutoLoader::AUTOLOAD = $AUTOLOAD;
@@ -131,7 +132,6 @@ sub AUTOLOAD {
 	return if ($haveinit);
 	$haveinit = 1;
 
-	snmp_enable_stderrlog();
 	my $flags = $_[0];
 	if ($flags->{'AgentX'}) {
 	    netsnmp_ds_set_boolean(NETSNMP_DS_APPLICATION_ID, NETSNMP_DS_AGENT_ROLE, 1);
@@ -197,6 +197,12 @@ sub agent_check_and_process {
     my ($self, $blocking) = @_;
     $self->maybe_init_lib();
     __agent_check_and_process($blocking || 0);
+}
+
+sub uptime {
+    my $self = shift;
+    $self->maybe_init_lib();
+    return _uptime();
 }
 
 bootstrap NetSNMP::agent $VERSION;
@@ -384,6 +390,8 @@ functional "enough" at this point in time.
     	list of valid modes.
 
 	$mode = $request->getMode();
+
+=head2 $registration_info object functions
 
     getRootOID ()
 	Returns a NetSNMP::OID object that describes the registration

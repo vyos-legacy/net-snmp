@@ -17,6 +17,7 @@
  *  @{
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <sys/types.h>
 #include <stdio.h>
 #if HAVE_STDLIB_H
@@ -31,6 +32,9 @@
 #include <strings.h>
 #endif
 
+#if HAVE_UNISTD_H
+#include <unistd.h>
+#endif
 #if HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
@@ -48,6 +52,11 @@
 
 #include <net-snmp/library/callback.h>
 #include <net-snmp/library/snmp_api.h>
+
+netsnmp_feature_child_of(callbacks_all, libnetsnmp)
+
+netsnmp_feature_child_of(callback_count, callbacks_all)
+netsnmp_feature_child_of(callback_list, callbacks_all)
 
 /*
  * the inline callback methods use major/minor to index into arrays.
@@ -211,7 +220,9 @@ init_callbacks(void)
  * @param new_callback is the callback function that is registered.
  *
  * @param arg when not NULL is a void pointer used whenever new_callback 
- *	function is exercised.
+ *	function is exercised. Ownership is transferred to the twodimensional
+ *      thecallbacks[][] array. The function clear_callback() will deallocate
+ *      the memory pointed at by calling free().
  *
  * @return 
  *	Returns SNMPERR_GENERR if major is >= MAX_CALLBACK_IDS or minor is >=
@@ -231,6 +242,20 @@ snmp_register_callback(int major, int minor, SNMPCallback * new_callback,
                                       NETSNMP_CALLBACK_DEFAULT_PRIORITY);
 }
 
+/**
+ * Register a callback function.
+ *
+ * @param major        Major callback event type.
+ * @param minor        Minor callback event type.
+ * @param new_callback Callback function being registered.
+ * @param arg          Argument that will be passed to the callback function.
+ * @param priority     Handler invocation priority. When multiple handlers have
+ *   been registered for the same (major, minor) callback event type, handlers
+ *   with the numerically lowest priority will be invoked first. Handlers with
+ *   identical priority are invoked in the order they have been registered.
+ *
+ * @see snmp_register_callback
+ */
 int
 netsnmp_register_callback(int major, int minor, SNMPCallback * new_callback,
                           void *arg, int priority)
@@ -348,6 +373,7 @@ snmp_call_callbacks(int major, int minor, void *caller_arg)
     return SNMPERR_SUCCESS;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_CALLBACK_COUNT
 int
 snmp_count_callbacks(int major, int minor)
 {
@@ -367,6 +393,7 @@ snmp_count_callbacks(int major, int minor)
 
     return count;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_CALLBACK_COUNT */
 
 int
 snmp_callback_available(int major, int minor)
@@ -545,6 +572,7 @@ clear_callback(void)
     }
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_CALLBACK_LIST
 struct snmp_gen_callback *
 snmp_callback_list(int major, int minor)
 {
@@ -553,4 +581,5 @@ snmp_callback_list(int major, int minor)
 
     return (thecallbacks[major][minor]);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_CALLBACK_LIST */
 /**  @} */

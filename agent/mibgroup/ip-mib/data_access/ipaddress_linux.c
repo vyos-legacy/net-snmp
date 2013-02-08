@@ -1,9 +1,10 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: ipaddress_linux.c 19548 2010-10-25 08:06:37Z bvassche $
+ * $Id$
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include "mibII/mibII_common.h"
 
@@ -17,6 +18,15 @@
 
 #include <errno.h>
 #include <sys/ioctl.h>
+
+netsnmp_feature_require(prefix_info)
+netsnmp_feature_require(find_prefix_info)
+
+netsnmp_feature_child_of(ipaddress_arch_entry_copy, ipaddress_common)
+
+#ifdef NETSNMP_FEATURE_REQUIRE_IPADDRESS_ARCH_ENTRY_COPY
+netsnmp_feature_require(ipaddress_ioctl_entry_copy)
+#endif /* NETSNMP_FEATURE_REQUIRE_IPADDRESS_ARCH_ENTRY_COPY */
 
 #if defined (NETSNMP_ENABLE_IPV6)
 #include <linux/types.h>
@@ -34,7 +44,7 @@
 #ifdef SUPPORT_PREFIX_FLAGS
 extern prefix_cbx *prefix_head_list;
 #endif
-static int _load_v6(netsnmp_container *container, int idx_offset);
+int _load_v6(netsnmp_container *container, int idx_offset);
 #ifdef HAVE_LINUX_RTNETLINK_H
 int
 netsnmp_access_ipaddress_extra_prefix_info(int index,
@@ -83,6 +93,7 @@ netsnmp_arch_ipaddress_entry_cleanup(netsnmp_ipaddress_entry *entry)
      */
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_IPADDRESS_ARCH_ENTRY_COPY
 /*
  * copy arch specific storage
  */
@@ -106,6 +117,7 @@ netsnmp_arch_ipaddress_entry_copy(netsnmp_ipaddress_entry *lhs,
 
     return rc;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_IPADDRESS_ARCH_ENTRY_COPY */
 
 /*
  * create a new entry
@@ -116,12 +128,14 @@ netsnmp_arch_ipaddress_create(netsnmp_ipaddress_entry *entry)
     if (NULL == entry)
         return -1;
 
-    if (4 != entry->ia_address_len) {
-        DEBUGMSGT(("access:ipaddress:create", "only ipv4 supported\n"));
+    if (4 == entry->ia_address_len) {
+        return _netsnmp_ioctl_ipaddress_set_v4(entry);
+    } else if (16 == entry->ia_address_len) {
+        return _netsnmp_ioctl_ipaddress_set_v6(entry);
+    } else {
+        DEBUGMSGT(("access:ipaddress:create", "wrong length of IP address\n"));
         return -2;
     }
-
-    return _netsnmp_ioctl_ipaddress_set_v4(entry);
 }
 
 /*
@@ -133,12 +147,14 @@ netsnmp_arch_ipaddress_delete(netsnmp_ipaddress_entry *entry)
     if (NULL == entry)
         return -1;
 
-    if (4 != entry->ia_address_len) {
+    if (4 == entry->ia_address_len) {
+        return _netsnmp_ioctl_ipaddress_delete_v4(entry);
+    } else if (16 == entry->ia_address_len) {
+        return _netsnmp_ioctl_ipaddress_delete_v6(entry);
+    } else {
         DEBUGMSGT(("access:ipaddress:create", "only ipv4 supported\n"));
         return -2;
     }
-
-    return _netsnmp_ioctl_ipaddress_delete_v4(entry);
 }
 
 /**
@@ -193,7 +209,7 @@ netsnmp_arch_ipaddress_container_load(netsnmp_container *container,
 #if defined (NETSNMP_ENABLE_IPV6)
 /**
  */
-static int
+int
 _load_v6(netsnmp_container *container, int idx_offset)
 {
 #ifndef HAVE_LINUX_RTNETLINK_H
@@ -208,28 +224,17 @@ _load_v6(netsnmp_container *container, int idx_offset)
     u_char          *buf;
     int             if_index, pfx_len, scope, flags, rc = 0;
     size_t          in_len, out_len;
-    prefix_cbx      prefix_val;
     netsnmp_ipaddress_entry *entry;
     _ioctl_extras           *extras;
-    static int      log_open_err = 1;
     struct address_flag_info addr_info;
     
     netsnmp_assert(NULL != container);
 
 #define PROCFILE "/proc/net/if_inet6"
     if (!(in = fopen(PROCFILE, "r"))) {
-        if (1 == log_open_err) {
-            snmp_log(LOG_ERR,"could not open " PROCFILE "\n");
-            log_open_err = 0;
-        }
+        DEBUGMSGTL(("access:ipaddress:container","could not open " PROCFILE "\n"));
         return -2;
     }
-    /*
-     * if we hadn't been able to open file and turned of err logging,
-     * turn it back on now that we opened the file.
-     */
-    if (0 == log_open_err)
-        log_open_err = 1;
 
     /*
      * address index prefix_len scope status if_name
@@ -371,6 +376,8 @@ _load_v6(netsnmp_container *container, int idx_offset)
         entry->ia_valid_lifetime = 0;
 #endif
 #ifdef SUPPORT_PREFIX_FLAGS
+        {
+        prefix_cbx      prefix_val;
         memset(&prefix_val, 0, sizeof(prefix_cbx));
         if(net_snmp_find_prefix_info(&prefix_head_list, addr, &prefix_val) < 0) {
            DEBUGMSGTL(("access:ipaddress:container", "unable to find info\n"));
@@ -380,7 +387,8 @@ _load_v6(netsnmp_container *container, int idx_offset)
         } else {
            entry->ia_onlink_flag = prefix_val.ipAddressPrefixOnLinkFlag; 
            entry->ia_autonomous_flag = prefix_val.ipAddressPrefixAutonomousFlag;
-        }  
+        }
+        }
 #else
         entry->ia_onlink_flag = 1;  /*Set by default as true*/
         entry->ia_autonomous_flag = 2; /*Set by default as false*/

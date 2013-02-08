@@ -70,7 +70,7 @@
 #endif
 #endif
 
-#if HAVE_DMALLOC_H
+#ifdef HAVE_DMALLOC_H
 #define DMALLOC_FUNC_CHECK
 #endif
 
@@ -212,6 +212,7 @@
 #define NETSNMP_HPUX11ID 14
 #define NETSNMP_AIXID 15
 #define NETSNMP_MACOSXID 16
+#define NETSNMP_DRAGONFLYID 17
 #define NETSNMP_UNKNOWNID 255
 
 #ifdef hpux9
@@ -241,6 +242,9 @@
 #if defined(__FreeBSD__)
 #define NETSNMP_OSTYPE NETSNMP_FREEBSDID
 #endif
+#if defined(__DragonFly__)
+#define NETSNMP_OSTYPE NETSNMP_DRAGONFLYID
+#endif
 #if defined(irix6) || defined(irix5)
 #define NETSNMP_OSTYPE NETSNMP_IRIXID
 #endif
@@ -250,7 +254,7 @@
 #if defined(bsdi2) || defined(bsdi3) || defined(bsdi4)
 #define NETSNMP_OSTYPE NETSNMP_BSDIID
 #endif
-#if defined(openbsd2) || defined(openbsd3) || defined(openbsd4)
+#if defined(openbsd)
 #define NETSNMP_OSTYPE NETSNMP_OPENBSDID
 #endif
 #ifdef WIN32
@@ -313,7 +317,7 @@
 
 #define NETSNMP_EXCACHETIME 30
 #define NETSNMP_CACHEFILE ".snmp-exec-cache"
-#define NETSNMP_MAXCACHESIZE (200*80)   /* roughly 200 lines max */
+#define NETSNMP_MAXCACHESIZE (1500*80)   /* roughly 1500 lines max */
 
 /* misc defaults */
 
@@ -340,9 +344,6 @@
 
 /* UNdefine to allow specifying zero-length community string */
 /* #define NETSNMP_NO_ZEROLENGTH_COMMUNITY 1 */
-
-/* define to exit the agent on a bad kernel read */
-/* #define NETSNMP_EXIT_ON_BAD_KLREAD  */
 
 /* Number of community strings to store */
 #define NETSNMP_NUM_COMMUNITIES	5
@@ -493,11 +494,8 @@
    and are not using the UC-Davis SNMP library. */
 #define UCD_SNMP_LIBRARY 1
 
-/* add in recent CMU library extensions (not complete) */
-#undef CMU_COMPATIBLE
-
 /* final conclusion on nlist usage */
-#if defined(HAVE_NLIST) && defined(HAVE_STRUCT_NLIST_N_VALUE) && !defined(NETSNMP_DONT_USE_NLIST) && !defined(NETSNMP_NO_KMEM_USAGE)
+#if defined(HAVE_NLIST) && defined(HAVE_STRUCT_NLIST_N_VALUE) && !defined(NETSNMP_DONT_USE_NLIST) && defined(HAVE_KMEM) && !defined(NETSNMP_NO_KMEM_USAGE)
 #define NETSNMP_CAN_USE_NLIST
 #endif
 
@@ -701,10 +699,6 @@
 
 #ifdef NETSNMP_NO_ZEROLENGTH_COMMUNITY
 # define NO_ZEROLENGTH_COMMUNITY NETSNMP_NO_ZEROLENGTH_COMMUNITY
-#endif
-
-#ifdef NETSNMP_EXIT_ON_BAD_KLREAD
-# define EXIT_ON_BAD_KLREAD NETSNMP_EXIT_ON_BAD_KLREAD
 #endif
 
 #define LASTFIELD NETSNMP_LASTFIELD

@@ -1,8 +1,18 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 #include "utilities/iquery.h"
+
+netsnmp_feature_child_of(iquery_all, libnetsnmpmibs)
+netsnmp_feature_child_of(iquery, iquery_all)
+netsnmp_feature_child_of(iquery_community_session, iquery_all)
+netsnmp_feature_child_of(iquery_pdu_session, iquery_all)
+
+netsnmp_feature_require(query_set_default_session)
+
+#ifndef NETSNMP_FEATURE_REMOVE_IQUERY
 
 void
 netsnmp_parse_iquerySecLevel(const char *token, char *line)
@@ -120,6 +130,7 @@ void init_iquery(void){
      *
      **************************/
 
+#ifndef NETSNMP_FEATURE_REMOVE_IQUERY_PDU_SESSION
 netsnmp_session *netsnmp_iquery_pdu_session(netsnmp_pdu* pdu) {
     if (!pdu)
        return NULL;
@@ -138,6 +149,7 @@ netsnmp_session *netsnmp_iquery_pdu_session(netsnmp_pdu* pdu) {
                            pdu->securityEngineID,
                            pdu->securityEngineIDLen);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_IQUERY_PDU_SESSION */
 
 netsnmp_session *netsnmp_iquery_user_session(char* secName){
     u_char eID[SNMP_MAXBUF_SMALL];
@@ -149,6 +161,7 @@ netsnmp_session *netsnmp_iquery_user_session(char* secName){
                            SNMP_SEC_LEVEL_AUTHNOPRIV, eID, elen);
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_IQUERY_COMMUNITY_SESSION
 netsnmp_session *netsnmp_iquery_community_session( char* community, int version ) { 
     u_char eID[SNMP_MAXBUF_SMALL];
     size_t elen = snmpv3_get_engineID(eID, sizeof(eID));
@@ -156,6 +169,7 @@ netsnmp_session *netsnmp_iquery_community_session( char* community, int version 
     return netsnmp_iquery_session( community, version, version+1,
                            SNMP_SEC_LEVEL_NOAUTH, eID, elen);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_IQUERY_COMMUNITY_SESSION */
 
 netsnmp_session *netsnmp_iquery_session(char* secName,   int   version,
                                         int   secModel,  int   secLevel,
@@ -191,4 +205,8 @@ netsnmp_session *netsnmp_iquery_session(char* secName,   int   version,
 
     return ss;
 }
+
+#else /* NETSNMP_FEATURE_REMOVE_IQUERY */
+netsnmp_feature_unused(iquery);
+#endif /* NETSNMP_FEATURE_REMOVE_IQUERY */
 

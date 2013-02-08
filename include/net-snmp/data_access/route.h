@@ -1,7 +1,7 @@
 /*
  * route data access header
  *
- * $Id: route.h 19685 2010-11-17 19:57:42Z nba $
+ * $Id$
  */
 #ifndef NETSNMP_ACCESS_ROUTE_H
 #define NETSNMP_ACCESS_ROUTE_H

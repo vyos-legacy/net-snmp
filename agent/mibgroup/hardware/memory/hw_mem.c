@@ -3,6 +3,12 @@
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/hardware/memory.h>
 
+#include <net-snmp/net-snmp-features.h>
+
+netsnmp_feature_child_of(hardware_memory, netsnmp_unused)
+
+netsnmp_feature_child_of(memory_get_cache, hardware_memory)
+
 extern NetsnmpCacheLoad netsnmp_mem_arch_load;
 
 netsnmp_memory_info *_mem_head  = NULL;
@@ -87,9 +93,11 @@ netsnmp_memory_info *netsnmp_memory_get_next_byIdx( int idx, int type ) {
 
 
 
+#ifndef NETSNMP_FEATURE_REMOVE_MEMORY_GET_CACHE
 netsnmp_cache *netsnmp_memory_get_cache( void ) {
     return _mem_cache;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_MEMORY_GET_CACHE */
 
 int netsnmp_memory_load( void ) {
      return netsnmp_cache_check_and_reload( _mem_cache );

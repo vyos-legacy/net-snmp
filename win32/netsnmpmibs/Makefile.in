@@ -20,9 +20,9 @@ ALL : "..\lib\$(OUTDIR)\$(PROGNAME).lib"
 
 CPP=cl.exe
 !IF  "$(CFG)" == "release"
-CPP_PROJ=/nologo /MD /W3 /EHsc /O2 /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /I "..\..\agent" /I "..\..\agent\mibgroup" /D "WIN32" /D "NDEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /Fo"$(INTDIR)\\" /Fd"$(INTDIR)\\" /FD /c 
+CPP_PROJ=/nologo /MD /W3 /EHsc /Zi /O2 /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /I "..\..\agent" /I "..\..\agent\mibgroup" /D "WIN32" /D "_BIND_TO_CURRENT_VCLIBS_VERSION" /D "NDEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /Fo"$(INTDIR)\\" /Fd"$(INTDIR)\\$(PROGNAME).pdb" /FD /c 
 !ELSEIF  "$(CFG)" == "debug"
-CPP_PROJ=/nologo /MDd /W3 /Gm /EHsc /Zi /Od /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /I "..\..\agent" /I "..\..\agent\mibgroup" /D "WIN32" /D "_DEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /Fo"$(INTDIR)\\" /Fd"$(INTDIR)\\" /FD /c 
+CPP_PROJ=/nologo /MDd /W3 /Gm /EHsc /Zi /Od /I "." /I ".." /I "..\..\snmplib" /I "..\.." /I "..\..\include" /I "..\..\agent" /I "..\..\agent\mibgroup" /D "WIN32" /D "_BIND_TO_CURRENT_VCLIBS_VERSION" /D "_DEBUG" /D "_CONSOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_WARNINGS" /D "_MBCS" /Fo"$(INTDIR)\\" /Fd"$(INTDIR)\\$(PROGNAME).pdb" /FD /c 
 !ENDIF
 
 .c{$(INTDIR)}.obj::
@@ -85,13 +85,13 @@ LIB32_OBJS1= \
 	"$(INTDIR)\mteTriggerThresholdTable.obj" \
 	"$(INTDIR)\example.obj" \
 	"$(INTDIR)\ucdDemoPublic.obj" \
-	"$(INTDIR)\dlmod.obj" \
 	"$(INTDIR)\errormib.obj" \
 	"$(INTDIR)\extensible.obj" \
 	"$(INTDIR)\file.obj"
 LIB32_OBJS2= \
 	"$(INTDIR)\loadave.obj" \
 	"$(INTDIR)\pass.obj" \
+	"$(INTDIR)\pass_common.obj" \
 	"$(INTDIR)\pass_persist.obj" \
 	"$(INTDIR)\proc.obj" \
 	"$(INTDIR)\proxy.obj" \
@@ -314,12 +314,6 @@ SOURCE=..\..\agent\mibgroup\examples\ucdDemoPublic.c
 	$(CPP) $(CPP_PROJ) $(SOURCE)
 
 
-SOURCE="..\..\agent\mibgroup\ucd-snmp\dlmod.c"
-
-"$(INTDIR)\dlmod.obj" : $(SOURCE) "$(INTDIR)"
-	$(CPP) $(CPP_PROJ) $(SOURCE)
-
-
 SOURCE="..\..\agent\mibgroup\ucd-snmp\errormib.c"
 
 "$(INTDIR)\errormib.obj" : $(SOURCE) "$(INTDIR)"
@@ -347,6 +341,12 @@ SOURCE="..\..\agent\mibgroup\ucd-snmp\loadave.c"
 SOURCE="..\..\agent\mibgroup\ucd-snmp\pass.c"
 
 "$(INTDIR)\pass.obj" : $(SOURCE) "$(INTDIR)"
+	$(CPP) $(CPP_PROJ) $(SOURCE)
+
+
+SOURCE="..\..\agent\mibgroup\ucd-snmp\pass_common.c"
+
+"$(INTDIR)\pass_common.obj" : $(SOURCE) "$(INTDIR)"
 	$(CPP) $(CPP_PROJ) $(SOURCE)
 
 

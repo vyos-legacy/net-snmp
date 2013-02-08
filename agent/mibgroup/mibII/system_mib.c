@@ -14,6 +14,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #if HAVE_STDLIB_H
 #include <stdlib.h>
@@ -43,6 +44,8 @@
 #include "util_funcs.h"
 #include "system_mib.h"
 #include "updates.h"
+
+netsnmp_feature_require(watcher_read_only_int_scalar)
 
         /*********************
 	 *
@@ -81,29 +84,23 @@ static void     windowsOSVersionString(char [], size_t);
 	 *********************/
 
 static void
-system_parse_config_sysdescr(const char *token, char *cptr)
+system_parse_config_string2(const char *token, char *cptr,
+                            char* value, size_t size)
 {
-    if (strlen(cptr) >= sizeof(version_descr)) {
-	netsnmp_config_error("sysdescr token too long (must be < %lu):\n\t%s",
-			     (unsigned long)sizeof(version_descr), cptr);
-    } else if (strcmp(cptr, "\"\"") == 0) {
-        version_descr[0] = '\0';
+    if (strlen(cptr) < size) {
+        strcpy(value, cptr);
     } else {
-        strcpy(version_descr, cptr);
+        netsnmp_config_error("%s token too long (must be < %lu):\n\t%s",
+                             token, (unsigned long)size, cptr);
     }
 }
 
-NETSNMP_STATIC_INLINE void
+static void
 system_parse_config_string(const char *token, char *cptr,
                            const char *name, char* value, size_t size,
                            int* guard)
 {
-    if (strlen(cptr) >= size) {
-	netsnmp_config_error("%s token too long (must be < %lu):\n\t%s",
-			     token, (unsigned long)size, cptr);
-    }
-
-    if (*token == 'p' && strcasecmp(token + 1, name) == 0) {
+    if (*token == 'p') {
         if (*guard < 0) {
             /*
              * This is bogus (and shouldn't happen anyway) -- the value is
@@ -113,7 +110,7 @@ system_parse_config_string(const char *token, char *cptr,
                      "ignoring attempted override of read-only %s.0\n", name);
             return;
         } else {
-            ++(*guard);
+            *guard = 1;
         }
     } else {
         if (*guard > 0) {
@@ -130,11 +127,14 @@ system_parse_config_string(const char *token, char *cptr,
         *guard = -1;
     }
 
-    if (strcmp(cptr, "\"\"") == 0) {
-        *value = '\0';
-    } else if (strlen(cptr) < size) {
-        strcpy(value, cptr);
-    }
+    system_parse_config_string2(token, cptr, value, size);
+}
+
+static void
+system_parse_config_sysdescr(const char *token, char *cptr)
+{
+    system_parse_config_string2(token, cptr, version_descr,
+                                sizeof(version_descr));
 }
 
 static void
@@ -175,7 +175,8 @@ system_parse_config_sysObjectID(const char *token, char *cptr)
         sysObjectIDByteLength = version_sysoid_len  * sizeof(oid);
         memcpy(sysObjectID, version_sysoid, sysObjectIDByteLength);
     } else
-        sysObjectIDByteLength = sysObjectIDLength * sizeof(oid);
+
+		sysObjectIDByteLength = sysObjectIDLength * sizeof(oid);
 }
 
 
@@ -261,9 +262,9 @@ init_system_mib(void)
     extmp.type = EXECPROC;
     extmp.next = NULL;
     exec_command(&extmp);
-    strncpy(version_descr, extmp.output, sizeof(version_descr));
-    version_descr[sizeof(version_descr) - 1] = 0;
-    version_descr[strlen(version_descr) - 1] = 0;       /* chomp new line */
+    strlcpy(version_descr, extmp.output, sizeof(version_descr));
+    if (strlen(version_descr) >= 1)
+        version_descr[strlen(version_descr) - 1] = 0; /* chomp new line */
 #else
 #if (defined (WIN32) && defined (HAVE_WIN32_PLATFORM_SDK)) || defined (mingw32)
     windowsOSVersionString(version_descr, sizeof(version_descr));
@@ -277,7 +278,7 @@ init_system_mib(void)
     gethostname(sysName, sizeof(sysName));
 #else
 #ifdef HAVE_UNAME
-    strncpy(sysName, utsName.nodename, sizeof(sysName));
+    strlcpy(sysName, utsName.nodename, sizeof(sysName));
 #else
 #if defined (HAVE_EXECV) && !defined (mingw32)
     sprintf(extmp.command, "%s -n", UNAMEPROG);
@@ -287,8 +288,9 @@ init_system_mib(void)
     extmp.type = EXECPROC;
     extmp.next = NULL;
     exec_command(&extmp);
-    strncpy(sysName, extmp.output, sizeof(sysName));
-    sysName[strlen(sysName) - 1] = 0;   /* chomp new line */
+    strlcpy(sysName, extmp.output, sizeof(sysName));
+    if (strlen(sysName) >= 1)
+        sysName[strlen(sysName) - 1] = 0; /* chomp new line */
 #else
     strcpy(sysName, "unknown");
 #endif                          /* HAVE_EXECV */
@@ -352,17 +354,28 @@ init_system_mib(void)
     {
         const oid sysContact_oid[] = { 1, 3, 6, 1, 2, 1, 1, 4 };
         static netsnmp_watcher_info sysContact_winfo;
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+        netsnmp_register_watched_scalar(
+            netsnmp_create_update_handler_registration(
+                "mibII/sysContact", sysContact_oid, OID_LENGTH(sysContact_oid), 
+                HANDLER_CAN_RWRITE, &sysContactSet),
+            netsnmp_init_watcher_info(
+                &sysContact_winfo, sysContact, SYS_STRING_LEN - 1,
+                ASN_OCTET_STR, WATCHER_MAX_SIZE | WATCHER_SIZE_STRLEN));
+#else  /* !NETSNMP_NO_WRITE_SUPPORT */
         netsnmp_register_watched_scalar(
             netsnmp_create_update_handler_registration(
                 "mibII/sysContact", sysContact_oid, OID_LENGTH(sysContact_oid),
-                HANDLER_CAN_RWRITE, &sysContactSet),
+                HANDLER_CAN_RONLY, &sysContactSet),
             netsnmp_init_watcher_info(
-		&sysContact_winfo, sysContact, SYS_STRING_LEN - 1,
-		ASN_OCTET_STR, WATCHER_MAX_SIZE | WATCHER_SIZE_STRLEN));
+                &sysContact_winfo, sysContact, SYS_STRING_LEN - 1,
+                ASN_OCTET_STR, WATCHER_MAX_SIZE | WATCHER_SIZE_STRLEN));
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     }
     {
         const oid sysName_oid[] = { 1, 3, 6, 1, 2, 1, 1, 5 };
         static netsnmp_watcher_info sysName_winfo;
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         netsnmp_register_watched_scalar(
             netsnmp_create_update_handler_registration(
                 "mibII/sysName", sysName_oid, OID_LENGTH(sysName_oid),
@@ -370,10 +383,20 @@ init_system_mib(void)
             netsnmp_init_watcher_info(
                 &sysName_winfo, sysName, SYS_STRING_LEN - 1, ASN_OCTET_STR,
                 WATCHER_MAX_SIZE | WATCHER_SIZE_STRLEN));
+#else  /* !NETSNMP_NO_WRITE_SUPPORT */
+        netsnmp_register_watched_scalar(
+            netsnmp_create_update_handler_registration(
+                "mibII/sysName", sysName_oid, OID_LENGTH(sysName_oid),
+                HANDLER_CAN_RONLY, &sysNameSet),
+            netsnmp_init_watcher_info(
+                &sysName_winfo, sysName, SYS_STRING_LEN - 1, ASN_OCTET_STR,
+                WATCHER_MAX_SIZE | WATCHER_SIZE_STRLEN));
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     }
     {
         const oid sysLocation_oid[] = { 1, 3, 6, 1, 2, 1, 1, 6 };
         static netsnmp_watcher_info sysLocation_winfo;
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         netsnmp_register_watched_scalar(
             netsnmp_create_update_handler_registration(
                 "mibII/sysLocation", sysLocation_oid,
@@ -382,6 +405,16 @@ init_system_mib(void)
             netsnmp_init_watcher_info(
 		&sysLocation_winfo, sysLocation, SYS_STRING_LEN - 1,
 		ASN_OCTET_STR, WATCHER_MAX_SIZE | WATCHER_SIZE_STRLEN));
+#else  /* !NETSNMP_NO_WRITE_SUPPORT */
+        netsnmp_register_watched_scalar(
+            netsnmp_create_update_handler_registration(
+                "mibII/sysLocation", sysLocation_oid,
+                OID_LENGTH(sysLocation_oid),
+                HANDLER_CAN_RONLY, &sysLocationSet),
+            netsnmp_init_watcher_info(
+		&sysLocation_winfo, sysLocation, SYS_STRING_LEN - 1,
+		ASN_OCTET_STR, WATCHER_MAX_SIZE | WATCHER_SIZE_STRLEN));
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     }
     {
         const oid sysServices_oid[] = { 1, 3, 6, 1, 2, 1, 1, 7 };

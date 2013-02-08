@@ -1,7 +1,7 @@
 /*
  * object_monitor.c
  *
- * $Id: object_monitor.c 14169 2006-01-25 16:28:12Z dts12 $
+ * $Id$
  *
  * functions and data structures for cooperating code to monitor objects.
  *

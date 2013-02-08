@@ -4,6 +4,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #if HAVE_SYS_PARAM_H
 #include <sys/param.h>
@@ -53,7 +54,8 @@
 #include <rpm/rpmmacro.h>
 #endif
 
-#ifdef HAVE_RPM_RPMDB_H
+#ifdef HAVE_RPM_RPMTS_H
+#include <rpm/rpmts.h>
 #include <rpm/rpmdb.h>
 #endif
 #endif
@@ -69,6 +71,8 @@
 #include <net-snmp/utilities.h>
 
 #define HRSWINST_MONOTONICALLY_INCREASING
+
+netsnmp_feature_require(date_n_time)
 
         /*********************
 	 *
@@ -113,7 +117,7 @@ typedef struct {
     int             swi_maxrec; /* no. of allocations */
     int             swi_nrec;   /* no. of valid offsets */
     int            *swi_recs;   /* db record offsets */
-    rpmdb           swi_rpmdb;
+    rpmts           swi_rpmts;
     Header          swi_h;
     int             swi_prevx;
 #else
@@ -193,6 +197,9 @@ oid             hrswinst_variables_oid[] = { 1, 3, 6, 1, 2, 1, 25, 6 };
 #ifdef freebsd2
 #define	_PATH_HRSW_directory	"/var/db/pkg"
 #endif
+#if defined(linux) && !defined(HAVE_LIBRPM)
+#define	_PATH_HRSW_directory	"/var/cache/hrmib"
+#endif
 
 void
 init_hr_swinst(void)
@@ -220,8 +227,7 @@ init_hr_swinst(void)
         rpmReadConfigFiles(NULL, NULL);
         swi->swi_dbpath = rpmGetPath("%{_dbpath}", NULL);
 #else
-        rpmReadConfigFiles(NULL, NULL, NULL, 0);
-        swi->swi_dbpath = rpmGetVar(RPMVAR_DBPATH);
+        swi->swi_dbpath = "/var/lib/rpm";  /* Most likely */
 #endif
         if (swi->swi_directory != NULL)
             free(swi->swi_directory);
@@ -399,10 +405,8 @@ var_hrswinst(struct variable * vp,
     case HRSWINST_UPDATE:
         string[0] = '\0';
 
-        if (swi->swi_directory != NULL) {
-            strncpy(string, swi->swi_directory, sizeof(string));
-            string[ sizeof(string)-1 ] = 0;
-        }
+        if (swi->swi_directory != NULL)
+            strlcpy(string, swi->swi_directory, sizeof(string));
 
         if (*string && (stat(string, &stat_buf) != -1)) {
             if (stat_buf.st_mtime > starttime.tv_sec)
@@ -430,7 +434,7 @@ var_hrswinst(struct variable * vp,
 #ifdef HAVE_PKGINFO
             char *pver;
 # endif
-            strncpy(string, swi->swi_name, sizeof(string) - 1);
+            strlcpy(string, swi->swi_name, sizeof(string));
 
 /* If we are on a solaris machine, the package names do not include versioning info,
  * so we must add it manually
@@ -567,17 +571,11 @@ Check_HRSW_cache(void *xxx)
         int             ix = 0;
         int             offset;
 
-#if defined(RPMDBI_PACKAGES)
         rpmdbMatchIterator mi = NULL;
         Header          h;
-        mi = rpmdbInitIterator(swi->swi_rpmdb, RPMDBI_PACKAGES, NULL, 0);
+        mi = rpmtsInitIterator(swi->swi_rpmts, RPMDBI_PACKAGES, NULL, 0);
         while ((h = rpmdbNextIterator(mi)) != NULL) {
             offset = rpmdbGetIteratorOffset(mi);
-#else
-        for (offset = rpmdbFirstRecNum(swi->swi_rpmdb);
-             offset != 0;
-             offset = rpmdbNextRecNum(swi->swi_rpmdb, offset)) {
-#endif
 
             if (ix >= swi->swi_maxrec) {
                 swi->swi_maxrec += 256;
@@ -587,13 +585,8 @@ Check_HRSW_cache(void *xxx)
                                       swi->swi_maxrec * sizeof(int));
             }
             swi->swi_recs[ix++] = offset;
-
-#if !defined(RPMDBI_PACKAGES)
-        }
-#else
         }
         rpmdbFreeIterator(mi);
-#endif
 
         swi->swi_nrec = ix;
     }
@@ -607,10 +600,10 @@ Init_HR_SWInst(void)
     swi->swi_index = 0;
 
 #ifdef HAVE_LIBRPM
-    if (swi->swi_rpmdb != NULL)
+    if (swi->swi_rpmts != NULL)
         return;
-    if (rpmdbOpen("", &swi->swi_rpmdb, O_RDONLY, 0644) != 0)
-        swi->swi_index = -1;
+    swi->swi_rpmts = rpmtsCreate();
+    rpmtsSetVSFlags( swi->swi_rpmts, (_RPMVSF_NOSIGNATURES|_RPMVSF_NODIGESTS));
     Check_HRSW_cache(swi);
 #else
     if (swi->swi_directory != NULL) {
@@ -673,18 +666,14 @@ Save_HR_SW_info(int ix)
 
         offset = swi->swi_recs[ix - 1];
 
-#if defined(RPMDBI_PACKAGES)
         {
             rpmdbMatchIterator mi;
-            mi = rpmdbInitIterator(swi->swi_rpmdb, RPMDBI_PACKAGES,
+            mi = rpmtsInitIterator(swi->swi_rpmts, RPMDBI_PACKAGES,
                                    &offset, sizeof(offset));
             if ((h = rpmdbNextIterator(mi)) != NULL)
                 h = headerLink(h);
             rpmdbFreeIterator(mi);
         }
-#else
-        h = rpmdbGetRecord(swi->swi_rpmdb, offset);
-#endif
 
         if (h == NULL) {
             DEBUGMSGTL(("host/hr_swinst",
@@ -737,8 +726,8 @@ End_HR_SWInst(void)
     SWI_t          *swi = &_myswi;      /* XXX static for now */
 
 #ifdef HAVE_LIBRPM
-    rpmdbClose(swi->swi_rpmdb); /* or only on finishing ? */
-    swi->swi_rpmdb = NULL;
+    rpmtsFree(swi->swi_rpmts); /* or only on finishing ? */
+    swi->swi_rpmts = NULL;
 #else
     if (swi->swi_dp != NULL)
         closedir(swi->swi_dp);

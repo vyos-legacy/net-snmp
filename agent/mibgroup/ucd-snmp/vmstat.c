@@ -20,7 +20,7 @@ init_vmstat(void)
         netsnmp_create_handler_registration("vmstat", vmstat_handler,
                              vmstat_oid, OID_LENGTH(vmstat_oid),
                              HANDLER_CAN_RONLY),
-        MIBINDEX, RAWSWAPOUT);
+        MIBINDEX, CPURAWGUESTNICE);
 }
 
 
@@ -31,13 +31,14 @@ vmstat_handler(netsnmp_mib_handler          *handler,
                netsnmp_request_info         *requests)
 {
     oid  obj;
-    long value = 0;
+    unsigned long long value = 0;
     char cp[300];
     netsnmp_cpu_info *info = netsnmp_cpu_get_byIdx( -1, 0 );
 
     switch (reqinfo->mode) {
     case MODE_GET:
         obj = requests->requestvb->name[ requests->requestvb->name_length-2 ];
+
         switch (obj) {
         case MIBINDEX:             /* dummy value */
              snmp_set_var_typed_integer(requests->requestvb, ASN_INTEGER, 1);
@@ -112,6 +113,18 @@ vmstat_handler(netsnmp_mib_handler          *handler,
              snmp_set_var_typed_integer(requests->requestvb, ASN_COUNTER,
                                         info->sirq_ticks & 0xffffffff);
              break;
+        case CPURAWSTEAL:
+             snmp_set_var_typed_integer(requests->requestvb, ASN_COUNTER,
+                                        info->steal_ticks & 0xffffffff);
+             break;
+        case CPURAWGUEST:
+             snmp_set_var_typed_integer(requests->requestvb, ASN_COUNTER,
+                                        info->guest_ticks & 0xffffffff);
+             break;
+        case CPURAWGUESTNICE:
+             snmp_set_var_typed_integer(requests->requestvb, ASN_COUNTER,
+                                        info->guestnice_ticks & 0xffffffff);
+             break;
 
         /*
          *  'Cooked' CPU statistics
@@ -129,26 +142,35 @@ vmstat_handler(netsnmp_mib_handler          *handler,
         case CPUUSER:
              if ( info->history && info->history[0].total_hist ) {
                  value  = (info->user_ticks  - info->history[0].user_hist)*100;
-                 value /= (info->total_ticks - info->history[0].total_hist);
+                 if ( info->total_ticks - info->history[0].total_hist)
+                     value /= (info->total_ticks - info->history[0].total_hist);
+                 else
+                     value = 0;    /* or skip this entry */
                  snmp_set_var_typed_integer(requests->requestvb,
-                                            ASN_INTEGER, value);
+                                            ASN_INTEGER, value & 0x7fffffff);
              }
              break;
         case CPUSYSTEM:
              if ( info->history && info->history[0].total_hist ) {
                      /* or sys2_ticks ??? */
                  value  = (info->sys_ticks  - info->history[0].sys_hist)*100;
-                 value /= (info->total_ticks - info->history[0].total_hist);
+                 if ( info->total_ticks - info->history[0].total_hist)
+                     value /= (info->total_ticks - info->history[0].total_hist);
+                 else
+                     value = 0;    /* or skip this entry */
                  snmp_set_var_typed_integer(requests->requestvb,
-                                            ASN_INTEGER, value);
+                                            ASN_INTEGER, value & 0x7fffffff);
              }
              break;
         case CPUIDLE:
              if ( info->history && info->history[0].total_hist ) {
                  value  = (info->idle_ticks  - info->history[0].idle_hist)*100;
-                 value /= (info->total_ticks - info->history[0].total_hist);
+                 if ( info->total_ticks - info->history[0].total_hist)
+                     value /= (info->total_ticks - info->history[0].total_hist);
+                 else
+                     value = 0;    /* or skip this entry */
                  snmp_set_var_typed_integer(requests->requestvb,
-                                            ASN_INTEGER, value);
+                                            ASN_INTEGER, value & 0x7fffffff);
              }
              break;
 		
@@ -168,14 +190,14 @@ vmstat_handler(netsnmp_mib_handler          *handler,
              if ( info->history && info->history[0].total_hist ) {
                  value  = (info->nInterrupts - info->history[0].intr_hist)/60;
                  snmp_set_var_typed_integer(requests->requestvb,
-                                            ASN_INTEGER, value);
+                                            ASN_INTEGER, value & 0x7fffffff);
              }
              break;
         case SYSCONTEXT:
              if ( info->history && info->history[0].total_hist ) {
                  value  = (info->nCtxSwitches - info->history[0].ctx_hist)/60;
                  snmp_set_var_typed_integer(requests->requestvb,
-                                            ASN_INTEGER, value);
+                                            ASN_INTEGER, value & 0x7fffffff);
              }
              break;
 
@@ -195,7 +217,7 @@ vmstat_handler(netsnmp_mib_handler          *handler,
                  value  = (info->swapIn - info->history[0].swpi_hist)/60;
                  /* ??? value *= PAGE_SIZE;  */
                  snmp_set_var_typed_integer(requests->requestvb,
-                                            ASN_INTEGER, value);
+                                            ASN_INTEGER, value & 0x7fffffff);
              }
              break;
         case SWAPOUT:
@@ -203,7 +225,7 @@ vmstat_handler(netsnmp_mib_handler          *handler,
                  value  = (info->swapOut - info->history[0].swpo_hist)/60;
                  /* ??? value *= PAGE_SIZE;  */
                  snmp_set_var_typed_integer(requests->requestvb,
-                                            ASN_INTEGER, value);
+                                            ASN_INTEGER, value & 0x7fffffff);
              }
              break;
 
@@ -222,14 +244,14 @@ vmstat_handler(netsnmp_mib_handler          *handler,
              if ( info->history && info->history[0].total_hist ) {
                  value  = (info->pageOut - info->history[0].pageo_hist)/60;
                  snmp_set_var_typed_integer(requests->requestvb,
-                                            ASN_INTEGER, value);
+                                            ASN_INTEGER, value & 0x7fffffff);
              }
              break;
         case IORECEIVE:
              if ( info->history && info->history[0].total_hist ) {
                  value  = (info->pageIn - info->history[0].pagei_hist)/60;
                  snmp_set_var_typed_integer(requests->requestvb,
-                                            ASN_INTEGER, value);
+                                            ASN_INTEGER, value & 0x7fffffff);
              }
              break;
 

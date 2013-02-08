@@ -1,9 +1,10 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: ipaddress_ioctl.c 19018 2010-06-16 21:34:42Z dts12 $
+ * $Id$
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include "mibII/mibII_common.h"
 
@@ -19,6 +20,8 @@
 #include <sys/ioctl.h>
 
 #include "ipaddress_ioctl.h"
+
+netsnmp_feature_child_of(ipadress_ioctl_entry_copy, ipaddress_common)
 
 static void _print_flags(short flags);
 
@@ -86,6 +89,7 @@ netsnmp_ioctl_ipaddress_entry_cleanup(netsnmp_ipaddress_entry *entry)
     netsnmp_remove_list_node(&entry->arch_data, LIST_TOKEN);
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_IPADDRESS_IOCTL_ENTRY_COPY
 /**
  * copy ioctl extras
  *
@@ -122,6 +126,7 @@ netsnmp_ioctl_ipaddress_entry_copy(netsnmp_ipaddress_entry *lhs,
 
     return rc;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_IPADDRESS_IOCTL_ENTRY_COPY */
 
 /**
  * load ipv4 address via ioctl
@@ -159,6 +164,14 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
 
         DEBUGMSGTL(("access:ipaddress:container",
                     " interface %d, %s\n", i, ifrp->ifr_name));
+
+        if (AF_INET != ifrp->ifr_addr.sa_family) {
+            DEBUGMSGTL(("access:ipaddress:container",
+                        " skipping %s; non AF_INET family %d\n",
+                        ifrp->ifr_name, ifrp->ifr_addr.sa_family));
+            continue;
+        }
+
         /*
          */
         entry = netsnmp_access_ipaddress_entry_create();
@@ -183,7 +196,6 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
         /*
          * set indexes
          */
-        netsnmp_assert(AF_INET == ifrp->ifr_addr.sa_family);
         si = (struct sockaddr_in *) &ifrp->ifr_addr;
         entry->ia_address_len = sizeof(si->sin_addr.s_addr);
         ipval = si->sin_addr.s_addr;
@@ -218,7 +230,7 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
         /* restore the interface name if we modifed it due to unaliasing
          * above
          */
-        if (entry->flags | NETSNMP_ACCESS_IPADDRESS_ISALIAS) {
+        if (entry->flags & NETSNMP_ACCESS_IPADDRESS_ISALIAS) {
             memcpy(ifrp->ifr_name, extras->name, sizeof(extras->name));
         }
 
@@ -230,7 +242,7 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
         addr_info = netsnmp_access_other_info_get(entry->if_index, AF_INET);
         if(addr_info.bcastflg) {
            bcastentry = netsnmp_access_ipaddress_entry_create();
-           if(NULL == entry) {
+           if(NULL == bcastentry) {
               rc = -3;
               break;
            }
@@ -333,6 +345,7 @@ _netsnmp_ioctl_ipaddress_container_load_v4(netsnmp_container *container,
 
         if (CONTAINER_INSERT(container, entry) < 0) {
             DEBUGMSGTL(("access:ipaddress:container","error with ipaddress_entry: insert into container failed.\n"));
+            NETSNMP_LOGONCE((LOG_ERR, "Duplicate IPv4 address detected, some interfaces may not be visible in IP-MIB\n"));
             netsnmp_access_ipaddress_entry_free(entry);
             continue;
         }
@@ -479,11 +492,10 @@ _netsnmp_ioctl_ipaddress_set_v4(netsnmp_ipaddress_entry * entry)
         alias_idx = _next_alias(name);
         snprintf(ifrq.ifr_name,sizeof(ifrq.ifr_name), "%s:%d",
                  name, alias_idx);
+        ifrq.ifr_name[sizeof(ifrq.ifr_name) - 1] = 0;
     }
     else
-        strncpy(ifrq.ifr_name, (char *) extras->name, sizeof(ifrq.ifr_name));
-
-    ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
+        strlcpy(ifrq.ifr_name, (char *) extras->name, sizeof(ifrq.ifr_name));
 
     sin = (struct sockaddr_in*)&ifrq.ifr_addr;
     sin->sin_family = AF_INET;
@@ -531,8 +543,7 @@ _netsnmp_ioctl_ipaddress_delete_v4(netsnmp_ipaddress_entry * entry)
 
     memset(&ifrq, 0, sizeof(ifrq));
 
-    strncpy(ifrq.ifr_name, (char *) extras->name, sizeof(ifrq.ifr_name));
-    ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
+    strlcpy(ifrq.ifr_name, (char *) extras->name, sizeof(ifrq.ifr_name));
 
     ifrq.ifr_flags = 0;
 
@@ -544,6 +555,91 @@ _netsnmp_ioctl_ipaddress_delete_v4(netsnmp_ipaddress_entry * entry)
     }
 
     return 0;
+}
+
+
+/**
+ * Add/remove IPv6 address using ioctl.
+ * @retval  0 : no error
+ * @retval -1 : bad parameter
+ * @retval -2 : couldn't create socket
+ * @retval -3 : ioctl failed
+ */
+int
+_netsnmp_ioctl_ipaddress_v6(netsnmp_ipaddress_entry * entry, int operation)
+{
+#ifdef linux
+    /*
+     * From linux/ipv6.h. It cannot be included because it collides
+     * with netinet/in.h
+     */
+    struct in6_ifreq {
+            struct in6_addr ifr6_addr;
+            uint32_t        ifr6_prefixlen;
+            int             ifr6_ifindex;
+    };
+
+    struct in6_ifreq               ifrq;
+    int                            rc, fd = -1;
+
+    DEBUGMSGT(("access:ipaddress:set", "_netsnmp_ioctl_ipaddress_set_v6 started\n"));
+
+    if (NULL == entry)
+        return -1;
+
+    netsnmp_assert(16 == entry->ia_address_len);
+
+    fd = socket(AF_INET6, SOCK_DGRAM, 0);
+    if(fd < 0) {
+        snmp_log(LOG_ERR,"couldn't create socket\n");
+        return -2;
+    }
+    memset(&ifrq, 0, sizeof(ifrq));
+    ifrq.ifr6_ifindex = entry->if_index;
+    ifrq.ifr6_prefixlen = 64;
+
+    memcpy(&ifrq.ifr6_addr, entry->ia_address,
+           entry->ia_address_len);
+
+    rc = ioctl(fd, operation, &ifrq);
+    close(fd);
+    if(rc < 0) {
+        snmp_log(LOG_ERR,"error setting address: %s(%d)\n", strerror(errno), errno);
+        return -3;
+    }
+    DEBUGMSGT(("access:ipaddress:set", "_netsnmp_ioctl_ipaddress_set_v6 finished\n"));
+    return 0;
+#else
+    /* we don't support ipv6 on this platform (yet) */
+    return -3;
+#endif
+
+}
+
+/**
+ *
+ * @retval  0 : no error
+ * @retval -1 : bad parameter
+ * @retval -2 : couldn't create socket
+ * @retval -3 : ioctl failed
+ */
+int
+_netsnmp_ioctl_ipaddress_set_v6(netsnmp_ipaddress_entry * entry)
+{
+    return _netsnmp_ioctl_ipaddress_v6(entry, SIOCSIFADDR);
+}
+
+/**
+ *
+ * @retval  0 : no error
+ * @retval -1 : bad parameter
+ * @retval -2 : couldn't create socket
+ * @retval -3 : ioctl failed
+ */
+int
+_netsnmp_ioctl_ipaddress_delete_v6(netsnmp_ipaddress_entry * entry)
+{
+    return _netsnmp_ioctl_ipaddress_v6(entry, SIOCDIFADDR);
 }
 
 /**

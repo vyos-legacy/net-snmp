@@ -10,10 +10,21 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include "utilities/iquery.h"
 #include "alarmTable.h"
+
+netsnmp_feature_require(iquery)
+netsnmp_feature_require(query_set_default_session)
+netsnmp_feature_require(table_tdata)
+netsnmp_feature_require(check_vb_type_and_max_size)
+netsnmp_feature_require(table_tdata_extract_table)
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(table_tdata_insert_row)
+netsnmp_feature_require(iquery_pdu_session)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /** Initializes the alarmTable module */
 void
@@ -66,7 +77,7 @@ event_api_send_alarm(u_char is_rising,
                      size_t alarmed_var_length,
                      u_long sample_type,
                      u_long value,
-                     u_long the_threshold, char *alarm_descr);
+                     u_long the_threshold, const char *alarm_descr);
 
 #define ALARM_STR1_LEN	32
 typedef enum {
@@ -162,6 +173,7 @@ alarmTable_run( unsigned int reg, void *clientarg)
     rc = netsnmp_query_get(  var, entry->session );
     if ( rc != SNMP_ERR_NOERROR ) {
         DEBUGMSGTL(( "rmon:alarmTable", "alarmVariable query failed (%d)\n", rc));
+        snmp_free_varbind(var);
         return;
     }
 
@@ -175,11 +187,12 @@ alarmTable_run( unsigned int reg, void *clientarg)
         break;
     default:
         DEBUGMSGTL(("rmon:alarmTable", "invalid type (%d)\n", var->type));
+        snmp_free_varbind(var);
         return ;
     }
 
-    DEBUGMSGTL(("rmon:alarmTable", "alarmIndex.%d last value (%d)\n", entry->alarmIndex, entry->last_abs_value));
-    DEBUGMSGTL(("rmon:alarmTable", "alarmIndex.%d new_value (%d)\n", entry->alarmIndex, new_value));
+    DEBUGMSGTL(("rmon:alarmTable", "alarmIndex.%ld last value (%ld)\n", entry->alarmIndex, entry->last_abs_value));
+    DEBUGMSGTL(("rmon:alarmTable", "alarmIndex.%ld new_value (%ld)\n", entry->alarmIndex, new_value));
 
     entry->alarmValue = (SAMPLE_TYPE_ABSOLUTE == entry->alarmSampleType) ?
         new_value : new_value - entry->last_abs_value;
@@ -214,7 +227,9 @@ alarmTable_run( unsigned int reg, void *clientarg)
             snmp_log(LOG_ERR,"failed to send falling alarm\n");
     }
     else
-        snmp_log(LOG_ERR,"no alarm sent\n");
+        DEBUGMSGTL(("rmon:alarmTable", "no alarm sent\n"));
+
+    snmp_free_varbind(var);
 }
 
 void

@@ -151,6 +151,7 @@ void
 init_ip(void)
 {
     netsnmp_handler_registration *reginfo;
+    int rc;
 
     /*
      * register ourselves with the agent as a group of scalars...
@@ -158,7 +159,9 @@ init_ip(void)
     DEBUGMSGTL(("mibII/ip", "Initialising IP group\n"));
     reginfo = netsnmp_create_handler_registration("ip", ip_handler,
                             ip_oid, OID_LENGTH(ip_oid), HANDLER_CAN_RONLY);
-    netsnmp_register_scalar_group(reginfo, IPFORWARDING, IPROUTEDISCARDS);
+    rc = netsnmp_register_scalar_group(reginfo, IPFORWARDING, IPROUTEDISCARDS);
+    if (rc != SNMPERR_SUCCESS)
+        return;
 
     /*
      * .... with a local cache
@@ -228,6 +231,12 @@ init_ip(void)
 #define	USES_SNMP_DESIGNED_IPSTAT
 #endif
 
+#ifdef NETBSD_STATS_VIA_SYSCTL
+#define IP_STAT_STRUCTURE	struct ip_mib
+#define USES_SNMP_DESIGNED_IPSTAT
+#undef IP_NSTATS
+#endif
+
 #ifdef HAVE_IPHLPAPI_H
 #include <iphlpapi.h>
 #define IP_STAT_STRUCTURE MIB_IPSTATS
@@ -238,6 +247,11 @@ long            ipTTL, oldipTTL;
 
 #ifdef HAVE_SYS_TCPIPSTATS_H
 #define IP_STAT_STRUCTURE	struct kna
+#define	USES_TRADITIONAL_IPSTAT
+#endif
+
+#ifdef dragonfly
+#define IP_STAT_STRUCTURE	struct ip_stats
 #define	USES_TRADITIONAL_IPSTAT
 #endif
 
@@ -663,6 +677,7 @@ ip_handler(netsnmp_mib_handler          *handler,
 
     case MODE_GETNEXT:
     case MODE_GETBULK:
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     case MODE_SET_RESERVE1:
 		/* XXX - Windows currently supports setting this */
     case MODE_SET_RESERVE2:
@@ -673,6 +688,7 @@ ip_handler(netsnmp_mib_handler          *handler,
         snmp_log(LOG_WARNING, "mibII/ip: Unsupported mode (%d)\n",
                                reqinfo->mode);
         break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     default:
         snmp_log(LOG_WARNING, "mibII/ip: Unrecognised mode (%d)\n",
                                reqinfo->mode);
@@ -812,6 +828,21 @@ ip_load(netsnmp_cache *cache, void *vmagic)
         DEBUGMSGTL(("mibII/ip", "Failed to load IP Group (solaris)\n"));
     } else {
         DEBUGMSGTL(("mibII/ip", "Loaded IP Group (solaris)\n"));
+    }
+    return ret_value;
+}
+#elif defined (NETBSD_STATS_VIA_SYSCTL)
+int
+ip_load(netsnmp_cache *cache, void *vmagic)
+{
+    long ret_value = -1;
+
+    ret_value = netbsd_read_ip_stat(&ipstat);
+
+    if ( ret_value < 0) {
+	DEBUGMSGTL(("mibII/ip", "Failed to load IP Group (netbsd)\n"));
+    } else {
+	DEBUGMSGTL(("mibII/ip", "Loaded IP Group (netbsd)\n"));
     }
     return ret_value;
 }

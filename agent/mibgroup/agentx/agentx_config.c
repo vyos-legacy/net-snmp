@@ -2,6 +2,7 @@
  *  AgentX Configuration
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -19,6 +20,9 @@
 #include "snmpd.h"
 #include "agentx/agentx_config.h"
 #include "agentx/protocol.h"
+
+netsnmp_feature_require(user_information)
+netsnmp_feature_require(string_time_to_secs)
 
 /* ---------------------------------------------------------------------
  *
@@ -116,8 +120,12 @@ agentx_parse_agentx_perms(const char *token, char *cptr)
 void
 agentx_parse_agentx_timeout(const char *token, char *cptr)
 {
-    int x = atoi(cptr);
+    int x = netsnmp_string_time_to_secs(cptr);
     DEBUGMSGTL(("agentx/config/timeout", "%s\n", cptr));
+    if (x == -1) {
+        config_perror("Invalid timeout value");
+        return;
+    }
     netsnmp_ds_set_int(NETSNMP_DS_APPLICATION_ID,
                        NETSNMP_DS_AGENT_AGENTX_TIMEOUT, x * ONE_SEC);
 }
@@ -152,11 +160,14 @@ agentx_register_config_handler(const char *token,
     register_config_handler(":agentx", token, parser, releaser, help);
 }
 
+netsnmp_feature_child_of(agentx_unregister_config_handler, netsnmp_unused)
+#ifndef NETSNMP_FEATURE_REMOVE_AGENTX_UNREGISTER_CONFIG_HANDLER
 void
 agentx_unregister_config_handler(const char *token)
 {
     unregister_config_handler(":agentx", token);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_AGENTX_UNREGISTER_CONFIG_HANDLER */
 
 void
 agentx_config_init(void)
@@ -169,10 +180,8 @@ agentx_config_init(void)
      */
     netsnmp_register_default_domain("agentx", "unix tcp");
     netsnmp_register_default_target("agentx", "unix", NETSNMP_AGENTX_SOCKET);
-#define val(x) __STRING(x)
     netsnmp_register_default_target("agentx", "tcp",
-                                    "localhost:" val(AGENTX_PORT));
-#undef val
+                                    "localhost:" __STRING(AGENTX_PORT));
     agentx_register_config_handler("agentxsocket",
                                   agentx_parse_agentx_socket, NULL,
                                   "AgentX bind address");

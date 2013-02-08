@@ -4,6 +4,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -13,6 +14,20 @@
 #include "tlstm-mib.h"
 
 #include "snmpTlstmParamsTable.h"
+
+netsnmp_feature_require(table_tdata)
+netsnmp_feature_require(tlstmparams_find)
+netsnmp_feature_require(tlstmparams_external)
+netsnmp_feature_require(cert_fingerprints)
+netsnmp_feature_require(table_tdata_delete_table)
+netsnmp_feature_require(table_tdata_extract_table)
+netsnmp_feature_require(table_tdata_remove_row)
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(check_vb_storagetype)
+netsnmp_feature_require(check_vb_type_and_max_size)
+netsnmp_feature_require(check_vb_rowstatus_with_storagetype)
+netsnmp_feature_require(table_tdata_insert_row)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /** XXX - move these to table_data header? */
 #define FATE_NEWLY_CREATED    1
@@ -167,7 +182,7 @@ init_snmpTlstmParamsTable(void)
         snmp_log(LOG_ERR,
                  "could not create handler for snmpTlstmParamsTableLastChanged\n");
     else
-        netsnmp_register_watched_scalar(reg, watcher);
+        netsnmp_register_watched_scalar2(reg, watcher);
 
     /*
      * Initialise the contents of the table here
@@ -1260,7 +1275,7 @@ _tlstmParamsTable_row_restore_mib(const char *token, char *buf)
         entry = row->data;
         
         entry->hashType = params->hashType;
-        strncpy(entry->snmpTlstmParamsClientFingerprint,params->fingerprint,
+        strlcpy(entry->snmpTlstmParamsClientFingerprint, params->fingerprint,
                 sizeof(entry->snmpTlstmParamsClientFingerprint));
         entry->snmpTlstmParamsClientFingerprint_len =
             strlen(entry->snmpTlstmParamsClientFingerprint);

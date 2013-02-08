@@ -2,7 +2,7 @@
 #!/usr/bin/perl -w
 
 #
-# $Id: mib2c 18449 2010-04-06 01:52:45Z rstory $
+# $Id$
 #
 # Description: 
 #
@@ -61,9 +61,8 @@ $currentlevel = -1;
 if($ENV{MIB2C_DIR}) {
    push @def_search_dirs, split(/:/, $ENV{MIB2C_DIR});
 }
-push @def_search_dirs, "/etc/snmp/";
-push @def_search_dirs, "/usr/share/snmp/";
-push @def_search_dirs, "/usr/share/snmp/mib2c-data";
+push @def_search_dirs, "/usr/local/share/snmp/";
+push @def_search_dirs, "/usr/local/share/snmp/mib2c-data";
 push @def_search_dirs, "./mib2c-conf.d";
 
 sub usage {
@@ -327,7 +326,7 @@ sub process_vars {
 
     # mib substitutions ($var.type -> $mibnode->{'type'})
    if ( $it =~ /\$(\w+)\.(\w+)/ ) {
-    if ($SNMP::MIB{$vars{$1}} && $SNMP::MIB{$vars{$1}}{'label'} =~ /Table$/) {
+    if ($SNMP::MIB{$vars{$1}} && defined($tables{$SNMP::MIB{$vars{$1}}{'label'}})) {
       $it =~ s/\$(\w+)\.(settable)/(table_is_writable($SNMP::MIB{$vars{$1}}{label}))/eg;
       $it =~ s/\$(\w+)\.(creatable)/(table_has_create($SNMP::MIB{$vars{$1}}{label}))/eg;
       $it =~ s/\$(\w+)\.(rowstatus)/(table_has_rowstatus($SNMP::MIB{$vars{$1}}{label}))/eg;
@@ -899,7 +898,8 @@ sub process {
 	      foreach $varbind (@{$notifyvars{$currentnotify}}) {
 		#		print "looping on $var for $varbind\n";
 		  $return = do_a_loop($stash, \$vars{$var}, $varbind,
-				      \$currentvarbind, $varbind);
+				          \$currentvarbind, $varbind,
+				              \$currentvar, $varbind);
 	      }
 	    }
             m2c_die("foreach did not end with \@end@") if($return ne "end");
@@ -953,6 +953,7 @@ sub process {
             m2c_die("foreach did not end with \@end@") if($return ne "end");
 	  } elsif (/\@\s*foreach\s+\$([^\@]+)\s+\$([^\@]+)\s+range\s+([^\@]+)\@/) {
 	    my ($svar, $evar, $node) = ($1, $2, $3);
+	    $svar =~ s/,$//;
 	    my $stash = do_tell();
 	    my $range;
 	    $node = $currentcolumn if (!$node);
@@ -990,6 +991,7 @@ sub process {
           my ($type,$arg,$ok) = ($1,$2,0);
 	  my $stash = do_tell();
           my $loop = 1;
+          my $everlooped = 0;
 
           while ($loop) {
             # check condition based on type
@@ -1007,7 +1009,11 @@ sub process {
             # act on condition
             if ($ok) {
 	      $return = do_a_loop($stash, \$vars{$type}, $ok, \$vars{$args});
+	      $everlooped = 1;
             } else {
+	      if (!$everlooped) {
+                $return = skippart();
+              }
 	      $loop = 0;
             }
           }
@@ -1060,7 +1066,7 @@ sub mib2c_output {
 
 sub setup_data {
     my $mib = shift;
-    if ($mib->{label} =~ /Table$/) {
+    if ($mib->{label} =~ /Table$/ && $#{$mib->{children}} != -1) {
 	my $tablename = $mib->{label};
 	my $entry = $mib->{children};
 	my $columns = $entry->[0]{children};

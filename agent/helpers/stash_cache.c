@@ -1,27 +1,28 @@
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
-#include <net-snmp/agent/stash_cache.h>
+netsnmp_feature_provide(stash_cache)
+netsnmp_feature_child_of(stash_cache, mib_helpers)
+#ifdef NETSNMP_FEATURE_REQUIRE_STASH_CACHE
+netsnmp_feature_require(oid_stash)
+netsnmp_feature_require(oid_stash_iterate)
+netsnmp_feature_require(oid_stash_get_data)
+#endif
 
+#ifndef NETSNMP_FEATURE_REMOVE_STASH_CACHE
 #include <net-snmp/agent/stash_to_next.h>
+
+#include <net-snmp/agent/stash_cache.h>
 
 extern NetsnmpCacheLoad _netsnmp_stash_cache_load;
 extern NetsnmpCacheFree _netsnmp_stash_cache_free;
  
-#ifdef HAVE_DMALLOC_H
-static void free_wrapper(void * p)
-{
-    free(p);
-}
-#else
-#define free_wrapper free
-#endif
-
 /** @defgroup stash_cache stash_cache
  *  Automatically caches data for certain handlers.
- *  This handler caches data in an optimized way which may aleviate
+ *  This handler caches data in an optimized way which may alleviate
  *  the need for the lower level handlers to perform as much
  *  optimization.  Specifically, somewhere in the lower level handlers
  *  must be a handler that supports the MODE_GET_STASH operation.
@@ -71,7 +72,7 @@ netsnmp_get_timed_bare_stash_cache_handler(int timeout, oid *rootoid, size_t roo
     }
 
     handler->myvoid = cinfo;
-    handler->data_free = &free_wrapper;
+    netsnmp_cache_handler_owns_cache(handler);
 
     return handler;
 }
@@ -246,3 +247,6 @@ netsnmp_init_stash_cache_helper(void)
 }
 /**  @} */
 
+#else /* NETSNMP_FEATURE_REMOVE_STASH_CACHE */
+netsnmp_feature_unused(stash_cache);
+#endif /* NETSNMP_FEATURE_REMOVE_STASH_CACHE */

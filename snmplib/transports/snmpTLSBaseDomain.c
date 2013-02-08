@@ -1,5 +1,9 @@
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-features.h>
+
+netsnmp_feature_require(cert_util)
+
 #include <net-snmp/library/snmpTLSBaseDomain.h>
 
 #if HAVE_DMALLOC_H
@@ -34,6 +38,7 @@
 #include <openssl/x509v3.h>
 
 #include <net-snmp/types.h>
+#include <net-snmp/config_api.h>
 #include <net-snmp/library/cert_util.h>
 #include <net-snmp/library/snmp_openssl.h>
 #include <net-snmp/library/default_store.h>
@@ -45,6 +50,8 @@
 #include <net-snmp/library/snmp_assert.h>
 #include <net-snmp/library/snmp_transport.h>
 #include <net-snmp/library/snmp_secmod.h>
+#include <net-snmp/library/read_config.h>
+#include <net-snmp/library/system.h>
 
 #define LOGANDDIE(msg) do { snmp_log(LOG_ERR, "%s\n", msg); return 0; } while(0)
 
@@ -83,6 +90,9 @@ int verify_callback(int ok, X509_STORE_CTX *ctx) {
        locally known fingerprint and then accept it */
     if (!ok &&
         (X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT == err ||
+         X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY == err ||
+         X509_V_ERR_CERT_UNTRUSTED == err ||
+         X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE == err ||
          X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN == err)) {
 
         cert = netsnmp_cert_find(NS_CERT_REMOTE_PEER, NS_CERTKEY_FINGERPRINT,
@@ -96,12 +106,13 @@ int verify_callback(int ok, X509_STORE_CTX *ctx) {
             DEBUGMSGTL(("tls_x509:verify", "verify_callback called with: ok=%d ctx=%p depth=%d err=%i:%s\n", ok, ctx, depth, err, X509_verify_cert_error_string(err)));
             DEBUGMSGTL(("tls_x509:verify", "  accepting matching fp of self-signed certificate found in: %s\n",
                         cert->info.filename));
+            SNMP_FREE(fingerprint);
             return 1;
         } else {
             DEBUGMSGTL(("tls_x509:verify", "  no matching fp found\n"));
             /* log where we are and why called */
             snmp_log(LOG_ERR, "tls verification failure: ok=%d ctx=%p depth=%d err=%i:%s\n", ok, ctx, depth, err, X509_verify_cert_error_string(err));
-
+            SNMP_FREE(fingerprint);
             return 0;
         }
 
@@ -109,6 +120,7 @@ int verify_callback(int ok, X509_STORE_CTX *ctx) {
             (verify_info->flags & VRFY_PARENT_WAS_OK)) {
             DEBUGMSGTL(("tls_x509:verify", "verify_callback called with: ok=%d ctx=%p depth=%d err=%i:%s\n", ok, ctx, depth, err, X509_verify_cert_error_string(err)));
             DEBUGMSGTL(("tls_x509:verify", "  a parent was ok, so returning ok for this child certificate\n"));
+            SNMP_FREE(fingerprint);
             return 1; /* we'll check the hostname later at this level */
         }
     }
@@ -119,6 +131,7 @@ int verify_callback(int ok, X509_STORE_CTX *ctx) {
         DEBUGMSGTL(("tls_x509:verify", "verify_callback called with: ok=%d ctx=%p depth=%d err=%i:%s\n", ok, ctx, depth, err, X509_verify_cert_error_string(err)));
     DEBUGMSGTL(("tls_x509:verify", "  returning the passed in value of %d\n",
                 ok));
+    SNMP_FREE(fingerprint);
     return(ok);
 }
 
@@ -144,26 +157,26 @@ _netsnmp_tlsbase_verify_remote_fingerprint(X509 *remote_cert,
 
     if (!tlsdata->their_fingerprint && tlsdata->their_identity) {
         /* we have an identity; try and find it's fingerprint */
-        netsnmp_cert *their_cert;
-        their_cert =
+        netsnmp_cert *peer_cert;
+        peer_cert =
             netsnmp_cert_find(NS_CERT_REMOTE_PEER, NS_CERTKEY_MULTIPLE,
                               tlsdata->their_identity);
 
-        if (their_cert)
+        if (peer_cert)
             tlsdata->their_fingerprint =
-                netsnmp_openssl_cert_get_fingerprint(their_cert->ocert, -1);
+                netsnmp_openssl_cert_get_fingerprint(peer_cert->ocert, -1);
     }
 
     if (!tlsdata->their_fingerprint && try_default) {
         /* try for the default instead */
-        netsnmp_cert *their_cert;
-        their_cert =
+        netsnmp_cert *peer_cert;
+        peer_cert =
             netsnmp_cert_find(NS_CERT_REMOTE_PEER, NS_CERTKEY_DEFAULT,
                               NULL);
 
-        if (their_cert)
+        if (peer_cert)
             tlsdata->their_fingerprint =
-                netsnmp_openssl_cert_get_fingerprint(their_cert->ocert, -1);
+                netsnmp_openssl_cert_get_fingerprint(peer_cert->ocert, -1);
     }
     
     if (tlsdata->their_fingerprint) {
@@ -177,6 +190,7 @@ _netsnmp_tlsbase_verify_remote_fingerprint(X509 *remote_cert,
         }
     } else {
         DEBUGMSGTL(("tls_x509:verify", "No fingerprint for the remote entity available to verify\n"));
+        free(fingerprint);
         return NO_FINGERPRINT_AVAILABLE;
     }
 
@@ -253,7 +267,7 @@ netsnmp_tlsbase_verify_server_cert(SSL *ssl, _netsnmpTLSBaseData *tlsdata) {
                              *check_name && j < sizeof(buf)-1;
                              ++check_name, ++j ) {
                             if (isascii(*check_name))
-                                buf[j] = tolower(*check_name);
+                                buf[j] = tolower(0xFF & *check_name);
                         }
                         if (j < sizeof(buf))
                             buf[j] = '\0';
@@ -571,8 +585,7 @@ sslctx_server_setup(const SSL_METHOD *method) {
         LOGANDDIE("can't create a new context");
     }
 
-    id_cert = netsnmp_cert_find(NS_CERT_IDENTITY, NS_CERTKEY_DEFAULT,
-                                (void*)1);
+    id_cert = netsnmp_cert_find(NS_CERT_IDENTITY, NS_CERTKEY_DEFAULT, NULL);
     if (!id_cert)
         LOGANDDIE ("error finding server identity keys");
 
@@ -613,24 +626,28 @@ netsnmp_tlsbase_config(struct netsnmp_transport_s *t, const char *token, const c
 
     tlsdata = t->data;
 
-    if (strcmp(token, "our_identity") == 0) {
+    if ((strcmp(token, "localCert") == 0) ||
+        (strcmp(token, "our_identity") == 0)) {
         SNMP_FREE(tlsdata->our_identity);
         tlsdata->our_identity = strdup(value);
         DEBUGMSGT(("tls:config","our identity %s\n", value));
     }
 
-    if (strcmp(token, "their_identity") == 0) {
+    if ((strcmp(token, "peerCert") == 0) ||
+        (strcmp(token, "their_identity") == 0)) {
         SNMP_FREE(tlsdata->their_identity);
         tlsdata->their_identity = strdup(value);
         DEBUGMSGT(("tls:config","their identity %s\n", value));
     }
 
-    if (strcmp(token, "their_hostname") == 0) {
+    if ((strcmp(token, "peerHostname") == 0) ||
+        (strcmp(token, "their_hostname") == 0)) {
         SNMP_FREE(tlsdata->their_hostname);
         tlsdata->their_hostname = strdup(value);
     }
 
-    if (strcmp(token, "trust_cert") == 0) {
+    if ((strcmp(token, "trust_cert") == 0) ||
+        (strcmp(token, "trustCert") == 0)) {
         SNMP_FREE(tlsdata->trust_cert);
         tlsdata->trust_cert = strdup(value);
     }
@@ -697,6 +714,32 @@ tls_get_verify_info_index() {
     return openssl_local_index;
 }
 
+static void _parse_client_cert(const char *tok, char *line)
+{
+    config_pwarn("clientCert is deprecated. Clients should use localCert, servers should use peerCert");
+    if (*line == '"') {
+        char buf[SNMP_MAXBUF];
+        copy_nword(line, buf, sizeof(buf));
+        netsnmp_ds_set_string(NETSNMP_DS_LIBRARY_ID,
+                              NETSNMP_DS_LIB_X509_CLIENT_PUB, buf);
+    } else
+        netsnmp_ds_set_string(NETSNMP_DS_LIBRARY_ID,
+                              NETSNMP_DS_LIB_X509_CLIENT_PUB, line);
+}
+
+static void _parse_server_cert(const char *tok, char *line)
+{
+    config_pwarn("serverCert is deprecated. Clients should use peerCert, servers should use localCert.");
+    if (*line == '"') {
+        char buf[SNMP_MAXBUF];
+        copy_nword(line, buf, sizeof(buf));
+        netsnmp_ds_set_string(NETSNMP_DS_LIBRARY_ID,
+                              NETSNMP_DS_LIB_X509_CLIENT_PUB, buf);
+    } else
+        netsnmp_ds_set_string(NETSNMP_DS_LIBRARY_ID,
+                              NETSNMP_DS_LIB_X509_SERVER_PUB, line);
+}
+
 void
 netsnmp_tlsbase_ctor(void) {
 
@@ -723,26 +766,25 @@ netsnmp_tlsbase_ctor(void) {
      */
 
     /* the public client cert to authenticate with */
-    netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "clientCert",
-                               NETSNMP_DS_LIBRARY_ID,
-                               NETSNMP_DS_LIB_X509_CLIENT_PUB);
-    /* XXX: this one needs to go away before 5.6 final */
-    netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "defX509ClientPub",
-                               NETSNMP_DS_LIBRARY_ID,
-                               NETSNMP_DS_LIB_X509_CLIENT_PUB);
+    register_config_handler("snmp", "clientCert", _parse_client_cert, NULL,
+                            NULL);
 
     /*
      * for the server
      */
 
     /* The X509 server key to use */
-    netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "serverCert",
+    register_config_handler("snmp", "serverCert", _parse_server_cert, NULL,
+                            NULL);
+    /*
+     * remove cert config ambiguity: localCert, peerCert
+     */
+    netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "localCert",
                                NETSNMP_DS_LIBRARY_ID,
-                               NETSNMP_DS_LIB_X509_SERVER_PUB);
-    /* XXX: this one needs to go away before 5.6 final */
-    netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "defX509ServerPub",
+                               NETSNMP_DS_LIB_TLS_LOCAL_CERT);
+    netsnmp_ds_register_config(ASN_OCTET_STR, "snmp", "peerCert",
                                NETSNMP_DS_LIBRARY_ID,
-                               NETSNMP_DS_LIB_X509_SERVER_PUB);
+                               NETSNMP_DS_LIB_TLS_PEER_CERT);
 
     /*
      * register our boot-strapping needs
@@ -877,9 +919,8 @@ int netsnmp_tlsbase_wrapup_recv(netsnmp_tmStateReference *tmStateRef,
     /* RFC5953 Section 5.1.2 step 2: tmSecurityName */
     /* XXX: detect and throw out overflow secname sizes rather
        than truncating. */
-    strncpy(tmStateRef->securityName, tlsdata->securityName,
-            sizeof(tmStateRef->securityName)-1);
-    tmStateRef->securityName[sizeof(tmStateRef->securityName)-1] = '\0';
+    strlcpy(tmStateRef->securityName, tlsdata->securityName,
+            sizeof(tmStateRef->securityName));
     tmStateRef->securityNameLen = strlen(tmStateRef->securityName);
 
     /* RFC5953 Section 5.1.2 step 2: tmSessionID */
@@ -893,6 +934,8 @@ int netsnmp_tlsbase_wrapup_recv(netsnmp_tmStateReference *tmStateRef,
     return SNMPERR_SUCCESS;
 }
 
+netsnmp_feature_child_of(_x509_get_error, netsnmp_unused)
+#ifndef NETSNMP_FEATURE_REMOVE__X509_GET_ERROR
 const char * _x509_get_error(int x509failvalue, const char *location) {
     static const char *reason = NULL;
     
@@ -1041,12 +1084,14 @@ const char * _x509_get_error(int x509failvalue, const char *location) {
 #endif
     case X509_V_ERR_APPLICATION_VERIFICATION:
         reason = "X509_V_ERR_APPLICATION_VERIFICATION";
+        break;
     default:
         reason = "unknown failure code";
     }
 
     return reason;
 }
+#endif /* NETSNMP_FEATURE_REMOVE__X509_GET_ERROR */
 
 void _openssl_log_error(int rc, SSL *con, const char *location) {
     const char     *reason, *file, *data;

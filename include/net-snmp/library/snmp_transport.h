@@ -1,11 +1,31 @@
 #ifndef _SNMP_TRANSPORT_H
 #define _SNMP_TRANSPORT_H
 
+#include <sys/types.h>
+
+#if HAVE_SYS_SOCKET_H
+#ifdef solaris2
+#define _XPG4_2
+#endif
+
+#if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
+#define _LINUX_SOURCE_COMPAT
+#endif
+
+#include <sys/socket.h>
+
+#ifdef solaris2
+# ifndef CMSG_SPACE
+#  define CMSG_SPACE(l) \
+            ((unsigned int)_CMSG_HDR_ALIGN(sizeof (struct cmsghdr) + (l)))
+#  define CMSG_LEN(l)   (_CMSG_HDR_ALIGN(sizeof(struct cmsghdr)) + (l))
+# endif
+#endif
+#endif /* HAVE_SYS_SOCKET_H */
+
 #ifdef HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
-
-#include <sys/types.h>
 
 #include <net-snmp/library/asn1.h>
 
@@ -51,14 +71,22 @@ NETSNMP_IMPORT size_t   netsnmpIPXDomain_len;
 /* note: VACM only allows <= 32 so this is overkill till another ACM comes */
 #define NETSNMP_TM_MAX_SECNAME 256
 
+typedef union netsnmp_sockaddr_storage_u {
+    struct sockaddr     sa;
+    struct sockaddr_in  sin;
+#ifdef NETSNMP_ENABLE_IPV6
+    struct sockaddr_in6 sin6;
+#endif
+} netsnmp_sockaddr_storage;
+
 typedef struct netsnmp_addr_pair_s {
-   struct sockaddr_in remote_addr;
-   struct sockaddr_in local_addr;
+   netsnmp_sockaddr_storage remote_addr;
+   netsnmp_sockaddr_storage local_addr;
 } netsnmp_addr_pair;
 
 typedef struct netsnmp_indexed_addr_pair_s {
-   struct sockaddr_in remote_addr;
-   struct sockaddr_in local_addr;
+   netsnmp_sockaddr_storage remote_addr;
+   netsnmp_sockaddr_storage local_addr;
     int if_index;
 } netsnmp_indexed_addr_pair;
 
@@ -115,8 +143,13 @@ typedef struct netsnmp_transport_s {
 
     size_t          msgMaxSize;
 
+#ifdef FOR_STANDARDS_COMPLIANCE_OR_FUTURE_USE
     /* TM state reference per ISMS WG solution */
     netsnmp_tmStateReference *tmStateRef;
+#endif
+
+    /* tunneled transports */
+    struct netsnmp_transport_s * base_transport;
 
     /*  Callbacks.  Arguments are:
      *		
@@ -199,6 +232,7 @@ int netsnmp_transport_add_to_list(netsnmp_transport_list **transport_list,
 				  netsnmp_transport *transport);
 int netsnmp_transport_remove_from_list(netsnmp_transport_list **transport_list,
 				       netsnmp_transport *transport);
+int netsnmp_sockaddr_size(struct sockaddr *sa);
 
 
 /*

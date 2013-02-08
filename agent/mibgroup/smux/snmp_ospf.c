@@ -1,5 +1,5 @@
 /*
- * $Id: snmp_ospf.c 17755 2009-09-02 07:12:50Z jsafranek $ 
+ * $Id$ 
  */
 
 /*

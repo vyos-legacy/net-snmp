@@ -209,8 +209,13 @@ netsnmp_parse_args(int argc,
      */
     snmp_sess_init(session);
     strcpy(Opts, "Y:VhHm:M:O:I:P:D:dv:r:t:c:Z:e:E:n:u:l:x:X:a:A:p:T:-:3:s:S:L:");
-    if (localOpts)
+    if (localOpts) {
+        if (strlen(localOpts) + strlen(Opts) >= sizeof(Opts)) {
+            snmp_log(LOG_ERR, "Too many localOpts in snmp_parse_args()\n");
+            return -1;
+        }
         strcat(Opts, localOpts);
+    }
 
     /*
      * get the options 
@@ -364,10 +369,8 @@ netsnmp_parse_args(int argc,
             }
 
             /* set the config */
-            strncpy(leftside, tmpopt, sizeof(leftside));
-            leftside[sizeof(leftside)-1] = '0';
-            strncpy(rightside, tmpcp, sizeof(rightside));
-            rightside[sizeof(rightside)-1] = '0';
+            strlcpy(leftside, tmpopt, sizeof(leftside));
+            strlcpy(rightside, tmpcp, sizeof(rightside));
 
             CONTAINER_INSERT(session->transport_configuration,
                              netsnmp_transport_create_config(leftside,
@@ -547,6 +550,7 @@ netsnmp_parse_args(int argc,
 
             break;
 
+#ifdef NETSNMP_SECMOD_USM
         case 'a':
 #ifndef NETSNMP_DISABLE_MD5
             if (!strcasecmp(optarg, "MD5")) {
@@ -620,6 +624,7 @@ netsnmp_parse_args(int argc,
 	    }
             break;
 #endif                          /* SNMPV3_CMD_OPTIONS */
+#endif /* NETSNMP_SECMOD_USM */
 
         case '?':
             return (NETSNMP_PARSE_ARGS_ERROR_USAGE);
@@ -679,6 +684,9 @@ netsnmp_parse_args(int argc,
 #endif
         }
     }
+
+#ifdef NETSNMP_SECMOD_USM
+    /* XXX: this should ideally be moved to snmpusm.c somehow */
 
     /*
      * make master key from pass phrases 
@@ -760,6 +768,8 @@ netsnmp_parse_args(int argc,
             return (NETSNMP_PARSE_ARGS_ERROR);
         }
     }
+#endif /* NETSNMP_SECMOD_USM */
+
     /*
      * get the hostname 
      */

@@ -93,7 +93,12 @@ NETSNMP_ARG_WITH(openssl,
     elif test "x$withval" = "xno"; then
       tryopenssl=no
     elif test -d "$withval"; then
-      AC_ADD_SEARCH_PATH($withval)
+      if test -d "$withval/lib/MinGW"; then
+        LDFLAGS="-L$withval/lib/MinGW $LDFLAGS"
+        CPPFLAGS="-I$withval/include $CPPFLAGS"
+      else
+        AC_ADD_SEARCH_PATH($withval)
+      fi
       tryopenssl=yes
       askedopenssl=yes
     fi,
@@ -140,6 +145,13 @@ if test "x$trykrb5" = "xdefaultyes"; then
       krb5path=/usr/kerberos
 fi
 
+AC_ARG_WITH(dnssec-local-validation,
+        [  --with-dnssec-local-validation Enable local DNSSEC validation using libval (no)], want_dnssec=$withval, want_dnssec=no)
+AC_ARG_ENABLE([dnssec-local-validation],,
+              NETSNMP_INVALID_WITH([dnssec-local-validation]))
+AC_ARG_WITH([dnssec],,NETSNMP_INVALID_WITH([dnssec-local-validation]))
+AC_ARG_ENABLE([dnssec],,NETSNMP_INVALID_WITH([dnssec-local-validation]))
+
 NETSNMP_ARG_WITH(rpm,
 [  --without-rpm                   Don't include support for the RPM package
                                   management system when building the host MIB
@@ -168,8 +180,14 @@ fi
 AC_SUBST(INSTALL_PREFIX)
 
 
-#   
+#
 #   Subsystems to build:
+#       Library
+#
+FEATUREHEADERS="library/features.h"
+FTMAINSUBS=""
+
+#
 #       Agent
 #
 NETSNMP_ARG_ENABLE(agent,
@@ -177,6 +195,8 @@ NETSNMP_ARG_ENABLE(agent,
 if test "x$enable_agent" != "xno"; then
    SNMPD='snmpd$(EXEEXT)'
    MAINSUBS="$MAINSUBS agent"
+   FEATUREHEADERS="$FEATUREHEADERS agent/features-mibgroups.h agent/features.h"
+   FTMAINSUBS="agent $FTMAINSUBS"
    TRAPLIBS='$(TRAPDWITHAGENT)'
    USETRAPLIBS='$(USEAGENTLIBS)'
 else
@@ -188,7 +208,9 @@ else
    #USETRAPLIBS='$(USELIBS)'
    TRAPLIBS='$(TRAPDWITHAGENT)'
    USETRAPLIBS='$(USEAGENTLIBS)'
+   AC_DEFINE([NETSNMP_DISABLE_AGENT], 1, [Define if no agent is built])
 fi
+
 AC_SUBST(SNMPD)
 AC_SUBST(TRAPLIBS)
 AC_SUBST(USETRAPLIBS)
@@ -199,6 +221,10 @@ NETSNMP_ARG_ENABLE(applications,
 [  --disable-applications          Do not build the apps (snmpget, ...).])
 if test "x$enable_applications" != "xno"; then
    MAINSUBS="$MAINSUBS apps"
+   FEATUREHEADERS="$FEATUREHEADERS features-snmpnetstat.h features-apps.h"
+   FTMAINSUBS="apps $FTMAINSUBS"
+else
+   AC_DEFINE([NETSNMP_DISABLE_APPS], 1, [Define if no apps are built])
 fi
 
 #       Manual pages
@@ -227,6 +253,7 @@ fi
 # with-mibs is valid too, but means something else
 
 AC_SUBST(MAINSUBS)
+AC_SUBST(FTMAINSUBS)
 AC_MSG_CHECKING([what to build and install])
 AC_MSG_RESULT([$MAINSUBS])
 
@@ -555,10 +582,14 @@ NETSNMP_ARG_WITH(security-modules,
   Available SNMP security services:
 
         usm                support for user based SNMP security
-                           (required and always compiled in)
         ksm                support for kerberos based SNMP security
         tsm                support for the Transport-based security
                            (for use with the SSH, DTLSUDP and TLSTCP transports)
+])
+
+NETSNMP_ARG_WITH(out-security-modules,
+[  --with-out-security-modules="s1 s2 ..."   Removes the given SNMP security
+                                    module services from the default list.
 ])
 
 
@@ -717,6 +748,90 @@ NETSNMP_ARG_WITH(agentx-socket,
 AC_DEFINE_UNQUOTED(NETSNMP_AGENTX_SOCKET,"$withval",
         [Unix domain socket for AgentX master-subagent communication])
 
+#
+# feature addition/removal and minimialist support
+#
+FEATURE_ADD_FLAGS=""
+NETSNMP_ARG_WITH(features,
+[  --with-features="feat1 feat2"   Request extra features to be turned on.
+                                   (only useful with --enable-minimalist)],[
+  if test "$withval" = yes; then
+    AC_MSG_ERROR([ Please provide a list of features ]);
+  fi
+  FEATURE_ADD_FLAGS="--add $withval"
+  AC_MSG_RESULT(adding in features: $withval)
+])
+AC_SUBST(FEATURE_ADD_FLAGS)
+
+
+FEATURE_REMOVE_FLAGS=""
+NETSNMP_ARG_WITH(out-features,
+[  --with-out-features="feat1..."  Remove specific features.
+                                   (implies --enable-minimalist)],[
+  if test "$withval" = yes; then
+    AC_MSG_ERROR([ Please provide a list of features ]);
+  fi
+  FEATURE_REMOVE_FLAGS="--remove $withval"
+  FEATURETARGS="features"
+  AC_DEFINE(NETSNMP_MINIMAL_CODE, 1,
+    [Define if you want to remove all non-essential code features.])
+  AC_MSG_RESULT(removing features: $withval)
+])
+AC_SUBST(FEATURE_REMOVE_FLAGS)
+
+
+# Catch common mistakes
+AC_ARG_WITH(feature,, NETSNMP_INVALID_WITH([features]))
+AC_ARG_WITH(out-feature,, NETSNMP_INVALID_WITH([out-features]))
+
+FEATURETARGS=""
+NETSNMP_ARG_ENABLE(minimalist,
+[  --enable-minimalist             Remove all non-essential code features.])
+if test "x$enable_minimalist" = "xyes"; then
+   # we'll assume the mini agent is desired here as well
+   mini_agent="yes"
+   FEATURETARGS="features"
+
+   # needed to bootstrap later checks
+   echo "" > include/net-snmp/feature-details.h
+   AC_DEFINE(NETSNMP_MINIMAL_CODE, 1,
+     [Define if you want to remove all non-essential code features.])
+else
+   FEATUREHEADERS=""
+fi
+AC_ARG_WITH([minimalist],,NETSNMP_INVALID_ENABLE([minimalist]))
+AC_SUBST(FEATURETARGS)
+AC_SUBST(FEATUREHEADERS)
+
+NETSNMP_ARG_ENABLE(notify-only,
+[  --enable-notify-only            Build tools that can only send notifications.])
+if test "x$enable_notify_only" = "xyes"; then
+   AC_DEFINE(NETSNMP_NOTIFY_ONLY, 1,
+     [Define if you want to only support sending notifications])
+fi
+AC_ARG_WITH([notify-only],,NETSNMP_INVALID_ENABLE([notify-only]))
+AC_ARG_ENABLE([notifyonly],,NETSNMP_INVALID_ENABLE([notify-only]))
+
+NETSNMP_ARG_ENABLE(no-listen,
+[  --enable-no-listen              Build tools that can't listen to ports.])
+if test "x$enable_no_listen" = "xyes" -o "x$enable_notify_only" = "xyes"; then
+   enable_no_listen="yes"
+   AC_DEFINE(NETSNMP_NO_LISTEN_SUPPORT, 1,
+     [Define if you want to remove all listening support from the code])
+fi
+AC_ARG_WITH([no-listen],,NETSNMP_INVALID_ENABLE([no-listen]))
+AC_ARG_ENABLE([nolisten],,NETSNMP_INVALID_ENABLE([no-listen]))
+
+NETSNMP_ARG_ENABLE(read-only,
+[  --enable-read-only              Remove all SET support from the code.])
+if test "x$enable_read_only" = "xyes" -o "x$enable_notify_only" = "xyes" ; then
+   enable_read_only="yes"
+   AC_DEFINE(NETSNMP_NO_WRITE_SUPPORT, 1,
+     [Define if you want to remove all SET/write access from the code])
+fi
+AC_ARG_WITH([read-only],,NETSNMP_INVALID_ENABLE([read-only]))
+AC_ARG_ENABLE([readonly],,NETSNMP_INVALID_ENABLE([read-only]))
+
 
 ##
 #   Project: Agent: MIB module configuration
@@ -731,6 +846,9 @@ else
 fi
 AC_ARG_WITH([miniagent],,NETSNMP_INVALID_ENABLE([mini-agent]))
 AC_ARG_ENABLE([miniagent],,NETSNMP_INVALID_ENABLE([mini-agent]))
+
+
+
 
 NETSNMP_ARG_ENABLE(mfd-rewrites,
 [  --enable-mfd-rewrites           Use new MFD rewrites of mib modules,

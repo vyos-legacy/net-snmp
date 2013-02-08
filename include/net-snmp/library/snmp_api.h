@@ -30,6 +30,8 @@
 #include <net-snmp/pdu_api.h>
 #include <net-snmp/session_api.h>
 
+#include <net-snmp/net-snmp-features.h>
+
 #ifndef DONT_SHARE_ERROR_WITH_OTHER_THREADS
 #define SET_SNMP_ERROR(x) snmp_errno=(x)
 #else
@@ -76,8 +78,8 @@ typedef struct request_list {
     void           *cb_data;        /* user callback data per request (NULL if unused) */
     int             retries;        /* Number of retries */
     u_long          timeout;        /* length to wait for timeout */
-    struct timeval  time;   /* Time this request was made */
-    struct timeval  expire; /* time this request is due to expire */
+    struct timeval  timeM;   /* Time this request was made [monotonic clock] */
+    struct timeval  expireM; /* Time this request is due to expire [monotonic clock]. */
     struct snmp_session *session;
     netsnmp_pdu    *pdu;    /* The pdu for this request
 			     * (saved so it can be retransmitted */
@@ -139,15 +141,22 @@ typedef struct request_list {
     /*
      * to determine type of Report from varbind_list 
      */
-#define REPORT_STATS_LEN 9
+#define REPORT_STATS_LEN  9	/* Length of prefix for MPD/USM report statistic objects */
+#define REPORT_STATS_LEN2 8	/* Length of prefix for Target report statistic objects */
+/* From SNMP-MPD-MIB */
 #define REPORT_snmpUnknownSecurityModels_NUM 1
-#define REPORT_snmpInvalidMsgs_NUM 2
+#define REPORT_snmpInvalidMsgs_NUM           2
+#define REPORT_snmpUnknownPDUHandlers_NUM    3
+/* From SNMP-USER-BASED-SM-MIB */
 #define REPORT_usmStatsUnsupportedSecLevels_NUM 1
 #define REPORT_usmStatsNotInTimeWindows_NUM 2
 #define REPORT_usmStatsUnknownUserNames_NUM 3
 #define REPORT_usmStatsUnknownEngineIDs_NUM 4
-#define REPORT_usmStatsWrongDigests_NUM 5
+#define REPORT_usmStatsWrongDigests_NUM     5
 #define REPORT_usmStatsDecryptionErrors_NUM 6
+/* From SNMP-TARGET-MIB */
+#define REPORT_snmpUnavailableContexts_NUM  4
+#define REPORT_snmpUnknownContexts_NUM      5
 
 #define SNMP_DETAIL_SIZE        512
 
@@ -391,14 +400,24 @@ typedef struct request_list {
     NETSNMP_IMPORT
     oid            *snmp_duplicate_objid(const oid * objToCopy, size_t);
     NETSNMP_IMPORT
+
+#ifndef NETSNMP_FEATURE_REMOVE_STATISTICS
     u_int           snmp_increment_statistic(int which);
     NETSNMP_IMPORT
     u_int           snmp_increment_statistic_by(int which, int count);
     NETSNMP_IMPORT
     u_int           snmp_get_statistic(int which);
     void            snmp_init_statistics(void);
+#else /* NETSNMP_FEATURE_REMOVE_STATISTICS */
+
+/* allow code to continue referencing API even if statistics are removed */
+#define snmp_increment_statistic(X)
+#define snmp_increment_statistic_by(X,Y)
+#define snmp_init_statistics()
+
+#endif
+
     int             create_user_from_session(netsnmp_session * session);
-    int snmp_get_fd_for_session(struct snmp_session *sessp);
     int snmpv3_probe_contextEngineID_rfc5343(void *slp,
                                              netsnmp_session *session);
 
@@ -480,7 +499,7 @@ struct netsnmp_transport_s;
                                            struct netsnmp_transport_s *transport);
 
     /*
-     * EXPERIMENTAL API EXTENSIONS ------------------------------------------ 
+     * EXTENDED SESSION API ------------------------------------------ 
      * 
      * snmp_sess_add_ex, snmp_sess_add, snmp_add 
      * 
@@ -677,6 +696,16 @@ struct netsnmp_transport_s;
 #define  NETSNMP_STAT_MAX_STATS              (STAT_TLSTM_STATS_END+1)
 /** backwards compatability */
 #define MAX_STATS NETSNMP_STAT_MAX_STATS
+
+    /*
+     * Internal: The list of active/open sessions.
+     */
+    struct session_list {
+       struct session_list *next;
+       netsnmp_session *session;
+       netsnmp_transport *transport;
+       struct snmp_internal_session *internal;
+    };
 
 #ifdef __cplusplus
 }

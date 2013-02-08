@@ -9,6 +9,10 @@
  */
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-features.h>
+
+netsnmp_feature_require(cert_util)
+
 #include <net-snmp/library/snmpTLSTCPDomain.h>
 
 #include <stdio.h>
@@ -129,9 +133,9 @@ netsnmp_tlstcp_copy(netsnmp_transport *oldt, netsnmp_transport *newt)
         newtlsdata->their_hostname = strdup(oldtlsdata->their_hostname);
     if (oldtlsdata->trust_cert)
         newtlsdata->trust_cert = strdup(oldtlsdata->trust_cert);
-    if (oldtlsdata->remote_addr)
-        memdup((u_char**)&newtlsdata->remote_addr, oldtlsdata->remote_addr,
-               sizeof(netsnmp_indexed_addr_pair));
+    if (oldtlsdata->addr)
+        memdup((u_char**)&newtlsdata->addr, oldtlsdata->addr,
+               sizeof(*oldtlsdata->addr));
 
     return 0;
 }
@@ -141,8 +145,6 @@ netsnmp_tlstcp_recv(netsnmp_transport *t, void *buf, int size,
                     void **opaque, int *olength)
 {
     int             rc = -1;
-    netsnmp_indexed_addr_pair *addr_pair = NULL;
-    struct sockaddr *from;
     netsnmp_tmStateReference *tmStateRef = NULL;
     _netsnmpTLSBaseData *tlsdata;
 
@@ -150,7 +152,7 @@ netsnmp_tlstcp_recv(netsnmp_transport *t, void *buf, int size,
         snmp_log(LOG_ERR,
                  "tlstcp received an invalid invocation with missing data\n");
         DEBUGMSGTL(("tlstcp", "recvfrom fd %d err %d (\"%s\")\n",
-                    t->sock, errno, strerror(errno)));
+                    (t ? t->sock : -1), errno, strerror(errno)));
         DEBUGMSGTL(("tlstcp", "  tdata = %p\n", t->data));
         return -1;
     }
@@ -233,9 +235,7 @@ netsnmp_tlstcp_recv(netsnmp_transport *t, void *buf, int size,
     tmStateRef->transportDomainLen = netsnmpTLSTCPDomain_len;
 
     /* Set the tmTransportAddress */
-    addr_pair = &tmStateRef->addresses;
     tmStateRef->have_addresses = 1;
-    from = (struct sockaddr *) &(addr_pair->remote_addr);
 
     /* RFC5953 Section 5.1.2 step 1:
      * 3)  The incomingMessage and incomingMessageLength are assigned values
@@ -248,8 +248,8 @@ netsnmp_tlstcp_recv(netsnmp_transport *t, void *buf, int size,
     */
 
     /* read the packet from openssl */
-    rc = SSL_read(tlsdata->ssl, buf, size);
-    while (rc <= 0) {
+    do {
+        rc = SSL_read(tlsdata->ssl, buf, size);
         if (rc == 0) {
             /* XXX closed connection */
             DEBUGMSGTL(("tlstcp", "remote side closed connection\n"));
@@ -257,24 +257,22 @@ netsnmp_tlstcp_recv(netsnmp_transport *t, void *buf, int size,
             SNMP_FREE(tmStateRef);
             return -1;
         }
-        rc = SSL_read(tlsdata->ssl, buf, size);
-    }
+        if (rc == -1) {
+            int err = SSL_get_error(tlsdata->ssl, rc);
+            if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE) {
+                /* error detected */
+                _openssl_log_error(rc, tlsdata->ssl, "SSL_read");
+                SNMP_FREE(tmStateRef);
+                return rc;
+            }
+        }
+        /* retry read for SSL_ERROR_WANT_READ || SSL_ERROR_WANT_WRITE */
+    } while (rc <= 0); 
 
     DEBUGMSGTL(("tlstcp", "received %d decoded bytes from tls\n", rc));
 
-    /* Check for errors */
-    if (rc == -1) {
-        if (SSL_get_error(tlsdata->ssl, rc) == SSL_ERROR_WANT_READ)
-            return -1; /* XXX: it's ok, but what's the right return? */
-
-        _openssl_log_error(rc, tlsdata->ssl, "SSL_read");
-        SNMP_FREE(tmStateRef);
-
-        return rc;
-    }
-
     /* log the packet */
-    {
+    DEBUGIF("tlstcp") {
         char *str = netsnmp_tlstcp_fmtaddr(t, NULL, 0);
         DEBUGMSGTL(("tlstcp",
                     "recvfrom fd %d got %d bytes (from %s)\n",
@@ -416,7 +414,7 @@ netsnmp_tlstcp_send(netsnmp_transport *t, void *buf, int size,
     /* If the first packet and we have no secname, then copy the
        important securityName data into the longer-lived session
        reference information. */
-    if ((tlsdata->flags | NETSNMP_TLSBASE_IS_CLIENT) &&
+    if ((tlsdata->flags & NETSNMP_TLSBASE_IS_CLIENT) &&
         !tlsdata->securityName && tmStateRef && tmStateRef->securityNameLen > 0)
         tlsdata->securityName = strdup(tmStateRef->securityName);
         
@@ -729,8 +727,6 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
             snmp_increment_statistic(STAT_TLSTM_SNMPTLSTMSESSIONOPENERRORS);
             snmp_log(LOG_ERR, "tlstcp: failed to create bio\n");
             _openssl_log_error(rc, NULL, "BIO creation");
-            SNMP_FREE(tlsdata);
-            SNMP_FREE(t);
             return NULL;
         }
             
@@ -742,8 +738,6 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
 		     tlsdata->addr_string);
             _openssl_log_error(rc, NULL, "BIO_do_connect");
             BIO_free(bio);
-            SNMP_FREE(tlsdata);
-            SNMP_FREE(t);
             return NULL;
         }
 
@@ -753,8 +747,6 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
             snmp_increment_statistic(STAT_TLSTM_SNMPTLSTMSESSIONOPENERRORS);
             snmp_log(LOG_ERR, "tlstcp: failed to create a SSL connection\n");
             BIO_free(bio);
-            SNMP_FREE(tlsdata);
-            SNMP_FREE(t);
             return NULL;
         }
         
@@ -768,8 +760,6 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
             snmp_log(LOG_ERR, "tlstcp: failed to create a SSL connection\n");
             SSL_shutdown(ssl);
             BIO_free(bio);
-            SNMP_FREE(tlsdata);
-            SNMP_FREE(t);
             return NULL;
         }
 
@@ -780,8 +770,6 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
             snmp_increment_statistic(STAT_TLSTM_SNMPTLSTMSESSIONOPENERRORS);
             snmp_log(LOG_ERR, "tlstcp: failed to ssl_connect\n");
             BIO_free(bio);
-            SNMP_FREE(tlsdata);
-            SNMP_FREE(t);
             return NULL;
         }
 
@@ -836,8 +824,6 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
             snmp_log(LOG_ERR, "tlstcp: failed to verify ssl certificate\n");
             SSL_shutdown(ssl);
             BIO_free(bio);
-            SNMP_FREE(tlsdata);
-            SNMP_FREE(t);
             return NULL;
         }
 
@@ -875,6 +861,7 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
         t->sock = BIO_get_fd(bio, NULL);
 
     } else {
+#ifndef NETSNMP_NO_LISTEN_SUPPORT
         /* Is the server */
         
         /* Create the socket bio */
@@ -884,8 +871,6 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
         t->local = (void *) strdup(tlsdata->addr_string);
         t->local_length = strlen(tlsdata->addr_string)+1;
         if (NULL == tlsdata->accept_bio) {
-            SNMP_FREE(t);
-            SNMP_FREE(tlsdata);
             snmp_log(LOG_ERR, "TLSTCP: Falied to create a accept BIO\n");
             return NULL;
         }
@@ -893,8 +878,6 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
         /* openssl requires an initial accept to bind() the socket */
         if (BIO_do_accept(tlsdata->accept_bio) <= 0) {
 	    _openssl_log_error(rc, tlsdata->ssl, "BIO_do__accept");
-            SNMP_FREE(t);
-            SNMP_FREE(tlsdata);
             snmp_log(LOG_ERR, "TLSTCP: Falied to do first accept on the TLS accept BIO\n");
             return NULL;
         }
@@ -905,6 +888,9 @@ netsnmp_tlstcp_open(netsnmp_transport *t)
 
         t->sock = BIO_get_fd(tlsdata->accept_bio, NULL);
         t->flags |= NETSNMP_TRANSPORT_FLAG_LISTEN;
+#else /* NETSNMP_NO_LISTEN_SUPPORT */
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
     }
     return t;
 }
@@ -923,12 +909,16 @@ netsnmp_tlstcp_transport(const char *addr_string, int isserver)
     char *cp;
     char buf[SPRINT_MAX_LEN];
     
+#ifdef NETSNMP_NO_LISTEN_SUPPORT
+    if (isserver)
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
+
     /* allocate our transport structure */
     t = SNMP_MALLOC_TYPEDEF(netsnmp_transport);
     if (NULL == t) {
         return NULL;
     }
-    memset(t, 0, sizeof(netsnmp_transport));
 
     /* allocate our TLS specific data */
     if (NULL == (tlsdata = netsnmp_tlsbase_allocate_tlsdata(t, isserver)))
@@ -943,12 +933,13 @@ netsnmp_tlstcp_transport(const char *addr_string, int isserver)
     if (!isserver && tlsdata && addr_string) {
         /* search for a : */
         if (NULL != (cp = strrchr(addr_string, ':'))) {
-            strncpy(buf, addr_string, sizeof(buf)-1);
+            sprintf(buf, "%.*s",
+                    (int) SNMP_MIN(cp - addr_string, sizeof(buf) - 1),
+                    addr_string);
         } else {
             /* else the entire spec is a host name only */
-            strncpy(buf, addr_string, sizeof(buf)-1);
+            strlcpy(buf, addr_string, sizeof(buf));
         }
-        buf[sizeof(buf)-1] = '\0';
         tlsdata->their_hostname = strdup(buf);
     }
 
@@ -996,7 +987,7 @@ netsnmp_tlstcp_create_tstring(const char *str, int local,
         for(cp = str; *cp != '\0'; cp++) {
             /* if ALL numbers, it must be just a port */
             /* if it contains anything else, assume a host or ip address */
-            if (!isdigit(*cp)) {
+            if (!isdigit(0xFF & *cp)) {
                 isport = 0;
                 break;
             }
@@ -1042,8 +1033,9 @@ netsnmp_tlstcp_ctor(void)
     tlstcpDomain.prefix[0] = "tlstcp";
     tlstcpDomain.prefix[1] = "tls";
 
+    tlstcpDomain.f_create_from_tstring     = NULL;
     tlstcpDomain.f_create_from_tstring_new = netsnmp_tlstcp_create_tstring;
-    tlstcpDomain.f_create_from_ostring = netsnmp_tlstcp_create_ostring;
+    tlstcpDomain.f_create_from_ostring     = netsnmp_tlstcp_create_ostring;
 
     netsnmp_tdomain_register(&tlstcpDomain);
 }

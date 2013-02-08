@@ -30,9 +30,18 @@ AC_CHECK_HEADERS([getopt.h   pthread.h  regex.h      ] dnl
                  [sys/timeb.h        ] dnl
                  [sys/un.h           ])
 
+#  Library and Agent:
+AC_CHECK_HEADERS([nlist.h],,,[
+AC_INCLUDES_DEFAULT
+[
+#ifndef LIBBSD_DISABLE_DEPRECATED
+#define LIBBSD_DISABLE_DEPRECATED 1
+#endif
+]])
+
 #  Library:
 AC_CHECK_HEADERS([fcntl.h    io.h       kstat.h                 ] dnl
-                 [limits.h   locale.h   nlist.h                 ] dnl
+                 [limits.h   locale.h                  ] dnl
                  [sys/file.h       sys/ioctl.h         ] dnl
                  [sys/sockio.h     sys/stat.h          ] dnl
                  [sys/systemcfg.h  sys/systeminfo.h    ] dnl
@@ -45,7 +54,7 @@ AC_CHECK_HEADERS([dlfcn.h    err.h      fcntl.h    fstab.h      ] dnl
                  [           grp.h      io.h                    ] dnl
                  [ioctls.h   kstat.h    kvm.h      limits.h     ] dnl
                  [           mntent.h   mtab.h                  ] dnl
-                 [nlist.h    pkglocs.h             pwd.h        ] dnl
+                 [           pkglocs.h             pwd.h        ] dnl
                  [           utmpx.h    utsname.h               ])
 
 AC_CHECK_HEADERS([sys/diskio.h  sys/dkio.h                                 ] dnl
@@ -81,6 +90,8 @@ AC_CHECK_HEADERS([search.h   sgtty.h    xti.h      ] dnl
                  [pci/pci.h                        ])
 
 
+# Valgrind
+AC_CHECK_HEADERS([valgrind/valgrind.h valgrind/memcheck.h])
 # OpenSSL
 AC_CHECK_HEADERS([openssl/aes.h ])     #  (Core)
 AC_CHECK_HEADERS([openssl/dh.h  ])     #  (Apps)
@@ -90,7 +101,8 @@ AC_CHECK_HEADERS([openssl/des.h  openssl/hmac.h ] dnl
 
 # RPM subdirectory path                   (Agent)
 if test "x$with_rpm" != "xno"; then
-  AC_CHECK_HEADERS(rpm/rpmdb.h   rpm/rpmfileutil.h)
+  AC_CHECK_HEADERS([rpm/rpmts.h   rpm/rpmfileutil.h], [], [],
+		   [[#include <rpm/rpmlib.h>]])
 fi
 
 
@@ -303,6 +315,9 @@ AC_CHECK_HEADERS([net/if_arp.h       net/if_mib.h         net/if_var.h     ] dnl
                  [netinet/tcpip.h    netinet/udp.h        netinet/udp_var.h] dnl
                  [net/route.h        netinet/icmp6.h                       ],,,
     [[
+#if HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
 #if HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
@@ -329,6 +344,9 @@ AC_CHECK_HEADERS([net/if_arp.h       net/if_mib.h         net/if_var.h     ] dnl
 #endif
 #if HAVE_NET_IF_H
 #include <net/if.h>
+#endif
+#if HAVE_NET_IF_VAR_H
+#include <net/if_var.h>
 #endif
 #if HAVE_NETINET_IP_VAR_H
 #include <netinet/ip_var.h>
@@ -360,17 +378,29 @@ AC_CHECK_HEADERS([netinet/ip6.h                               ] dnl
                  [netinet6/tcp6.h       netinet6/tcp6_fsm.h   ] dnl
                  [netinet6/tcp6_timer.h netinet6/tcp6_var.h],,,
     [[
+#if HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
 #if HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
 #if HAVE_SYS_QUEUE_H
 #include <sys/queue.h>
 #endif
+#if HAVE_SYS_SOCKET_H
+#include <sys/socket.h>
+#endif
 #if HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
 #if HAVE_NETINET_IP6_H
 #include <netinet/ip6.h>
+#endif
+#if HAVE_NET_IF_H
+#include <net/if.h>
+#endif
+#if HAVE_NET_ROUTE_H
+#include <net/route.h>
 #endif
     ]])
 
@@ -379,6 +409,9 @@ AC_CHECK_HEADERS([netinet/ip6.h                               ] dnl
 #
 AC_CHECK_HEADERS(netinet/in_pcb.h,,,
     [[
+#if HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
 #if HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
@@ -391,17 +424,20 @@ AC_CHECK_HEADERS(netinet/in_pcb.h,,,
 #if HAVE_SYS_SOCKETVAR_H
 #include <sys/socketvar.h>
 #endif
-#if HAVE_ARPA_INET_H
-#include <arpa/inet.h>
+#if HAVE_NETINET_IN_H
+#include <netinet/in.h>
 #endif
 #if HAVE_NETINET_IN_SYSTM_H
 #include <netinet/in_systm.h>
 #endif
-#if HAVE_NETINET_IN_H
-#include <netinet/in.h>
+#if HAVE_NETINET_IP_H
+#include <netinet/ip.h>
 #endif
 #if HAVE_NET_ROUTE_H
 #include <net/route.h>
+#endif
+#if HAVE_ARPA_INET_H
+#include <arpa/inet.h>
 #endif
     ]])
 
@@ -446,7 +482,12 @@ case $target_os in
 *** To monitor CPU/memory values in AIX you need to install
 *** libperfstat which can be found in bos.perf
 ]),,
-                LMIBLIBS))
+                LMIBLIBS),,
+    [[
+#if HAVE_SYS_PROTOSW_H
+#include <sys/protosw.h>
+#endif
+    ]])
         ;;
     hpux*)
         #       HP-UX agent needs open_mib       (XXX - not a header check!)

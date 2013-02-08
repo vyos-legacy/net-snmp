@@ -1,5 +1,6 @@
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/watcher.h>
@@ -14,6 +15,12 @@
 #include "mibdefs.h"
 #define SHELLCOMMAND 3
 #endif
+
+netsnmp_feature_require(extract_table_row_data)
+netsnmp_feature_require(table_data_delete_table)
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(insert_table_row)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 oid  ns_extend_oid[]    = { 1, 3, 6, 1, 4, 1, 8072, 1, 3, 2 };
 oid  extend_count_oid[] = { 1, 3, 6, 1, 4, 1, 8072, 1, 3, 2, 1 };
@@ -35,18 +42,19 @@ extend_registration_block *ereg_head = NULL;
 
 #ifndef USING_UCD_SNMP_EXTENSIBLE_MODULE
 typedef struct netsnmp_old_extend_s {
-    int idx;
+    unsigned int idx;
     netsnmp_extend *exec_entry;
     netsnmp_extend *efix_entry;
 } netsnmp_old_extend;
 
-int             num_compatability_entries = 0;
-int             max_compatability_entries = 50;
+unsigned int             num_compatability_entries = 0;
+unsigned int             max_compatability_entries = 50;
 netsnmp_old_extend *compatability_entries;
 
 WriteMethod fixExec2Error;
 FindVarMethod var_extensible_old;
 oid  old_extensible_variables_oid[] = { NETSNMP_UCDAVIS_MIB, NETSNMP_SHELLMIBNUM, 1 };
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 struct variable2 old_extensible_variables[] = {
     {MIBINDEX,     ASN_INTEGER,   NETSNMP_OLDAPI_RONLY,
      var_extensible_old, 1, {MIBINDEX}},
@@ -63,6 +71,24 @@ struct variable2 old_extensible_variables[] = {
     {ERRORFIXCMD,  ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
      var_extensible_old, 1, {ERRORFIXCMD}}
 };
+#else /* !NETSNMP_NO_WRITE_SUPPORT */
+struct variable2 old_extensible_variables[] = {
+    {MIBINDEX,     ASN_INTEGER,   NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {MIBINDEX}},
+    {ERRORNAME,    ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {ERRORNAME}},
+    {SHELLCOMMAND, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {SHELLCOMMAND}},
+    {ERRORFLAG,    ASN_INTEGER,   NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {ERRORFLAG}},
+    {ERRORMSG,     ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {ERRORMSG}},
+    {ERRORFIX,     ASN_INTEGER,  NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {ERRORFIX}},
+    {ERRORFIXCMD,  ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_extensible_old, 1, {ERRORFIXCMD}}
+};
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
 #endif
 
 
@@ -94,7 +120,8 @@ _register_extend( oid *base, size_t len )
     netsnmp_table_data                *dinfo;
     netsnmp_table_registration_info   *tinfo;
     netsnmp_watcher_info              *winfo;
-    netsnmp_handler_registration      *reg;
+    netsnmp_handler_registration      *reg = NULL;
+    int                                rc;
 
     for ( eptr=ereg_head; eptr; eptr=eptr->next ) {
         if (!snmp_oid_compare( base, len, eptr->root_oid, eptr->oid_len))
@@ -102,6 +129,8 @@ _register_extend( oid *base, size_t len )
     }
     if (!eptr) {
         eptr = SNMP_MALLOC_TYPEDEF( extend_registration_block );
+        if (!eptr)
+            return NULL;
         eptr->root_oid = snmp_duplicate_objid( base, len );
         eptr->oid_len  = len;
         eptr->num_entries = 0;
@@ -122,10 +151,20 @@ _register_extend( oid *base, size_t len )
     tinfo->min_column = COLUMN_EXTCFG_FIRST_COLUMN;
     tinfo->max_column = COLUMN_EXTCFG_LAST_COLUMN;
     oid_buf[len] = 2;
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     reg   = netsnmp_create_handler_registration(
                 "nsExtendConfigTable", handle_nsExtendConfigTable, 
                 oid_buf, len+1, HANDLER_CAN_RWRITE);
-    netsnmp_register_table_data( reg, dinfo, tinfo );
+#else /* !NETSNMP_NO_WRITE_SUPPORT */
+    reg   = netsnmp_create_handler_registration(
+                "nsExtendConfigTable", handle_nsExtendConfigTable, 
+                oid_buf, len+1, HANDLER_CAN_RONLY);
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
+    rc = netsnmp_register_table_data( reg, dinfo, tinfo );
+    if (rc != SNMPERR_SUCCESS) {
+        goto bail;
+    }
+    netsnmp_handler_owns_table_info(reg->handler->next);
     eptr->reg[0] = reg;
 
         /*
@@ -142,7 +181,10 @@ _register_extend( oid *base, size_t len )
     reg   = netsnmp_create_handler_registration(
                 "nsExtendOut1Table", handle_nsExtendOutput1Table, 
                 oid_buf, len+1, HANDLER_CAN_RONLY);
-    netsnmp_register_table_data( reg, dinfo, tinfo );
+    rc = netsnmp_register_table_data( reg, dinfo, tinfo );
+    if (rc != SNMPERR_SUCCESS)
+        goto bail;
+    netsnmp_handler_owns_table_info(reg->handler->next);
     eptr->reg[1] = reg;
 
         /*
@@ -161,7 +203,10 @@ _register_extend( oid *base, size_t len )
     reg   = netsnmp_create_handler_registration(
                 "nsExtendOut2Table", handle_nsExtendOutput2Table, 
                 oid_buf, len+1, HANDLER_CAN_RONLY);
-    netsnmp_register_table( reg, tinfo );
+    rc = netsnmp_register_table( reg, tinfo );
+    if (rc != SNMPERR_SUCCESS)
+        goto bail;
+    netsnmp_handler_owns_table_info(reg->handler->next);
     eptr->reg[2] = reg;
 
         /*
@@ -174,9 +219,41 @@ _register_extend( oid *base, size_t len )
     winfo = netsnmp_create_watcher_info(
                 &(eptr->num_entries), sizeof(eptr->num_entries),
                 ASN_INTEGER, WATCHER_FIXED_SIZE);
-    netsnmp_register_watched_scalar( reg, winfo );
+    rc = netsnmp_register_watched_scalar2( reg, winfo );
+    if (rc != SNMPERR_SUCCESS)
+        goto bail;
 
     return eptr;
+
+bail:
+    if (eptr->reg[2])
+        netsnmp_unregister_handler(eptr->reg[2]);
+    if (eptr->reg[1])
+        netsnmp_unregister_handler(eptr->reg[1]);
+    if (eptr->reg[0])
+        netsnmp_unregister_handler(eptr->reg[0]);
+    return NULL;
+}
+
+static void
+_unregister_extend(extend_registration_block *eptr)
+{
+    extend_registration_block *prev;
+
+    netsnmp_assert(eptr);
+    for (prev = ereg_head; prev && prev->next != eptr; prev = prev->next)
+	;
+    if (prev) {
+        netsnmp_assert(eptr == prev->next);
+	prev->next = eptr->next;
+    } else {
+        netsnmp_assert(eptr == ereg_head);
+	ereg_head = eptr->next;
+    }
+
+    netsnmp_table_data_delete_table(eptr->dinfo);
+    free(eptr->root_oid);
+    free(eptr);
 }
 
 int
@@ -219,6 +296,17 @@ void init_extend( void )
     snmp_register_callback(SNMP_CALLBACK_APPLICATION,
                            SNMPD_CALLBACK_PRE_UPDATE_CONFIG,
                            extend_clear_callback, NULL);
+}
+
+void
+shutdown_extend(void)
+{
+#ifndef USING_UCD_SNMP_EXTENSIBLE_MODULE
+    free(compatability_entries);
+    compatability_entries = NULL;
+#endif
+    while (ereg_head)
+	_unregister_extend(ereg_head);
 }
 
         /*************************
@@ -339,9 +427,9 @@ _free_extension( netsnmp_extend *extension, extend_registration_block *ereg )
             eprev->next = eptr->next;
         else
             ereg->ehead = eptr->next;
+        netsnmp_table_data_remove_and_delete_row( ereg->dinfo, extension->row);
     }
 
-    netsnmp_table_data_remove_and_delete_row( ereg->dinfo, extension->row);
     SNMP_FREE( extension->token );
     SNMP_FREE( extension->cache );
     SNMP_FREE( extension->command );
@@ -490,10 +578,21 @@ extend_parse_config(const char *token, char *cptr)
             
     } else if (!strcmp( token, "sh"   ) ||
                !strcmp( token, "exec" )) {
-        if ( num_compatability_entries == max_compatability_entries )
+        if ( num_compatability_entries == max_compatability_entries ) {
             /* XXX - should really use dynamic allocation */
-            config_perror("No further UCD-compatible entries" );
-        else
+            netsnmp_old_extend *new_compatability_entries;
+            new_compatability_entries = realloc(compatability_entries,
+                             max_compatability_entries*2*sizeof(netsnmp_old_extend));
+            if (!new_compatability_entries)
+                config_perror("No further UCD-compatible entries" );
+            else {
+                memset(new_compatability_entries+num_compatability_entries, 0,
+                        sizeof(netsnmp_old_extend)*max_compatability_entries);
+                max_compatability_entries *= 2;
+                compatability_entries = new_compatability_entries;
+            }
+        }
+        if (num_compatability_entries != max_compatability_entries)
             compatability_entries[
                 num_compatability_entries++ ].exec_entry = extension;
     }
@@ -613,6 +712,7 @@ handle_nsExtendConfigTable(netsnmp_mib_handler          *handler,
          *
          **********/
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         case MODE_SET_RESERVE1:
             /*
              * Validate the new assignments
@@ -938,6 +1038,7 @@ handle_nsExtendConfigTable(netsnmp_mib_handler          *handler,
                 }
             }
             break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */ 
 
         default:
             netsnmp_set_request_error(reqinfo, request, SNMP_ERR_GENERR);
@@ -945,6 +1046,7 @@ handle_nsExtendConfigTable(netsnmp_mib_handler          *handler,
         }
     }
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     /*
      * If we're marking a given row as active,
      *  then we need to check that it's ready.
@@ -969,7 +1071,8 @@ handle_nsExtendConfigTable(netsnmp_mib_handler          *handler,
             }
         }
     }
-
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
+    
     return SNMP_ERR_NOERROR;
 }
 
@@ -1098,7 +1201,7 @@ _extend_find_entry( netsnmp_request_info       *request,
 {
     netsnmp_extend            *eptr;
     extend_registration_block *ereg;
-    int line_idx;
+    unsigned int line_idx;
     oid oid_buf[MAX_OID_LEN];
     int oid_len;
     int i;
@@ -1276,7 +1379,7 @@ handle_nsExtendOutput2Table(netsnmp_mib_handler          *handler,
     netsnmp_table_request_info *table_info;
     netsnmp_extend             *extension;
     char *cp;
-    int line_idx;
+    unsigned int line_idx;
     int len;
 
     for ( request=requests; request; request=request->next ) {
@@ -1357,13 +1460,15 @@ var_extensible_old(struct variable * vp,
 {
     netsnmp_old_extend *exten = NULL;
     static long     long_ret;
-    int idx;
+    unsigned int idx;
 
     if (header_simple_table
         (vp, name, length, exact, var_len, write_method, num_compatability_entries))
         return (NULL);
 
     idx = name[*length-1] -1;
+	if (idx > max_compatability_entries)
+		return NULL;
     exten = &compatability_entries[ idx ];
     if (exten) {
         switch (vp->magic) {
@@ -1419,11 +1524,12 @@ fixExec2Error(int action,
              u_char * statP, oid * name, size_t name_len)
 {
     netsnmp_old_extend *exten = NULL;
-    int idx;
+    unsigned int idx;
 
     idx = name[name_len-1] -1;
     exten = &compatability_entries[ idx ];
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     switch (action) {
     case MODE_SET_RESERVE1:
         if (var_val_type != ASN_INTEGER) {
@@ -1444,6 +1550,7 @@ fixExec2Error(int action,
     case MODE_SET_COMMIT:
         netsnmp_cache_check_and_reload( exten->efix_entry->cache );
     }
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     return SNMP_ERR_NOERROR;
 }
-#endif
+#endif /* USING_UCD_SNMP_EXTENSIBLE_MODULE */

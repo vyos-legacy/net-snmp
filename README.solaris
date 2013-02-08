@@ -1,5 +1,5 @@
 README.solaris
-$Id: README.solaris 17763 2009-09-22 21:51:42Z tanders $
+$Id$
 
 This document describes issues relating to compiling,
 installing and using net-snmp on Solaris.

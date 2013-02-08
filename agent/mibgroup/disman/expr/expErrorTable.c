@@ -7,10 +7,13 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include "disman/expr/expExpression.h"
 #include "disman/expr/expErrorTable.h"
+
+netsnmp_feature_require(table_tdata)
 
 /* Initializes the expExpressionErrorTable module */
 void
@@ -74,6 +77,9 @@ expErrorTable_handler(netsnmp_mib_handler *handler,
          */
     case MODE_GET:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             entry = (struct expExpression *)
                     netsnmp_tdata_extract_entry(request);
             tinfo = netsnmp_extract_table_info(request);

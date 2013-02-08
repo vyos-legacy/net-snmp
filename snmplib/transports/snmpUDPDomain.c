@@ -13,6 +13,7 @@
 
 #include <net-snmp/types.h>
 #include <net-snmp/library/snmpUDPDomain.h>
+#include <net-snmp/library/snmpUDPIPv4BaseDomain.h>
 
 #include <stddef.h>
 #include <stdio.h>
@@ -101,7 +102,9 @@ netsnmp_udp_fmtaddr(netsnmp_transport *t, void *data, int len)
 
 
 
-#if defined(linux) && defined(IP_PKTINFO)
+#if (defined(linux) && defined(IP_PKTINFO)) \
+    || defined(IP_RECVDSTADDR) && HAVE_STRUCT_MSGHDR_MSG_CONTROL \
+                               && HAVE_STRUCT_MSGHDR_MSG_FLAGS
 
 int netsnmp_udp_recvfrom(int s, void *buf, int len, struct sockaddr *from, socklen_t *fromlen, struct sockaddr *dstip, socklen_t *dstlen, int *if_index)
 {
@@ -116,7 +119,7 @@ int netsnmp_udp_sendto(int fd, struct in_addr *srcip, int if_index, struct socka
     /** udpiv4 just calls udpbase. should we skip directly to there? */
     return netsnmp_udpipv4_sendto(fd, srcip, if_index, remote, data, len);
 }
-#endif /* linux && IP_PKTINFO */
+#endif /* (linux && IP_PKTINFO) || IP_RECVDSTADDR */
 
 /*
  * Open a UDP-based transport for SNMP.  Local is TRUE if addr is the local
@@ -287,6 +290,8 @@ netsnmp_udp_parse_security(const char *token, char *param)
             if (*cp == '\0') {
                 if (0 < maskLen && maskLen <= 32)
                     mask.s_addr = htonl((in_addr_t)(~0UL << (32 - maskLen)));
+                else if (maskLen == 0)
+                    mask.s_addr = 0;
                 else {
                     config_perror("bad mask length");
                     return;
@@ -507,8 +512,9 @@ netsnmp_udp_ctor(void)
     udpDomain.prefix = (const char**)calloc(2, sizeof(char *));
     udpDomain.prefix[0] = "udp";
 
+    udpDomain.f_create_from_tstring     = NULL;
     udpDomain.f_create_from_tstring_new = netsnmp_udp_create_tstring;
-    udpDomain.f_create_from_ostring = netsnmp_udp_create_ostring;
+    udpDomain.f_create_from_ostring     = netsnmp_udp_create_ostring;
 
     netsnmp_tdomain_register(&udpDomain);
 }

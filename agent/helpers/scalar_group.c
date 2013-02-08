@@ -15,6 +15,17 @@
 #include <net-snmp/agent/instance.h>
 #include <net-snmp/agent/serialize.h>
 
+static netsnmp_scalar_group*
+clone_scalar_group(netsnmp_scalar_group* src)
+{
+  netsnmp_scalar_group *t = SNMP_MALLOC_TYPEDEF(netsnmp_scalar_group);
+  if(t != NULL) {
+    t->lbound = src->lbound;
+    t->ubound = src->ubound;
+  }
+  return t;
+}
+
 /** @defgroup scalar_group_group scalar_group
  *  Process groups of scalars.
  *  @ingroup leaf
@@ -38,6 +49,8 @@ netsnmp_get_scalar_group_handler(oid first, oid last)
 	    sgroup->lbound = first;
 	    sgroup->ubound = last;
             ret->myvoid = (void *)sgroup;
+            ret->data_free = free;
+            ret->data_clone = (void *(*)(void *))clone_scalar_group;
 	}
     }
     return ret;
@@ -96,12 +109,14 @@ netsnmp_scalar_group_helper_handler(netsnmp_mib_handler *handler,
         ret = SNMP_NOSUCHOBJECT;
         /* Fallthrough */
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     case MODE_SET_RESERVE1:
     case MODE_SET_RESERVE2:
     case MODE_SET_ACTION:
     case MODE_SET_COMMIT:
     case MODE_SET_UNDO:
     case MODE_SET_FREE:
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
         if (cmp != 0 ||
             requests->requestvb->name_length <= reginfo->rootoid_len) {
 	    /*

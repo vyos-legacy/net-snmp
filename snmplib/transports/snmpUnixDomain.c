@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <sys/types.h>
 #include <net-snmp/library/snmpUnixDomain.h>
@@ -34,7 +35,10 @@
 #include <net-snmp/library/snmp_transport.h>
 #include <net-snmp/library/snmpSocketBaseDomain.h>
 #include <net-snmp/library/system.h> /* mkdirhier */
+#include <net-snmp/library/tools.h>
 
+netsnmp_feature_child_of(transport_unix_socket_all, transport_all)
+netsnmp_feature_child_of(unix_socket_paths, transport_unix_socket_all)
 
 #ifndef NETSNMP_STREAM_QUEUE_LEN
 #define NETSNMP_STREAM_QUEUE_LEN  5
@@ -259,6 +263,7 @@ netsnmp_unix_accept(netsnmp_transport *t)
 static int create_path = 0;
 static mode_t create_mode;
 
+#ifndef NETSNMP_FEATURE_REMOVE_UNIX_SOCKET_PATHS
 /** If trying to create unix sockets in nonexisting directories then
  *  try to create the directory with mask mode.
  */
@@ -275,6 +280,7 @@ void netsnmp_unix_dont_create_path(void)
 {
     create_path = 0;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_UNIX_SOCKET_PATHS */
 
 /*
  * Open a Unix-domain transport for SNMP.  Local is TRUE if addr is the local
@@ -289,24 +295,30 @@ netsnmp_unix_transport(struct sockaddr_un *addr, int local)
     netsnmp_transport *t = NULL;
     sockaddr_un_pair *sup = NULL;
     int             rc = 0;
-    char           *string = NULL;
+
+#ifdef NETSNMP_NO_LISTEN_SUPPORT
+    /* SPECIAL CIRCUMSTANCE: We still want AgentX to be able to operate,
+       so we allow for unix domain socktes to still listen when everything
+       else isn't allowed to.  Thus, we ignore this define in this file.
+    */
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
 
     if (addr == NULL || addr->sun_family != AF_UNIX) {
         return NULL;
     }
 
-    t = (netsnmp_transport *) malloc(sizeof(netsnmp_transport));
+    t = SNMP_MALLOC_TYPEDEF(netsnmp_transport);
     if (t == NULL) {
         return NULL;
     }
 
-    string = netsnmp_unix_fmtaddr(NULL, (void *)addr,
-                                  sizeof(struct sockaddr_un));
-    DEBUGMSGTL(("netsnmp_unix", "open %s %s\n", local ? "local" : "remote",
-                string));
-    free(string);
-
-    memset(t, 0, sizeof(netsnmp_transport));
+    DEBUGIF("netsnmp_unix") {
+        char *str = netsnmp_unix_fmtaddr(NULL, (void *)addr,
+                                         sizeof(struct sockaddr_un));
+        DEBUGMSGTL(("netsnmp_unix", "open %s %s\n", local ? "local" : "remote",
+                    str));
+        free(str);
+    }
 
     t->domain = netsnmp_UnixDomain;
     t->domain_length =
@@ -451,7 +463,7 @@ netsnmp_unix_create_tstring(const char *string, int local,
 	(strlen(string) < sizeof(addr.sun_path))) {
         addr.sun_family = AF_UNIX;
         memset(addr.sun_path, 0, sizeof(addr.sun_path));
-        strncpy(addr.sun_path, string, sizeof(addr.sun_path) - 1);
+        strlcpy(addr.sun_path, string, sizeof(addr.sun_path));
         return netsnmp_unix_transport(&addr, local);
     } else {
         if (string != NULL && *string != '\0') {
@@ -471,7 +483,7 @@ netsnmp_unix_create_ostring(const u_char * o, size_t o_len, int local)
     if (o_len > 0 && o_len < (sizeof(addr.sun_path) - 1)) {
         addr.sun_family = AF_UNIX;
         memset(addr.sun_path, 0, sizeof(addr.sun_path));
-        strncpy(addr.sun_path, (const char *)o, o_len);
+        strlcpy(addr.sun_path, (const char *)o, sizeof(addr.sun_path));
         return netsnmp_unix_transport(&addr, local);
     } else {
         if (o_len > 0) {
@@ -491,8 +503,9 @@ netsnmp_unix_ctor(void)
     unixDomain.prefix = (const char**)calloc(2, sizeof(char *));
     unixDomain.prefix[0] = "unix";
 
+    unixDomain.f_create_from_tstring     = NULL;
     unixDomain.f_create_from_tstring_new = netsnmp_unix_create_tstring;
-    unixDomain.f_create_from_ostring = netsnmp_unix_create_ostring;
+    unixDomain.f_create_from_ostring     = netsnmp_unix_create_ostring;
 
     netsnmp_tdomain_register(&unixDomain);
 }

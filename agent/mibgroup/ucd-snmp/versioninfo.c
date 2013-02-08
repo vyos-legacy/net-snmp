@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <sys/types.h>
 #if TIME_WITH_SYS_TIME
@@ -23,7 +24,12 @@
 
 #include "struct.h"
 #include "versioninfo.h"
-#include "util_funcs.h"
+#include "util_funcs/header_generic.h"
+#include "util_funcs/restart.h"
+#include "util_funcs.h" /* clear_cache */
+
+netsnmp_feature_require(clear_cache)
+
 
 void
 init_versioninfo(void)
@@ -102,22 +108,21 @@ var_extensible_version(struct variable *vp,
         long_ret = name[8];
         return ((u_char *) (&long_ret));
     case VERTAG:
-        strcpy(errmsg, netsnmp_get_version());
+        strlcpy(errmsg, netsnmp_get_version(), sizeof(errmsg));
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERDATE:
-        sprintf(errmsg, "$Date: 2010-01-24 03:41:03 -0800 (Sun, 24 Jan 2010) $");
+        strlcpy(errmsg, "$Date$", sizeof(errmsg));
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERCDATE:
         curtime = time(NULL);
         cptr = ctime(&curtime);
-        strcpy(errmsg, cptr);
-        *var_len = strlen(errmsg) - 1;
+        strlcpy(errmsg, cptr, sizeof(errmsg));
+        *var_len = strlen(errmsg) - 1; /* - 1 to strip trailing newline */
         return ((u_char *) errmsg);
     case VERIDENT:
-        sprintf(errmsg,
-                "$Id: versioninfo.c 18044 2010-01-24 11:41:03Z bvassche $");
+        strlcpy(errmsg, "$Id$", sizeof(errmsg));
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
     case VERCONFIG:
@@ -127,7 +132,7 @@ var_extensible_version(struct variable *vp,
             *var_len = 1024;    /* mib imposed restriction */
         return (u_char *) config_opts;
 #else
-        sprintf(errmsg, "");
+        strlcpy(errmsg, "", sizeof(errmsg)));
         *var_len = strlen(errmsg);
         return ((u_char *) errmsg);
 #endif
@@ -202,13 +207,10 @@ save_persistent(int action,
                size_t var_val_len,
                u_char * statP, oid * name, size_t name_len)
 {
-    long            tmp = 0;
-
     if (var_val_type != ASN_INTEGER) {
         DEBUGMSGTL(("versioninfo", "Wrong type != int\n"));
         return SNMP_ERR_WRONGTYPE;
     }
-    tmp = *((long *) var_val);
     if (action == COMMIT) {
         snmp_store(netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
                                          NETSNMP_DS_LIB_APPTYPE));

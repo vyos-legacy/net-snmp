@@ -7,11 +7,18 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include "disman/expr/expObject.h"
 #include "disman/expr/expObjectTable.h"
 
+netsnmp_feature_require(table_tdata)
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(check_vb_oid)
+netsnmp_feature_require(check_vb_truthvalue)
+netsnmp_feature_require(table_tdata_insert_row)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /* Initializes the expObjectTable module */
 void
@@ -83,6 +90,9 @@ expObjectTable_handler(netsnmp_mib_handler *handler,
          */
     case MODE_GET:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             entry = (struct expObject *)netsnmp_tdata_extract_entry(request);
             tinfo = netsnmp_extract_table_info(request);
             if (!entry || !(entry->flags & EXP_OBJ_FLAG_VALID))
@@ -152,6 +162,9 @@ expObjectTable_handler(netsnmp_mib_handler *handler,
          */
     case MODE_SET_RESERVE1:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             entry = (struct expObject *)
                 netsnmp_tdata_extract_entry(request);
             tinfo = netsnmp_extract_table_info(request);
@@ -204,6 +217,9 @@ expObjectTable_handler(netsnmp_mib_handler *handler,
 
     case MODE_SET_RESERVE2:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             tinfo = netsnmp_extract_table_info(request);
 
             switch (tinfo->colnum) {
@@ -238,6 +254,9 @@ expObjectTable_handler(netsnmp_mib_handler *handler,
 
     case MODE_SET_FREE:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             tinfo = netsnmp_extract_table_info(request);
 
             switch (tinfo->colnum) {
@@ -263,6 +282,9 @@ expObjectTable_handler(netsnmp_mib_handler *handler,
 
     case MODE_SET_ACTION:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             tinfo = netsnmp_extract_table_info(request);
             entry = (struct expObject *)
                     netsnmp_tdata_extract_entry(request);
@@ -289,6 +311,9 @@ expObjectTable_handler(netsnmp_mib_handler *handler,
          */
         ret = 0;  /* Flag to re-check expExpressionPrefix settings */
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             entry = (struct expObject *) netsnmp_tdata_extract_entry(request);
             tinfo = netsnmp_extract_table_info(request);
 

@@ -6,11 +6,11 @@
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
-#include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/table_container.h>
 #include "sctpLookupRemIPAddrTable.h"
 
 static netsnmp_container *sctpLookupRemIPAddrTable_container;
+static netsnmp_table_registration_info *table_info;
 
 /** Initializes the sctpLookupRemIPAddrTable module */
 void
@@ -25,8 +25,7 @@ init_sctpLookupRemIPAddrTable(void)
 void
 shutdown_sctpLookupRemIPAddrTable(void)
 {
-    sctpLookupRemIPAddrTable_container_clear
-        (sctpLookupRemIPAddrTable_container);
+    shutdown_table_sctpLookupRemIPAddrTable();
 }
 
 /** Initialize the sctpLookupRemIPAddrTable table by defining its contents and how it's structured */
@@ -40,7 +39,6 @@ initialize_table_sctpLookupRemIPAddrTable(void)
     netsnmp_handler_registration *reg = NULL;
     netsnmp_mib_handler *handler = NULL;
     netsnmp_container *container = NULL;
-    netsnmp_table_registration_info *table_info = NULL;
 
     reg =
         netsnmp_create_handler_registration("sctpLookupRemIPAddrTable",
@@ -100,6 +98,7 @@ initialize_table_sctpLookupRemIPAddrTable(void)
     if (SNMPERR_SUCCESS != netsnmp_register_table(reg, table_info)) {
         snmp_log(LOG_ERR,
                  "error registering table handler for sctpLookupRemIPAddrTable\n");
+        reg = NULL; /* it was freed inside netsnmp_register_table */
         goto bail;
     }
 
@@ -121,6 +120,17 @@ initialize_table_sctpLookupRemIPAddrTable(void)
 
     if (reg)
         netsnmp_handler_registration_free(reg);
+}
+
+void
+shutdown_table_sctpLookupRemIPAddrTable(void)
+{
+    if (table_info) {
+        netsnmp_table_registration_info_free(table_info);
+	table_info = NULL;
+    }
+    sctpLookupRemIPAddrTable_container_clear
+        (sctpLookupRemIPAddrTable_container);
 }
 
 /** handles requests for the sctpLookupRemIPAddrTable table */
@@ -253,8 +263,7 @@ sctpLookupRemIPAddrTable_entry_copy(sctpLookupRemIPAddrTable_entry * from,
 void
 sctpLookupRemIPAddrTable_entry_free(sctpLookupRemIPAddrTable_entry * entry)
 {
-    if (entry != NULL)
-        SNMP_FREE(entry);
+    SNMP_FREE(entry);
 }
 
 netsnmp_container *

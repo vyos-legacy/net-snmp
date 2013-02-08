@@ -3,6 +3,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <stdio.h>
 #include <errno.h>
@@ -40,6 +41,8 @@
 #include "agentx/protocol.h"
 #include "agentx/client.h"
 #include "agentx/subagent.h"
+
+netsnmp_feature_require(set_agent_uptime)
 
         /*
          * AgentX handling utility routines
@@ -103,6 +106,7 @@ agentx_open_session(netsnmp_session * ss)
     netsnmp_pdu    *pdu, *response;
     extern oid      version_sysoid[];
     extern int      version_sysoid_len;
+    u_long 	    timeout;
 
     DEBUGMSGTL(("agentx/subagent", "opening session \n"));
     if (ss == NULL || !IS_AGENTX_VERSION(ss->version)) {
@@ -112,7 +116,14 @@ agentx_open_session(netsnmp_session * ss)
     pdu = snmp_pdu_create(AGENTX_MSG_OPEN);
     if (pdu == NULL)
         return 0;
+    timeout = netsnmp_ds_get_int(NETSNMP_DS_APPLICATION_ID,
+                                   NETSNMP_DS_AGENT_AGENTX_TIMEOUT);
+    if (timeout < 0) 
     pdu->time = 0;
+    else
+	/* for master TIMEOUT is usec, but Agentx Open specifies sec */
+    	pdu->time = timeout/ONE_SEC;
+
     snmp_add_var(pdu, version_sysoid, version_sysoid_len,
 		 's', "Net-SNMP AgentX sub-agent");
 

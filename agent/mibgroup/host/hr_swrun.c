@@ -122,6 +122,8 @@ static int      LowProcIndex;
 #if defined(hpux10) || defined(hpux11)
 struct pst_status *proc_table;
 struct pst_dynamic pst_dyn;
+#elif HAVE_KVM_GETPROC2
+struct kinfo_proc2 *proc_table;
 #elif HAVE_KVM_GETPROCS
 struct kinfo_proc *proc_table;
 #elif defined(solaris2)
@@ -478,6 +480,82 @@ header_hrswrunEntry(struct variable *vp,
 	 *
 	 *********************/
 
+#if defined(linux)
+static char     *
+skip_to_next_field(char *cp)
+{
+    while (*cp && ! isspace(*cp)) /* skip past non-space */
+	++cp;
+    while (*cp && isspace(*cp)) /* skip past space */
+	++cp;
+    return cp;
+
+}
+
+static char     *
+get_proc_file_line(char *fmt,
+		    int pid,
+		    char *buf,
+		    int buflen )
+{
+    static char     string[1024];
+    FILE *fp;
+    *buf = '\0';
+    sprintf(string,fmt,pid);
+    if (   ((fp = fopen(string, "r")) == NULL)
+	|| (fgets(buf, buflen, fp) == NULL) ) {
+	if (fp)
+	    fclose(fp);
+	return NULL;
+    }
+    fclose(fp);
+    return buf;
+}
+
+static char     *
+get_proc_stat_field(int pid,
+		    char *buf,
+		    int buflen,
+		    int skip )
+{
+    int i;
+    char *cp;
+
+    if ((cp = get_proc_file_line("/proc/%d/stat", pid, buf, buflen)) == NULL )
+	return NULL;
+    for (i = 0; *cp && i < skip; ++i) {
+	cp = skip_to_next_field(cp);
+    }
+    return cp;
+}
+
+static char *
+get_proc_name_from_cmdline(int pid,
+			    char *buf,
+			    int buflen )
+{
+    return get_proc_file_line("/proc/%d/cmdline", pid, buf, buflen);
+}
+
+static char *
+get_proc_name_from_status(int pid,
+	    char *buf,
+	    int buflen )
+{
+    char *cp,*cp2;
+    if ((cp = get_proc_file_line("/proc/%d/status", pid, buf, buflen)) == NULL )
+	return NULL;
+    cp = strchr(cp, ':');
+    if ( cp == NULL ) {
+	return NULL;    /* the process file is malformed */
+    }
+    cp = skip_to_next_field(cp);
+    cp2 = strchr(cp, '\n');
+    if (cp2)
+	*cp2 = 0;
+    return cp;
+}
+#endif
 
 u_char         *
 var_hrswrun(struct variable * vp,
@@ -504,7 +582,7 @@ var_hrswrun(struct variable * vp,
     time_t          now;
     static int      oldpid = -1;
 #endif
-#if HAVE_KVM_GETPROCS
+#if (defined(HAVE_KVM_GETPROCS) || defined(HAVE_KVM_GETPROC2))
     char          **argv;
 #endif
 #ifdef linux
@@ -579,14 +657,12 @@ var_hrswrun(struct variable * vp,
         return (u_char *) & long_return;
     case HRSWRUN_NAME:
 #ifdef HAVE_SYS_PSTAT_H
-        snprintf(string, sizeof(string), "%s", proc_buf.pst_cmd);
-        string[ sizeof(string)-1 ] = 0;
+        strlcpy(string, proc_buf.pst_cmd, sizeof(string));
         cp = strchr(string, ' ');
         if (cp != NULL)
             *cp = '\0';
 #elif defined(dynix)
-        snprintf(string, sizeof(string), "%s", lowpsinfo.pr_fname);
-        string[ sizeof(string)-1 ] = 0;
+        strlcpy(string, lowpsinfo.pr_fname, sizeof(string));
         cp = strchr(string, ' ');
         if (cp != NULL)
             *cp = '\0';
@@ -595,44 +671,40 @@ var_hrswrun(struct variable * vp,
         if (proc_buf) { 
             char *pos=strchr(proc_buf->pr_psargs,' ');
             if (pos != NULL) *pos = '\0';
-            strlcpy(string, basename(proc_buf->pr_psargs),sizeof(string));
+            strlcpy(string, basename(proc_buf->pr_psargs), sizeof(string));
             if (pos != NULL) *pos=' ';
         } else {
-            strcpy(string, "<exited>");
+            strlcpy(string, "<exited>", sizeof(string));
         }
-        string[ sizeof(string)-1 ] = 0;
 #else
-        strncpy(string, proc_buf->p_user.u_comm, sizeof(string));
-        string[ sizeof(string)-1 ] = 0;
+        strlcpy(string, proc_buf->p_user.u_comm, sizeof(string));
 #endif
 #elif defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
-        strncpy(string, proc_table[LowProcIndex].pi_comm, sizeof(string));
-        string[ sizeof(string)-1 ] = 0;
+        strlcpy(string, proc_table[LowProcIndex].pi_comm, sizeof(string));
+        cp = strchr(string, ' ');
+        if (cp != NULL)
+            *cp = '\0';
+#elif HAVE_KVM_GETPROC2
+        strlcpy(string, proc_table[LowProcIndex].p_comm, sizeof(string));
+        /* process name: truncate the string at the first space */
         cp = strchr(string, ' ');
         if (cp != NULL)
             *cp = '\0';
 #elif HAVE_KVM_GETPROCS
     #if defined(freebsd5) && __FreeBSD_version >= 500014
         strcpy(string, proc_table[LowProcIndex].ki_comm);
+    #elif defined(dragonfly) && __DragonFly_version >= 190000
+        strcpy(string, proc_table[LowProcIndex].kp_comm);
     #else
         strcpy(string, proc_table[LowProcIndex].kp_proc.p_comm);
     #endif
 #elif defined(linux)
-        sprintf(string, "/proc/%d/status", pid);
-        if ((fp = fopen(string, "r")) == NULL) {
+	if( (cp=get_proc_name_from_status(pid,buf,sizeof(buf))) == NULL ) {
             strcpy(string, "<exited>");
             *var_len = strlen(string);
             return (u_char *) string;
         }
-        fgets(buf, sizeof(buf), fp);    /* Name: process name */
-        cp = buf;
-        while (*cp != ':')
-            ++cp;
-        ++cp;
-        while (isspace(*cp))
-            ++cp;
         strcpy(string, cp);
-        fclose(fp);
 #elif defined(cygwin)
         /* if (lowproc.process_state & (PID_ZOMBIE | PID_EXITED)) */
         if (lowproc.process_state & PID_EXITED || (lowproc.exitcode & ~0xffff))
@@ -729,52 +801,39 @@ var_hrswrun(struct variable * vp,
         *cp1 = 0;
 #endif
 #elif defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
-        strncpy(string, proc_table[LowProcIndex].pi_comm, sizeof(string));
-        string[ sizeof(string)-1 ] = 0;
+        strlcpy(string, proc_table[LowProcIndex].pi_comm, sizeof(string));
+        cp = strchr(string, ' ');
+        if (cp != NULL)
+            *cp = '\0';
+#elif HAVE_KVM_GETPROC2
+        /* Should be path, but this is not available, just use argv[0] again */
+        strlcpy(string, proc_table[LowProcIndex].p_comm, sizeof(string));
         cp = strchr(string, ' ');
         if (cp != NULL)
             *cp = '\0';
 #elif HAVE_KVM_GETPROCS
     #if defined(freebsd5) && __FreeBSD_version >= 500014
         strcpy(string, proc_table[LowProcIndex].ki_comm);
+    #elif defined(dragonfly) && __DragonFly_version >= 190000
+        strcpy(string, proc_table[LowProcIndex].kp_comm);
     #else
         strcpy(string, proc_table[LowProcIndex].kp_proc.p_comm);
     #endif
 #elif defined(linux)
-        sprintf(string, "/proc/%d/cmdline", pid);
-        if ((fp = fopen(string, "r")) == NULL) {
-            strcpy(string, "<exited>");
-            *var_len = strlen(string);
-            return (u_char *) string;
-        }
-        if (fgets(buf, sizeof(buf) - 1, fp))    /* argv[0] '\0' argv[1] '\0' .... */
-            strcpy(string, buf);
+        cp = get_proc_name_from_cmdline(pid,buf,sizeof(buf)-1);
+        if (cp != NULL && *cp)    /* argv[0] '\0' argv[1] '\0' .... */
+            strcpy(string, cp);
         else {
             /*
              * swapped out - no cmdline 
              */
-            fclose(fp);
-            sprintf(string, "/proc/%d/status", pid);
-            if ((fp = fopen(string, "r")) == NULL)
-                return NULL;
-            if (!fgets(buf, sizeof(buf), fp)) {
-                fclose(fp);
-                return NULL;    /* the process probably died */
-            }
-            cp = strchr(buf, ':');
-            if ( cp == NULL ) {
-                fclose(fp);
-                return NULL;    /* the process file is malformed */
-            }
-            ++cp;
-            while (isspace(*cp))
-                ++cp;
+	    if( (cp=get_proc_name_from_status(pid,buf,sizeof(buf)-1)) == NULL ) {
+		strcpy(string, "<exited>");
+		*var_len = strlen(string);
+		return (u_char *) string;
+	    }
             strcpy(string, cp);
-            cp = strchr(string, '\n');
-            if (cp)
-                *cp = 0;
         }
-        fclose(fp);
 #elif defined(cygwin)
         /* if (lowproc.process_state & (PID_ZOMBIE | PID_EXITED)) */
         if (lowproc.process_state & PID_EXITED || (lowproc.exitcode & ~0xffff))
@@ -851,6 +910,17 @@ var_hrswrun(struct variable * vp,
             sprintf(string, "%s", cp);
         } else
             string[0] = '\0';
+#elif HAVE_KVM_GETPROC2
+        string[0] = 0;
+        argv = kvm_getargv2(kd, proc_table + LowProcIndex, sizeof(string));
+        if (argv)
+            argv++;
+        while (argv && *argv) {
+            if (string[0] != 0)
+                strcat(string, " ");
+            strcat(string, *argv);
+            argv++;
+        }
 #elif HAVE_KVM_GETPROCS
         string[0] = 0;
         argv = kvm_getargv(kd, proc_table + LowProcIndex, sizeof(string));
@@ -863,25 +933,11 @@ var_hrswrun(struct variable * vp,
             argv++;
         }
 #elif defined(linux)
-        sprintf(string, "/proc/%d/cmdline", pid);
-        if ((fp = fopen(string, "r")) == NULL) {
+        memset(buf, 0, sizeof(buf));
+	if( (cp=get_proc_name_from_cmdline(pid,buf,sizeof(buf)-2)) == NULL ) {
             strcpy(string, "");
             *var_len = 0;
             return (u_char *) string;
-        }
-        memset(buf, 0, sizeof(buf));
-
-        /*
-         * argv[0] '\0' argv[1] '\0' .... 
-         */
-        if (!fgets(buf, sizeof(buf) - 2, fp)) {
-            /*
-             * maybe be empty (even argv[0] is missing) 
-             */
-            string[0] = '\0';
-            *var_len = 0;
-            fclose(fp);
-            return (u_char *)string;
         }
 
         /*
@@ -907,7 +963,6 @@ var_hrswrun(struct variable * vp,
             ++cp;
         ++cp;
         strcpy(string, cp);
-        fclose(fp);
 #elif defined(cygwin)
         string[0] = 0;
 #else
@@ -933,6 +988,11 @@ var_hrswrun(struct variable * vp,
 			long_return = 2;	/* kernel process */
 		} else
 			long_return = 4;	/* application */
+#elif HAVE_KVM_GETPROC2
+        if (proc_table[LowProcIndex].p_flag & P_SYSTEM)
+	    long_return = 2;	/* operatingSystem */
+	else
+	    long_return = 4;	/* application */
 #elif HAVE_KVM_GETPROCS
     #if defined(freebsd5) && __FreeBSD_version >= 500014
 	if (proc_table[LowProcIndex].ki_flag & P_SYSTEM) {
@@ -943,7 +1003,11 @@ var_hrswrun(struct variable * vp,
 	} else
 	    long_return = 4;	/* application */
     #else
+      #if defined(dragonfly) && __DragonFly_version >= 190000
+        if (proc_table[LowProcIndex].kp_flags & P_SYSTEM)
+      #else
         if (proc_table[LowProcIndex].kp_proc.p_flag & P_SYSTEM)
+      #endif
 	    long_return = 2;	/* operatingSystem */
 	else
 	    long_return = 4;	/* application */
@@ -981,9 +1045,13 @@ var_hrswrun(struct variable * vp,
             break;
         }
 #else
-#if HAVE_KVM_GETPROCS
+#if HAVE_KVM_GETPROC2
+        switch (proc_table[LowProcIndex].p_stat) {
+#elif HAVE_KVM_GETPROCS
     #if defined(freebsd5) && __FreeBSD_version >= 500014
         switch (proc_table[LowProcIndex].ki_stat) {
+    #elif defined(dragonfly) && __DragonFly_version >= 190000
+        switch (proc_table[LowProcIndex].kp_stat) {
     #else
         switch (proc_table[LowProcIndex].kp_proc.p_stat) {
     #endif
@@ -1034,16 +1102,7 @@ var_hrswrun(struct variable * vp,
         }
 #endif
 #else
-        sprintf(string, "/proc/%d/stat", pid);
-        if ((fp = fopen(string, "r")) != NULL) {
-            fgets(buf, sizeof(buf), fp);
-            cp = buf;
-            for (i = 0; i < 2; ++i) {   /* skip two fields */
-                while (*cp != ' ')
-                    ++cp;
-                ++cp;
-            }
-
+	if ((cp = get_proc_stat_field(pid,buf,sizeof(buf),2)) != NULL ) {
             switch (*cp) {
             case 'R':
                 long_return = 1;        /* running */
@@ -1060,7 +1119,6 @@ var_hrswrun(struct variable * vp,
                 long_return = 4;        /* invalid */
                 break;
             }
-            fclose(fp);
         } else
             long_return = 4;    /* invalid */
 #endif
@@ -1082,6 +1140,10 @@ var_hrswrun(struct variable * vp,
 #else
         long_return = proc_buf->p_utime * 100 + proc_buf->p_stime * 100;
 #endif
+#elif HAVE_KVM_GETPROC2
+        long_return = proc_table[LowProcIndex].p_uticks +
+            proc_table[LowProcIndex].p_sticks +
+            proc_table[LowProcIndex].p_iticks;
 #elif HAVE_KVM_GETPROCS
     #if defined(NOT_DEFINED) && defined(freebsd5) && __FreeBSD_version >= 500014
         /* XXX: Accessing ki_paddr causes sig10 ...
@@ -1091,32 +1153,30 @@ var_hrswrun(struct variable * vp,
         long_return = 0;
     #elif defined(freebsd5)
         long_return = proc_table[LowProcIndex].ki_runtime / 100000;
+    #elif defined(dragonfly) && __DragonFly_version >= 190000
+        long_return = proc_table[LowProcIndex].kp_lwp.kl_uticks +
+            proc_table[LowProcIndex].kp_lwp.kl_sticks +
+            proc_table[LowProcIndex].kp_lwp.kl_iticks;
+    #elif defined(dragonfly)
+        long_return = proc_table[LowProcIndex].kp_eproc.e_uticks +
+            proc_table[LowProcIndex].kp_eproc.e_sticks +
+            proc_table[LowProcIndex].kp_eproc.e_iticks;
     #else
         long_return = proc_table[LowProcIndex].kp_proc.p_uticks +
             proc_table[LowProcIndex].kp_proc.p_sticks +
             proc_table[LowProcIndex].kp_proc.p_iticks;
     #endif
 #elif defined(linux)
-        sprintf(string, "/proc/%d/stat", pid);
-        if ((fp = fopen(string, "r")) == NULL) {
+	if ((cp = get_proc_stat_field(pid,buf,sizeof(buf),13)) == NULL ) {
             long_return = 0;
             return (u_char *) & long_return;
-        }
-        fgets(buf, sizeof(buf), fp);
-        cp = buf;
-        for (i = 0; i < 13; ++i) {      /* skip 13 fields */
-            while (*cp != ' ')
-                ++cp;
-            ++cp;
         }
 
         long_return = atoi(cp); /* utime */
 
-        while (*cp != ' ')
-            ++cp;
-        ++cp;
+        cp = skip_to_next_field(cp);
+
         long_return += atoi(cp);        /* + stime */
-        fclose(fp);
 #elif defined(sunos4)
         long_return = proc_table[LowProcIndex].p_time;
 #elif defined(cygwin)
@@ -1196,6 +1256,11 @@ var_hrswrun(struct variable * vp,
 #endif
 #elif defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
         long_return = proc_table[LowProcIndex].pi_size * getpagesize() / 1024;
+#elif HAVE_KVM_GETPROC2
+        long_return = proc_table[LowProcIndex].p_vm_tsize +
+            proc_table[LowProcIndex].p_vm_ssize +
+            proc_table[LowProcIndex].p_vm_dsize;
+        long_return = long_return * (getpagesize() / 1024);
 #elif HAVE_KVM_GETPROCS && !defined(darwin8)
   #if defined(NOT_DEFINED) && defined(freebsd5) && __FreeBSD_version >= 500014
 	    /* XXX
@@ -1208,6 +1273,8 @@ var_hrswrun(struct variable * vp,
         long_return =
     #if defined(freebsd5)
             proc_table[LowProcIndex].ki_size / 1024;
+    #elif defined(dragonfly) && __DragonFly_version >= 190000
+            proc_table[LowProcIndex].kp_vm_map_size / 1024;
     #else
             proc_table[LowProcIndex].kp_eproc.e_vm.vm_map.size / 1024;
     #endif
@@ -1218,20 +1285,11 @@ var_hrswrun(struct variable * vp,
         long_return = long_return * (getpagesize() / 1024);
   #endif
 #elif defined(linux)
-        sprintf(string, "/proc/%d/stat", pid);
-        if ((fp = fopen(string, "r")) == NULL) {
+	if ((cp = get_proc_stat_field(pid,buf,sizeof(buf),23)) == NULL ) {
             long_return = 0;
             return (u_char *) & long_return;
         }
-        fgets(buf, sizeof(buf), fp);
-        cp = buf;
-        for (i = 0; i < 23; ++i) {      /* skip 23 fields */
-            while (*cp != ' ')
-                ++cp;
-            ++cp;
-        }
         long_return = atoi(cp) * (getpagesize() / 1024);        /* rss */
-        fclose(fp);
 #elif defined(cygwin)
         {
             DWORD           n = lowproc.dwProcessId;
@@ -1468,6 +1526,14 @@ Init_HR_SWRun(void)
 			proc_table = realloc(proc_table, avail * sizeof(proc_table[0]));
 		}
     }
+#elif HAVE_KVM_GETPROC2
+    {
+        if (kd == NULL) {
+            nproc = 0;
+            return;
+        }
+        proc_table = kvm_getproc2(kd, KERN_PROC_ALL, 0, sizeof (struct kinfo_proc2), &nproc);
+    }
 #elif HAVE_KVM_GETPROCS
     {
         if (kd == NULL) {
@@ -1524,10 +1590,16 @@ Get_Next_HR_SWRun(void)
         return proc_table[current_proc_entry++].pst_pid;
 #elif defined(solaris2)
         return proc_table[current_proc_entry++];
+#elif HAVE_KVM_GETPROC2
+        if (proc_table[current_proc_entry].p_stat != 0)
+            return proc_table[current_proc_entry++].p_pid;
 #elif HAVE_KVM_GETPROCS
     #if defined(freebsd5) && __FreeBSD_version >= 500014
         if (proc_table[current_proc_entry].ki_stat != 0)
             return proc_table[current_proc_entry++].ki_pid;
+    #elif defined(dragonfly) && __DragonFly_version >= 190000
+        if (proc_table[current_proc_entry].kp_stat != 0)
+            return proc_table[current_proc_entry++].kp_pid;
     #else
         if (proc_table[current_proc_entry].kp_proc.p_stat != 0)
             return proc_table[current_proc_entry++].kp_proc.p_pid;
@@ -1558,13 +1630,13 @@ End_HR_SWRun(void)
 int
 count_processes(void)
 {
-#if !(defined(linux) || defined(cygwin) || defined(hpux10) || defined(hpux11) || defined(solaris2) || HAVE_KVM_GETPROCS || defined(dynix))
+#if !(defined(linux) || defined(cygwin) || defined(hpux10) || defined(hpux11) || defined(solaris2) || HAVE_KVM_GETPROCS || HAVE_KVM_GETPROC2 || defined(dynix))
     int             i;
 #endif
     int             total = 0;
 
     Init_HR_SWRun();
-#if defined(hpux10) || defined(hpux11) || HAVE_KVM_GETPROCS || defined(solaris2)
+#if defined(hpux10) || defined(hpux11) || HAVE_KVM_GETPROCS || HAVE_KVM_GETPROC2 || defined(solaris2)
     total = nproc;
 #else
 #if defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)
@@ -1578,7 +1650,7 @@ count_processes(void)
 #endif
         ++total;
     }
-#endif                          /* !hpux10 && !hpux11 && !HAVE_KVM_GETPROCS && !solaris2 */
+#endif                          /* !hpux10 && !hpux11 && !HAVE_KVM_GETPROCS && !HAVE_KVM_GETPROC2 && !solaris2 */
     End_HR_SWRun();
     return total;
 }

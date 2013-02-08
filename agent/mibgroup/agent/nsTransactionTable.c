@@ -3,12 +3,15 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 #include <net-snmp/agent/table.h>
 #include <net-snmp/agent/table_iterator.h>
 #include "nsTransactionTable.h"
+
+netsnmp_feature_require(table_dataset)
 
 /** Initialize the nsTransactionTable table by defining it's contents
    and how it's structured */
@@ -61,10 +64,10 @@ initialize_table_nsTransactionTable(void)
      */
     DEBUGMSGTL(("initialize_table_nsTransactionTable",
                 "Registering table nsTransactionTable as a table iterator\n"));
-    netsnmp_register_table_iterator(my_handler, iinfo);
+    netsnmp_register_table_iterator2(my_handler, iinfo);
 }
 
-/** Initialzies the nsTransactionTable module */
+/** Initializes the nsTransactionTable module */
 void
 init_nsTransactionTable(void)
 {

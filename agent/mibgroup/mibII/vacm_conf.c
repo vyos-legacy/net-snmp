@@ -201,8 +201,7 @@ vacm_parse_group(const char *token, char *param)
         config_perror("failed to create group entry");
         return;
     }
-    strncpy(gp->groupName, group, sizeof(gp->groupName));
-    gp->groupName[ sizeof(gp->groupName)-1 ] = 0;
+    strlcpy(gp->groupName, group, sizeof(gp->groupName));
     gp->storageType = SNMP_STORAGE_PERMANENT;
     gp->status = SNMP_ROW_ACTIVE;
     free(gp->reserved);
@@ -252,7 +251,7 @@ _vacm_parse_access_common(const char *token, char *param, char **st,
         return PARSE_FAIL;
     }
 
-    if (strcmp(*context, "\"\"") == 0)
+    if (strcmp(*context, "\"\"") == 0 || strcmp(*context, "\'\'") == 0)
         **context = 0;
     if (strcasecmp(model, "any") == 0)
         *imodel = SNMP_SEC_MODEL_ANY;
@@ -537,10 +536,6 @@ vacm_parse_setaccess(const char *token, char *param)
     } else {
         DEBUGMSGTL(("vacm:conf:setaccess",
                     "existing access found, using it\n"));
-    }
-    if (!ap) {
-        config_perror("failed to create access entry");
-        return;
     }
     if (!ap) {
         config_perror("failed to create access entry");
@@ -990,11 +985,9 @@ vacm_create_simple(const char *token, char *confline,
             sprintf(viewname,"viewUSM%d",commcount);
         }
         if ( strcmp( token, "authgroup" ) == 0 ) {
-            strncpy(grpname, community, sizeof(grpname));
-            grpname[ sizeof(grpname)-1 ] = 0;
+            strlcpy(grpname, community, sizeof(grpname));
         } else {
-            strncpy(secname, community, sizeof(secname));
-            secname[ sizeof(secname)-1 ] = 0;
+            strlcpy(secname, community, sizeof(secname));
 
             /*
              * sec->group mapping 
@@ -1208,9 +1201,11 @@ vacm_in_view(netsnmp_pdu *pdu, oid * name, size_t namelen,
     case SNMP_MSG_GETBULK:
         viewtype = VACM_VIEW_READ;
         break;
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     case SNMP_MSG_SET:
         viewtype = VACM_VIEW_WRITE;
         break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     case SNMP_MSG_TRAP:
     case SNMP_MSG_TRAP2:
     case SNMP_MSG_INFORM:
@@ -1417,7 +1412,7 @@ vacm_check_view_contents(netsnmp_pdu *pdu, oid * name, size_t namelen,
      * NULL termination of the pdu field is ugly here.  Do in PDU parsing? 
      */
     if (pdu->contextName)
-        strncpy(contextNameIndex, pdu->contextName, pdu->contextNameLen);
+        memcpy(contextNameIndex, pdu->contextName, pdu->contextNameLen);
     else
         contextNameIndex[0] = '\0';
 

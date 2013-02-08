@@ -1,8 +1,13 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/hardware/fsys.h>
+#ifdef HAVE_INTTYPES_H
+#include <inttypes.h>
+#endif
 
+netsnmp_feature_child_of(hw_fsys_get_container, netsnmp_unused)
 
 extern void             netsnmp_fsys_arch_load( void );
 extern void             netsnmp_fsys_arch_init( void );
@@ -59,10 +64,12 @@ void shutdown_hw_fsys( void ) {
     _fsys_free();
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_HW_FSYS_GET_CONTAINER
 /*
  *  Return the main fsys container
  */
 netsnmp_container *netsnmp_fsys_get_container( void ) { return _fsys_container; }
+#endif /* NETSNMP_FEATURE_REMOVE_HW_FSYS_GET_CONTAINER */
 
 /*
  *  Return the main fsys cache control structure (if defined)
@@ -170,9 +177,8 @@ netsnmp_fsys_by_path( char *path, int create_type )
      * ... so let's create a new one
      */
     sp = _fsys_create_entry();
-    if ( sp ) {
-        strncpy( sp->path, path, sizeof(sp->path) );
-    }
+    if (sp)
+        strlcpy(sp->path, path, sizeof(sp->path));
     return sp;
 }
 
@@ -213,9 +219,8 @@ netsnmp_fsys_by_device( char *device, int create_type )
      * ... so let's create a new one
      */
     sp = _fsys_create_entry();
-    if ( sp ) {
-        strncpy( sp->device, device, sizeof(sp->device) );
-    }
+    if (sp)
+        strlcpy(sp->device, device, sizeof(sp->device));
     return sp;
 }
 
@@ -238,7 +243,7 @@ _fsys_create_entry( void )
         sp->idx.oids[0] = ++_fsys_idx;
     }
 
-    DEBUGMSGTL(("fsys:new", "Create filesystem entry (index = %d\n", _fsys_idx));
+    DEBUGMSGTL(("fsys:new", "Create filesystem entry (index = %d)\n", _fsys_idx));
     CONTAINER_INSERT( _fsys_container, sp );
     return sp;
 }
@@ -249,7 +254,7 @@ _fsys_create_entry( void )
  *    (attempting to avoid 32-bit overflow!)
  */
 unsigned long long
-_fsys_to_K( int size, int units )
+_fsys_to_K( unsigned long long size, unsigned long long units )
 {
     int factor = 1;
 
@@ -311,3 +316,34 @@ netsnmp_fsys_avail( netsnmp_fsys_info *f) {
     return (int)v;
 }
 
+#ifndef INT32_MAX
+#define INT32_MAX 0x7fffffff
+#endif
+
+#ifndef PRIu64
+#define PRIu64 "llu"
+#endif
+
+/* recalculate f->size_32, used_32, avail_32 and units_32 from f->size & comp.*/
+void
+netsnmp_fsys_calculate32(netsnmp_fsys_info *f)
+{
+    unsigned long long s = f->size;
+    unsigned shift = 0;
+
+    while (s > INT32_MAX) {
+        s = s >> 1;
+        shift++;
+    }
+
+    f->size_32 = s;
+    f->units_32 = f->units << shift;
+    f->avail_32 = f->avail >> shift;
+    f->used_32 = f->used >> shift;
+
+    DEBUGMSGTL(("fsys", "Results of 32-bit conversion: size %" PRIu64 " -> %lu;"
+		" units %" PRIu64 " -> %lu; avail %" PRIu64 " -> %lu;"
+                " used %" PRIu64 " -> %lu\n",
+		(uint64_t)f->size, f->size_32, (uint64_t)f->units, f->units_32,
+		(uint64_t)f->avail, f->avail_32, (uint64_t)f->used, f->used_32));
+}

@@ -47,6 +47,7 @@
 #include <net-snmp/library/snmp_transport.h>
 #include <net-snmp/library/snmpSocketBaseDomain.h>
 #include <net-snmp/library/snmpTCPBaseDomain.h>
+#include <net-snmp/library/tools.h>
 
 #include "inet_ntop.h"
 
@@ -70,7 +71,6 @@ netsnmp_tcp6_accept(netsnmp_transport *t)
     struct sockaddr_in6 *farend = NULL;
     int             newsock = -1;
     socklen_t       farendlen = sizeof(struct sockaddr_in6);
-    char           *str = NULL;
 
     farend = (struct sockaddr_in6 *) malloc(sizeof(struct sockaddr_in6));
 
@@ -98,9 +98,11 @@ netsnmp_tcp6_accept(netsnmp_transport *t)
 
         t->data = farend;
         t->data_length = farendlen;
-        str = netsnmp_tcp6_fmtaddr(NULL, farend, farendlen);
-        DEBUGMSGTL(("netsnmp_tcp6", "accept succeeded (from %s)\n", str));
-        free(str);
+        DEBUGIF("netsnmp_tcp6") {
+            char *str = netsnmp_tcp6_fmtaddr(NULL, farend, farendlen);
+            DEBUGMSGTL(("netsnmp_tcp6", "accept succeeded (from %s)\n", str));
+            free(str);
+        }
 
         /*
          * Try to make the new socket blocking.  
@@ -138,32 +140,35 @@ netsnmp_tcp6_transport(struct sockaddr_in6 *addr, int local)
 {
     netsnmp_transport *t = NULL;
     int             rc = 0;
-    char           *str = NULL;
+
+#ifdef NETSNMP_NO_LISTEN_SUPPORT
+    if (local)
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
 
     if (addr == NULL || addr->sin6_family != AF_INET6) {
         return NULL;
     }
 
-    t = (netsnmp_transport *) malloc(sizeof(netsnmp_transport));
+    t = SNMP_MALLOC_TYPEDEF(netsnmp_transport);
     if (t == NULL) {
         return NULL;
     }
-    memset(t, 0, sizeof(netsnmp_transport));
 
-    str = netsnmp_tcp6_fmtaddr(NULL, (void *)addr,
-				  sizeof(struct sockaddr_in6));
-    DEBUGMSGTL(("netsnmp_tcp6", "open %s %s\n", local ? "local" : "remote",
-                str));
-    free(str);
+    DEBUGIF("netsnmp_tcp6") {
+        char *str = netsnmp_tcp6_fmtaddr(NULL, (void *)addr,
+                                   sizeof(struct sockaddr_in6));
+        DEBUGMSGTL(("netsnmp_tcp6", "open %s %s\n", local ? "local" : "remote",
+                    str));
+        free(str);
+    }
 
-    memset(t, 0, sizeof(netsnmp_transport));
-
-    t->data = malloc(sizeof(struct sockaddr_in6));
+    t->data = malloc(sizeof(netsnmp_indexed_addr_pair));
     if (t->data == NULL) {
         netsnmp_transport_free(t);
         return NULL;
     }
-    t->data_length = sizeof(struct sockaddr_in6);
+    t->data_length = sizeof(netsnmp_indexed_addr_pair);
     memcpy(t->data, addr, sizeof(struct sockaddr_in6));
 
     t->domain = netsnmp_TCPIPv6Domain;
@@ -178,6 +183,7 @@ netsnmp_tcp6_transport(struct sockaddr_in6 *addr, int local)
     t->flags = NETSNMP_TRANSPORT_FLAG_STREAM;
 
     if (local) {
+#ifndef NETSNMP_NO_LISTEN_SUPPORT
         int opt = 1;
 
         /*
@@ -246,7 +252,9 @@ netsnmp_tcp6_transport(struct sockaddr_in6 *addr, int local)
         /*
          * no buffer size on listen socket - doesn't make sense
          */
-
+#else /* NETSNMP_NO_LISTEN_SUPPORT */
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
     } else {
         t->remote = (unsigned char*)malloc(18);
         if (t->remote == NULL) {
@@ -351,8 +359,9 @@ netsnmp_tcpipv6_ctor(void)
 {
     tcp6Domain.name = netsnmp_TCPIPv6Domain;
     tcp6Domain.name_length = sizeof(netsnmp_TCPIPv6Domain) / sizeof(oid);
+    tcp6Domain.f_create_from_tstring     = NULL;
     tcp6Domain.f_create_from_tstring_new = netsnmp_tcp6_create_tstring;
-    tcp6Domain.f_create_from_ostring = netsnmp_tcp6_create_ostring;
+    tcp6Domain.f_create_from_ostring     = netsnmp_tcp6_create_ostring;
     tcp6Domain.prefix = (const char**)calloc(4, sizeof(char *));
     tcp6Domain.prefix[0] = "tcp6";
     tcp6Domain.prefix[1] = "tcpv6";
