@@ -48,23 +48,6 @@ typedef struct binary_array_iterator_s {
 
 static netsnmp_iterator *_ba_iterator_get(netsnmp_container *c);
 
-/* basic insertion sort */
-static void
-insert_sort(void **data, int size, netsnmp_container_compare *f)
-{
-    int i, j;
-    void *tmp;
-
-    for (i = 1; i < size; i++) {
-	if ((*f)(data[i-1], data[i]) <= 0)
-	    continue;
-	tmp = data[i];
-	for (j = i - 1; j >= 0 && (*f)(data[j], tmp) > 0; j--)
-	    data[j+1] = data[j];
-	data[j+1] = tmp;
-    }
-}
-
 /**********************************************************************
  *
  * 
@@ -76,15 +59,9 @@ array_qsort(void **data, int first, int last, netsnmp_container_compare *f)
     int i, j;
     void *mid, *tmp;
     
-    /* for small ranges, insertion sort is faster. */
-    if (last - first + 1 < 32) {
-	insert_sort(data + first, last - first + 1, f);
-	return;
-    }
-
     i = first;
     j = last;
-    mid = data[first + ((last - first) >> 1)];
+    mid = data[(first+last)/2];
     
     do {
         while (i < last && (*f)(data[i], mid) < 0)
