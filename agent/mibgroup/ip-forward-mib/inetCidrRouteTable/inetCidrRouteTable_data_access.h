@@ -7,6 +7,8 @@
 #ifndef INETCIDRROUTETABLE_DATA_ACCESS_H
 #define INETCIDRROUTETABLE_DATA_ACCESS_H
 
+#include "ip-forward-mib/inetCidrRouteTable/inetCidrRouteTable.h"
+
 #ifdef __cplusplus
 extern          "C" {
 #endif

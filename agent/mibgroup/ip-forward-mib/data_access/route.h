@@ -19,7 +19,10 @@
  */
 config_require(ip-forward-mib/data_access/route_common)
 
-#if defined( linux )
+#if defined( HAVE_LINUX_RTNETLINK_H )
+config_require(ip-forward-mib/data_access/route_netlink)
+config_require(ip-forward-mib/data_access/route_ioctl)
+#elif defined( linux )
 config_require(ip-forward-mib/data_access/route_linux)
 config_require(ip-forward-mib/data_access/route_ioctl)
 #else

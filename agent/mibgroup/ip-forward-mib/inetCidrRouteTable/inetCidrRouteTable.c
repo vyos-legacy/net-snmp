@@ -177,6 +177,7 @@ inetCidrRouteTable_rowreq_ctx_init(inetCidrRouteTable_rowreq_ctx *
     DEBUGMSGTL(("verbose:inetCidrRouteTable:inetCidrRouteTable_rowreq_ctx_init", "called\n"));
 
     netsnmp_assert(NULL != rowreq_ctx);
+    netsnmp_assert(NULL != rowreq_ctx->data);
 
     /*
      * TODO:210:o: |-> Perform extra inetCidrRouteTable rowreq initialization. (eg DEFVALS)
@@ -570,14 +571,13 @@ int
 inetCidrRouteIfIndex_get(inetCidrRouteTable_rowreq_ctx * rowreq_ctx,
                          long *inetCidrRouteIfIndex_val_ptr)
 {
-   /** we should have a non-NULL pointer */
+    /** we should have non-NULL pointers */
+    netsnmp_assert(NULL != rowreq_ctx);
+    netsnmp_assert(NULL != rowreq_ctx->data);
     netsnmp_assert(NULL != inetCidrRouteIfIndex_val_ptr);
-
 
     DEBUGMSGTL(("verbose:inetCidrRouteTable:inetCidrRouteIfIndex_get",
                 "called\n"));
-
-    netsnmp_assert(NULL != rowreq_ctx);
 
     /*
      * TODO:231:o: |-> Extract the current value of the inetCidrRouteIfIndex data->

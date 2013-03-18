@@ -36,7 +36,7 @@ _type_from_flags(unsigned int flags)
 
 }
 static int
-_load_ipv4(netsnmp_container* container, u_long *index )
+_load_ipv4(netsnmp_route_access* access, u_long *index)
 {
     FILE           *in;
     char            line[256];
@@ -47,7 +47,8 @@ _load_ipv4(netsnmp_container* container, u_long *index )
     DEBUGMSGTL(("access:route:container",
                 "route_container_arch_load ipv4\n"));
 
-    netsnmp_assert(NULL != container);
+    netsnmp_assert(NULL != access);
+    netsnmp_assert(NULL != index);
 
     /*
      * fetch routes from the proc file-system:
@@ -180,14 +181,15 @@ _load_ipv4(netsnmp_container* container, u_long *index )
             ? IANAIPROUTEPROTOCOL_ICMP : IANAIPROUTEPROTOCOL_LOCAL;
 
         /*
-         * insert into container
+         * insert into cache
          */
-        if (CONTAINER_INSERT(container, entry) < 0)
-        {
-            DEBUGMSGTL(("access:route:container", "error with route_entry: insert into container failed.\n"));
-            netsnmp_access_route_entry_free(entry);
-            continue;
-        }
+	 if (access->update_hook)
+		 access->update_hook(access, entry);
+	 else {
+		 DEBUGMSGTL(("access:netlink:route",
+			     "no update hook: insert into cache failed.\n"));
+		 netsnmp_access_route_entry_free(entry);
+	 }
     }
 
     fclose(in);
@@ -197,7 +199,7 @@ _load_ipv4(netsnmp_container* container, u_long *index )
 
 #ifdef NETSNMP_ENABLE_IPV6
 static int
-_load_ipv6(netsnmp_container* container, u_long *index )
+_load_ipv6(netsnmp_route_access* access, u_long *index)
 {
     FILE           *in;
     char            line[256];
@@ -206,7 +208,8 @@ _load_ipv6(netsnmp_container* container, u_long *index )
     DEBUGMSGTL(("access:route:container",
                 "route_container_arch_load ipv6\n"));
 
-    netsnmp_assert(NULL != container);
+    netsnmp_assert(NULL != access);
+    netsnmp_assert(NULL != index);
 
     /*
      * fetch routes from the proc file-system:
@@ -328,9 +331,15 @@ _load_ipv6(netsnmp_container* container, u_long *index )
             ? IANAIPROUTEPROTOCOL_ICMP : IANAIPROUTEPROTOCOL_LOCAL;
 
         /*
-         * insert into container
+         * insert into cache
          */
-        CONTAINER_INSERT(container, entry);
+	 if (access->update_hook)
+		 access->update_hook(access, entry);
+	 else {
+		 DEBUGMSGTL(("access:netlink:route",
+			     "no update hook: insert into cache failed.\n"));
+		 netsnmp_access_route_entry_free(entry);
+	 }
     }
 
     fclose(in);
@@ -345,37 +354,56 @@ _load_ipv6(netsnmp_container* container, u_long *index )
  * @retval -1 no container specified
  * @retval -2 could not open data file
  */
-int
-netsnmp_access_route_container_arch_load(netsnmp_container* container,
-                                         u_int load_flags)
+int netsnmp_access_route_load(netsnmp_route_access *access)
 {
     u_long          count = 0;
     int             rc;
 
-    DEBUGMSGTL(("access:route:container",
-                "route_container_arch_load (flags %x)\n", load_flags));
+    DEBUGMSGTL(("access:route:load",
+                "load route cache (flags 0x%x)\n", access->load_flags));
 
-    if (NULL == container) {
-        snmp_log(LOG_ERR, "no container specified/found for access_route\n");
+    if (NULL == access) {
+        snmp_log(LOG_ERR, "invalid data access to load route cache\n");
         return -1;
     }
 
-    rc = _load_ipv4(container, &count);
+    if (access->synchronized) {
+        DEBUGMSGTL(("access:netlink:route", "already synchronized\n"));
+        return 0;
+    }
+
+    access->synchronized = 0;
+    rc = _load_ipv4(access, &count);
     
 #ifdef NETSNMP_ENABLE_IPV6
-    if((0 != rc) || (load_flags & NETSNMP_ACCESS_ROUTE_LOAD_IPV4_ONLY))
+    if((0 != rc) || (access->load_flags & NETSNMP_ACCESS_ROUTE_LOAD_IPV4_ONLY))
         return rc;
 
     /*
      * load ipv6. ipv6 module might not be loaded,
      * so ignore -2 err (file not found)
      */
-    rc = _load_ipv6(container, &count);
+    rc = _load_ipv6(access, &count);
     if (-2 == rc)
         rc = 0;
 #endif
+    access->synchronized = 1;
 
     return rc;
+}
+
+/**
+ * Unload route cache
+ *
+ * @param access Pointer to data access structure
+ *
+ * @retval 0  : Always
+ */
+int netsnmp_access_route_unload(netsnmp_route_access *access)
+{
+    DEBUGMSGTL(("access:netlink:route", "unload route cache\n"));
+    access->synchronized = 0;
+    return 0;
 }
 
 /*

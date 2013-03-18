@@ -12,19 +12,11 @@
 
 /**---------------------------------------------------------------------*/
 /*
- * local static prototypes
- */
-static void _access_route_entry_release(netsnmp_route_entry * entry, void *unused);
-
-/**---------------------------------------------------------------------*/
-/*
  * external per-architecture functions prototypes
  *
  * These shouldn't be called by the general public, so they aren't in
  * the header file.
  */
-extern int netsnmp_access_route_container_arch_load(netsnmp_container* container,
-                                                    u_int load_flags);
 extern int
 netsnmp_arch_route_create(netsnmp_route_entry *entry);
 extern int
@@ -33,65 +25,80 @@ netsnmp_arch_route_delete(netsnmp_route_entry *entry);
 
 /**---------------------------------------------------------------------*/
 /*
- * container functions
+ * access functions
  */
 
 /**
- * @retval NULL  error
- * @retval !NULL pointer to container
+ * Create and initialize route access structure
+ *
+ * @param init_flags Initialization flags
+ * @param update_hook Callback to update cache
+ * @param gc_hook Callback to clean out old cache data
+ * @param cache_flags Initialize cache flags (optional)
+ * @param cache_expired Initial cache expired flag
+ *
+ * @remark
+ * Called from inetCidrRouteTable_container_init()
+ *
+ * @retval !NULL  : pointer to created route access structure.
+ * @retval NULL   : error.
  */
-netsnmp_container*
-netsnmp_access_route_container_load(netsnmp_container* container, u_int load_flags)
+netsnmp_route_access *
+netsnmp_access_route_create(u_int init_flags,
+                            NetsnmpAccessRouteUpdate *update_hook,
+                            int *cache_flags,
+                            char *cache_expired)
 {
-    int rc;
+    netsnmp_route_access *access;
 
-    DEBUGMSGTL(("access:route:container", "load\n"));
+    DEBUGMSGTL(("access:route:create", "create route access\n"));
 
-    if (NULL == container) {
-        container = netsnmp_container_find("access:_route:fifo");
-        if (NULL == container) {
-            snmp_log(LOG_ERR, "no container specified/found for access_route\n");
-            return NULL;
-        }
+    access = SNMP_MALLOC_TYPEDEF(netsnmp_route_access);
+    if (NULL == access) {
+        snmp_log(LOG_ERR,"malloc error in %s\n", __func__);
+        return NULL;
     }
 
-    container->container_name = strdup("_route");
+    access->magic = NULL;
+    access->arch_magic = NULL;
+    access->update_hook = update_hook;
+    access->synchronized = 0;
 
-    rc =  netsnmp_access_route_container_arch_load(container, load_flags);
-    if (0 != rc) {
-        netsnmp_access_route_container_free(container, NETSNMP_ACCESS_ROUTE_FREE_NOFLAGS);
-        container = NULL;
-    }
+    if (init_flags & NETSNMP_ACCESS_ROUTE_CREATE_IPV4_ONLY)
+	    access->load_flags |= NETSNMP_ACCESS_ROUTE_LOAD_IPV4_ONLY;
 
-    return container;
+    if (cache_flags != NULL)
+        *cache_flags |= NETSNMP_CACHE_RESET_TIMER_ON_USE;
+    access->cache_expired = cache_expired;
+
+    return access;
 }
 
-void
-netsnmp_access_route_container_free(netsnmp_container *container, u_int free_flags)
+
+/**
+ * Delete route access structure and accociated memory
+ *
+ * @param access Pointer to data access structure to delete
+ *
+ * @retval 0 : Always
+ */
+int netsnmp_access_route_delete(netsnmp_route_access *access)
 {
-    DEBUGMSGTL(("access:route:container", "free\n"));
+    DEBUGMSGTL(("access:netlink:route:delete", "delete route access\n"));
 
-    if (NULL == container) {
-        snmp_log(LOG_ERR, "invalid container for netsnmp_access_route_free\n");
-        return;
-    }
+    if (NULL == access)
+        return 0;
 
-    if(! (free_flags & NETSNMP_ACCESS_ROUTE_FREE_DONT_CLEAR)) {
-        /*
-         * free all items.
-         */
-        CONTAINER_CLEAR(container,
-                        (netsnmp_container_obj_func*)_access_route_entry_release,
-                        NULL);
-    }
+    netsnmp_access_route_unload(access);
+    free(access);
 
-    if(! (free_flags & NETSNMP_ACCESS_ROUTE_FREE_KEEP_CONTAINER))
-        CONTAINER_FREE(container);
+    return 0;
 }
+
 
 /**---------------------------------------------------------------------*/
 /*
- * ifentry functions
+ * route entry functions
  */
 /** create route entry
  *
@@ -102,7 +109,11 @@ netsnmp_access_route_container_free(netsnmp_container *container, u_int free_fla
 netsnmp_route_entry *
 netsnmp_access_route_entry_create(void)
 {
-    netsnmp_route_entry *entry = SNMP_MALLOC_TYPEDEF(netsnmp_route_entry);
+    netsnmp_route_entry *entry;
+
+    DEBUGMSGTL(("entry:route:create", "create route entry\n"));
+
+    entry = SNMP_MALLOC_TYPEDEF(netsnmp_route_entry);
     if(NULL == entry) {
         snmp_log(LOG_ERR, "could not allocate route entry\n");
         return NULL;
@@ -127,6 +138,8 @@ netsnmp_access_route_entry_create(void)
 void
 netsnmp_access_route_entry_free(netsnmp_route_entry * entry)
 {
+    DEBUGMSGTL(("entry:route:free", "free route entry\n"));
+
     if (NULL == entry)
         return;
 
@@ -264,18 +277,4 @@ netsnmp_access_route_entry_copy(netsnmp_route_entry *lhs,
     lhs->flags = rhs->flags;
    
     return 0;
-}
-
-
-/**---------------------------------------------------------------------*/
-/*
- * Utility routines
- */
-
-/**
- */
-void
-_access_route_entry_release(netsnmp_route_entry * entry, void *context)
-{
-    netsnmp_access_route_entry_free(entry);
 }

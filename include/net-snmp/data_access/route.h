@@ -11,16 +11,19 @@ extern          "C" {
 #endif
 
 /**---------------------------------------------------------------------*/
-/*
- * structure definitions
- */
+#define NETSNMP_ACCESS_ROUTE_ADDR_IPV6_BUF_SIZE (16)
+#define NETSNMP_ACCESS_ROUTE_ADDR_IPV4_BUF_SIZE (4)
 #if defined( NETSNMP_ENABLE_IPV6 )
-#   define NETSNMP_ACCESS_ROUTE_ADDR_BUF_SIZE 16
+#   define NETSNMP_ACCESS_ROUTE_ADDR_BUF_SIZE NETSNMP_ACCESS_ROUTE_ADDR_IPV6_BUF_SIZE
 #else
-#   define NETSNMP_ACCESS_ROUTE_ADDR_BUF_SIZE 4
+#   define NETSNMP_ACCESS_ROUTE_ADDR_BUF_SIZE NETSNMP_ACCESS_ROUTE_ADDR_IPV4_BUF_SIZE
 #endif
 
 
+/**---------------------------------------------------------------------*/
+/*
+ * structure definitions
+ */
 /*
  * netsnmp_route_entry
  *   - primary route structure for both ipv4 & ipv6
@@ -78,33 +81,48 @@ typedef struct netsnmp_route_s {
 
 } netsnmp_route_entry;
 
+#define NETSNMP_ACCESS_ROUTE_ENTRY_FLAG_DELETE      (0x00000001)
 
 
 /**---------------------------------------------------------------------*/
 /*
  * ACCESS function prototypes
  */
-/*
- * ifcontainer init
- */
-netsnmp_container * netsnmp_access_route_container_init(u_int init_flags);
-#define NETSNMP_ACCESS_ROUTE_INIT_NOFLAGS               0x0000
-#define NETSNMP_ACCESS_ROUTE_INIT_ADDL_IDX_BY_NAME      0x0001
+struct netsnmp_route_access_s;
+typedef struct netsnmp_route_access_s netsnmp_route_access;
+
+typedef void (NetsnmpAccessRouteUpdate)(netsnmp_route_access *, netsnmp_route_entry*);
+
+struct netsnmp_route_access_s {
+    void *magic;      /* pointer to container */
+    void *arch_magic; /* netlink socket fd */
+    int synchronized;
+    unsigned int generation;
+    unsigned int load_flags;
+    oid index;     /* arbitrary index number of the route */
+    NetsnmpAccessRouteUpdate *update_hook;
+    char *cache_expired;
+};
+
+
+
+netsnmp_route_access *
+netsnmp_access_route_create(u_int init_flags,
+                            NetsnmpAccessRouteUpdate *update_hook,
+                            int *cache_flags,
+                            char *cache_expired);
+#define NETSNMP_ACCESS_ROUTE_CREATE_NOFLAGS               0x0000
+#define NETSNMP_ACCESS_ROUTE_CREATE_IPV4_ONLY             0x0001
+
+int netsnmp_access_route_delete(netsnmp_route_access *access);
+int netsnmp_access_route_load(netsnmp_route_access *access);
+int netsnmp_access_route_unload(netsnmp_route_access *access);
 
 /*
- * ifcontainer load and free
+ * route container load and free
  */
-netsnmp_container*
-netsnmp_access_route_container_load(netsnmp_container* container,
-                                    u_int load_flags);
 #define NETSNMP_ACCESS_ROUTE_LOAD_NOFLAGS               0x0000
 #define NETSNMP_ACCESS_ROUTE_LOAD_IPV4_ONLY             0x0001
-
-void netsnmp_access_route_container_free(netsnmp_container *container,
-                                         u_int free_flags);
-#define NETSNMP_ACCESS_ROUTE_FREE_NOFLAGS               0x0000
-#define NETSNMP_ACCESS_ROUTE_FREE_DONT_CLEAR            0x0001
-#define NETSNMP_ACCESS_ROUTE_FREE_KEEP_CONTAINER        0x0002
 
 
 /*
