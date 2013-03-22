@@ -1,3 +1,16 @@
+net-snmp (5.7.2-vyatta+1+daisy3) unstable; urgency=low
+
+  [ James Davidson ]
+  * Revert "Improve performance of sort in binary_container_array"
+
+  [ Stephen Hemminger ]
+  * optimize insertion of binary array container
+
+  [ James Davidson ]
+  * Support netlink for reading routes
+
+ -- James Davidson <james.davidson@vyatta.com>  Fri, 22 Mar 2013 14:46:09 -0700
+
 net-snmp (5.7.2-vyatta+1+daisy2) unstable; urgency=low
 
   * SNMP-135 add 'net-snmp-cert' script to 'libsnmp15' package
