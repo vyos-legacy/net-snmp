@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #if HAVE_IO_H
 #include <io.h>
@@ -37,30 +38,27 @@
 
 #include "struct.h"
 #include "pass_persist.h"
+#include "pass_common.h"
 #include "extensible.h"
 #include "util_funcs.h"
+
+netsnmp_feature_require(get_exten_instance)
+netsnmp_feature_require(parse_miboid)
 
 struct extensible *persistpassthrus = NULL;
 int             numpersistpassthrus = 0;
 struct persist_pipe_type {
     FILE           *fIn, *fOut;
     int             fdIn, fdOut;
-    int             pid;
+    netsnmp_pid_t   pid;
 }              *persist_pipes = (struct persist_pipe_type *) NULL;
+static unsigned pipe_check_alarm_id;
 static int      init_persist_pipes(void);
 static void     close_persist_pipe(int iindex);
 static int      open_persist_pipe(int iindex, char *command);
+static void     check_persist_pipes(unsigned clientreg, void *clientarg);
 static void     destruct_persist_pipes(void);
 static int      write_persist_pipe(int iindex, const char *data);
-
-/*
- * These are defined in pass.c 
- */
-extern int      asc2bin(char *p);
-extern int      bin2asc(char *p, size_t n);
-extern int      netsnmp_pass_str_to_errno(const char *buf);
-extern int      snmp_oid_min_compare(const oid *, size_t, const oid *,
-                                     size_t);
 
 /*
  * the relocatable extensible commands variables 
@@ -80,6 +78,19 @@ init_pass_persist(void)
                                   pass_persist_parse_config,
                                   pass_persist_free_config,
                                   "miboid program");
+    pipe_check_alarm_id = snmp_alarm_register(10, SA_REPEAT, check_persist_pipes, NULL);
+}
+
+void
+shutdown_pass_persist(void)
+{
+    if (pipe_check_alarm_id) {
+        snmp_alarm_unregister(pipe_check_alarm_id);
+        pipe_check_alarm_id = 0;
+    }
+
+    /* Close any open pipes. */
+    destruct_persist_pipes();
 }
 
 void
@@ -136,6 +147,7 @@ pass_persist_parse_config(const char *token, char *cptr)
     if (*ppass == NULL)
         return;
     (*ppass)->type = PASSTHRU_PERSIST;
+    (*ppass)->mibpriority = priority;
 
     (*ppass)->miblen = parse_miboid(cptr, (*ppass)->miboid);
     while (isdigit((unsigned char)(*cptr)) || *cptr == '.')
@@ -150,17 +162,15 @@ pass_persist_parse_config(const char *token, char *cptr)
     } else {
         for (tcptr = cptr; *tcptr != 0 && *tcptr != '#' && *tcptr != ';';
              tcptr++);
-        strncpy((*ppass)->command, cptr, tcptr - cptr);
-        (*ppass)->command[tcptr - cptr] = 0;
+        sprintf((*ppass)->command, "%.*s", (int) (tcptr - cptr), cptr);
     }
-    strncpy((*ppass)->name, (*ppass)->command, sizeof((*ppass)->name));
-    (*ppass)->name[ sizeof((*ppass)->name)-1 ] = 0;
+    strlcpy((*ppass)->name, (*ppass)->command, sizeof((*ppass)->name));
     (*ppass)->next = NULL;
 
     register_mib_priority("pass_persist",
                  (struct variable *) extensible_persist_passthru_variables,
                  sizeof(struct variable2), 1, (*ppass)->miboid,
-                 (*ppass)->miblen, priority);
+                 (*ppass)->miblen, (*ppass)->mibpriority);
 
     /*
      * argggg -- pasthrus must be sorted 
@@ -192,15 +202,10 @@ pass_persist_free_config(void)
 {
     struct extensible *etmp, *etmp2;
 
-    /*
-     * Close any open pipes to any programs 
-     */
-    destruct_persist_pipes();
-
     for (etmp = persistpassthrus; etmp != NULL;) {
         etmp2 = etmp;
         etmp = etmp->next;
-        unregister_mib(etmp2->miboid, etmp2->miblen);
+        unregister_mib_priority(etmp2->miboid, etmp2->miblen, etmp2->mibpriority);
         free(etmp2);
     }
     persistpassthrus = NULL;
@@ -216,11 +221,8 @@ var_extensible_pass_persist(struct variable *vp,
 {
     oid             newname[MAX_OID_LEN];
     int             i, rtest, newlen;
-    static long     long_ret;
-    static in_addr_t addr_ret;
     char            buf[SNMP_MAXBUF];
     static char     buf2[SNMP_MAXBUF];
-    static oid      objid[MAX_OID_LEN];
     struct extensible *persistpassthru;
     FILE           *file;
 
@@ -229,10 +231,9 @@ var_extensible_pass_persist(struct variable *vp,
      */
     init_persist_pipes();
 
-    long_ret = *length;
     for (i = 1; i <= numpersistpassthrus; i++) {
         persistpassthru = get_exten_instance(persistpassthrus, i);
-        rtest = snmp_oid_min_compare(name, *length,
+        rtest = snmp_oidtree_compare(name, *length,
                                      persistpassthru->miboid,
                                      persistpassthru->miblen);
         if ((exact && rtest == 0) || (!exact && rtest <= 0)) {
@@ -311,89 +312,7 @@ var_extensible_pass_persist(struct variable *vp,
                     close_persist_pipe(i);
                     return (NULL);
                 }
-                /*
-                 * buf contains the return type, and buf2 contains the data 
-                 */
-                if (!strncasecmp(buf, "string", 6)) {
-                    buf2[strlen(buf2) - 1] = 0; /* zap the linefeed */
-                    *var_len = strlen(buf2);
-                    vp->type = ASN_OCTET_STR;
-                    return ((unsigned char *) buf2);
-                } 
-                else if (!strncasecmp(buf, "integer64", 9)) {
-                    static struct counter64 c64;
-                    uint64_t v64 = strtoull(buf2, NULL, 10);
-                    c64.high = (unsigned long)(v64 >> 32);
-                    c64.low  = (unsigned long)(v64 & 0xffffffff);
-                    *var_len = sizeof(c64);
-                    vp->type = ASN_INTEGER64;
-                    return ((unsigned char *) &c64);
-                } 
-                else if (!strncasecmp(buf, "integer", 7)) {
-                    *var_len = sizeof(long_ret);
-                    long_ret = strtol(buf2, NULL, 10);
-                    vp->type = ASN_INTEGER;
-                    return ((unsigned char *) &long_ret);
-                } else if (!strncasecmp(buf, "unsigned", 8)) {
-                    *var_len = sizeof(long_ret);
-                    long_ret = strtoul(buf2, NULL, 10);
-                    vp->type = ASN_UNSIGNED;
-                    return ((unsigned char *) &long_ret);
-                } 
-                else if (!strncasecmp(buf, "counter64", 9)) {
-                    static struct counter64 c64;
-                    uint64_t v64 = strtoull(buf2, NULL, 10);
-                    c64.high = (unsigned long)(v64 >> 32);
-                    c64.low  = (unsigned long)(v64 & 0xffffffff);
-                    *var_len = sizeof(c64);
-                    vp->type = ASN_COUNTER64;
-                    return ((unsigned char *) &c64);
-                } 
-                else if (!strncasecmp(buf, "counter", 7)) {
-                    *var_len = sizeof(long_ret);
-                    long_ret = strtoul(buf2, NULL, 10);
-                    vp->type = ASN_COUNTER;
-                    return ((unsigned char *) &long_ret);
-                } else if (!strncasecmp(buf, "octet", 5)) {
-                    *var_len = asc2bin(buf2);
-                    vp->type = ASN_OCTET_STR;
-                    return ((unsigned char *) buf2);
-                } else if (!strncasecmp(buf, "opaque", 6)) {
-                    *var_len = asc2bin(buf2);
-                    vp->type = ASN_OPAQUE;
-                    return ((unsigned char *) buf2);
-                } else if (!strncasecmp(buf, "gauge", 5)) {
-                    *var_len = sizeof(long_ret);
-                    long_ret = strtoul(buf2, NULL, 10);
-                    vp->type = ASN_GAUGE;
-                    return ((unsigned char *) &long_ret);
-                } else if (!strncasecmp(buf, "objectid", 8)) {
-                    newlen = parse_miboid(buf2, objid);
-                    *var_len = newlen * sizeof(oid);
-                    vp->type = ASN_OBJECT_ID;
-                    return ((unsigned char *) objid);
-                } else if (!strncasecmp(buf, "timetick", 8)) {
-                    *var_len = sizeof(long_ret);
-                    long_ret = strtoul(buf2, NULL, 10);
-                    vp->type = ASN_TIMETICKS;
-                    return ((unsigned char *) &long_ret);
-                } else if (!strncasecmp(buf, "ipaddress", 9)) {
-                    newlen = parse_miboid(buf2, objid);
-                    if (newlen != 4) {
-                        snmp_log(LOG_ERR,
-                                 "invalid ipaddress returned:  %s\n",
-                                 buf2);
-                        *var_len = 0;
-                        return (NULL);
-                    }
-                    addr_ret =
-                        (objid[0] << (8 * 3)) + (objid[1] << (8 * 2)) +
-                        (objid[2] << 8) + objid[3];
-                    addr_ret = htonl(addr_ret);
-                    *var_len = sizeof(addr_ret);
-                    vp->type = ASN_IPADDRESS;
-                    return ((unsigned char *) &addr_ret);
-                }
+                return netsnmp_internal_pass_parse(buf, buf2, var_len, vp);
             }
             *var_len = 0;
             return (NULL);
@@ -416,8 +335,6 @@ setPassPersist(int action,
     struct extensible *persistpassthru;
 
     char            buf[SNMP_MAXBUF], buf2[SNMP_MAXBUF];
-    long            tmp;
-    unsigned long   utmp;
 
     /*
      * Make sure that our basic pipe structure is malloced 
@@ -426,7 +343,7 @@ setPassPersist(int action,
 
     for (i = 1; i <= numpersistpassthrus; i++) {
         persistpassthru = get_exten_instance(persistpassthrus, i);
-        rtest = snmp_oid_min_compare(name, name_len,
+        rtest = snmp_oidtree_compare(name, name_len,
                                      persistpassthru->miboid,
                                      persistpassthru->miblen);
         if (rtest <= 0) {
@@ -443,55 +360,9 @@ setPassPersist(int action,
             snprintf(persistpassthru->command,
                      sizeof(persistpassthru->command), "set\n%s\n", buf);
             persistpassthru->command[ sizeof(persistpassthru->command)-1 ] = 0;
-            switch (var_val_type) {
-            case ASN_INTEGER:
-            case ASN_COUNTER:
-            case ASN_GAUGE:
-            case ASN_TIMETICKS:
-                tmp = *((long *) var_val);
-                switch (var_val_type) {
-                case ASN_INTEGER:
-                    sprintf(buf, "integer %d\n", (int) tmp);
-                    break;
-                case ASN_COUNTER:
-                    sprintf(buf, "counter %d\n", (int) tmp);
-                    break;
-                case ASN_GAUGE:
-                    sprintf(buf, "gauge %d\n", (int) tmp);
-                    break;
-                case ASN_TIMETICKS:
-                    sprintf(buf, "timeticks %d\n", (int) tmp);
-                    break;
-                }
-                break;
-            case ASN_IPADDRESS:
-                utmp = *((u_long *) var_val);
-                utmp = ntohl(utmp);
-                sprintf(buf, "ipaddress %d.%d.%d.%d\n",
-                        (int) ((utmp & 0xff000000) >> (8 * 3)),
-                        (int) ((utmp & 0xff0000) >> (8 * 2)),
-                        (int) ((utmp & 0xff00) >> (8)),
-                        (int) ((utmp & 0xff)));
-                break;
-            case ASN_OCTET_STR:
-                memcpy(buf2, var_val, var_val_len);
-                if (var_val_len == 0)
-                    sprintf(buf, "string \"\"\n");
-                else if (bin2asc(buf2, var_val_len) == (int) var_val_len)
-                    snprintf(buf, sizeof(buf), "string \"%s\"\n", buf2);
-                else
-                    snprintf(buf, sizeof(buf), "octet \"%s\"\n", buf2);
-                buf[ sizeof(buf)-1 ] = 0;
-                break;
-            case ASN_OBJECT_ID:
-                sprint_mib_oid(buf2, (oid *) var_val, var_val_len/sizeof(oid));
-                snprintf(buf, sizeof(buf), "objectid \"%s\"\n", buf2);
-                buf[ sizeof(buf)-1 ] = 0;
-                break;
-            }
-            strncat(persistpassthru->command, buf,
-                    sizeof(persistpassthru->command) -
-                    strlen(persistpassthru->command) - 2);
+            netsnmp_internal_pass_set_format(buf, var_val, var_val_type, var_val_len);
+            strlcat(persistpassthru->command, buf,
+                    sizeof(persistpassthru->command));
             persistpassthru->command[ sizeof(persistpassthru->command)-2 ] = '\n';
             persistpassthru->command[ sizeof(persistpassthru->command)-1 ] = 0;
 
@@ -512,7 +383,7 @@ setPassPersist(int action,
                 return SNMP_ERR_NOTWRITABLE;
             }
 
-            return netsnmp_pass_str_to_errno(buf);
+            return netsnmp_internal_pass_str_to_errno(buf);
         }
     }
     if (snmp_get_do_debugging()) {
@@ -560,10 +431,48 @@ init_persist_pipes(void)
         for (i = 0; i <= numpersistpassthrus; i++) {
             persist_pipes[i].fIn = persist_pipes[i].fOut = (FILE *) 0;
             persist_pipes[i].fdIn = persist_pipes[i].fdOut = -1;
-            persist_pipes[i].pid = -1;
+            persist_pipes[i].pid = NETSNMP_NO_SUCH_PROCESS;
         }
     }
     return persist_pipes ? 1 : 0;
+}
+
+/**
+ * Return true if and only if the process associated with the persistent
+ * pipe has stopped.
+ *
+ * @param[in] idx Persistent pipe index.
+ */
+static int process_stopped(int idx)
+{
+    if (persist_pipes[idx].pid != NETSNMP_NO_SUCH_PROCESS) {
+#if HAVE_SYS_WAIT_H
+        return waitpid(persist_pipes[idx].pid, NULL, WNOHANG) > 0;
+#endif
+#if defined(WIN32) && !defined (mingw32) && !defined(HAVE_SIGNAL)
+        return WaitForSingleObject(persist_pipes[idx].pid, 0) == WAIT_OBJECT_0;
+#endif
+    }
+    return 0;
+}
+
+/**
+ * Iterate over all persistent pipes and close those pipes of which the
+ * associated process has stopped.
+ */
+static void check_persist_pipes(unsigned clientreg, void *clientarg)
+{
+    int             i;
+
+    if (!persist_pipes)
+        return;
+
+    for (i = 0; i <= numpersistpassthrus; i++) {
+        if (process_stopped(i)) {
+            snmp_log(LOG_INFO, "pass_persist[%d]: child process stopped - closing pipe\n", i);
+            close_persist_pipe(i);
+        }
+    }
 }
 
 /*
@@ -598,19 +507,20 @@ open_persist_pipe(int iindex, char *command)
 {
     static int      recurse = 0;        /* used to allow one level of recursion */
 
-    DEBUGMSGTL(("ucd-snmp/pass_persist", "open_persist_pipe(%d,'%s')\n",
-                iindex, command));
+    DEBUGMSGTL(("ucd-snmp/pass_persist", "open_persist_pipe(%d,'%s') recurse=%d\n",
+                iindex, command, recurse));
     /*
      * Open if it's not already open 
      */
-    if (persist_pipes[iindex].pid == -1) {
-        int             fdIn, fdOut, pid;
+    if (persist_pipes[iindex].pid == NETSNMP_NO_SUCH_PROCESS) {
+        int             fdIn, fdOut;
+        netsnmp_pid_t   pid;
 
         /*
          * Did we fail? 
          */
         if ((0 == get_exec_pipes(command, &fdIn, &fdOut, &pid)) ||
-            (pid == -1)) {
+            (pid == NETSNMP_NO_SUCH_PROCESS)) {
             DEBUGMSGTL(("ucd-snmp/pass_persist",
                         "open_persist_pipe: pid == -1\n"));
             recurse = 0;
@@ -630,6 +540,7 @@ open_persist_pipe(int iindex, char *command)
          * Setup our -non-buffered-io- 
          */
         setbuf(persist_pipes[iindex].fOut, (char *) 0);
+        DEBUGMSGTL(("ucd-snmp/pass_persist", "open_persist_pipe: opened the pipes\n"));
     }
 
     /*
@@ -649,6 +560,7 @@ open_persist_pipe(int iindex, char *command)
              * Recurse one time if we get a SIGPIPE 
              */
             if (!recurse) {
+                DEBUGMSGTL(("ucd-snmp/pass_persist", "open_persist_pipe: recursing to reopen\n"));
                 recurse = 1;
                 return open_persist_pipe(iindex, command);
             }
@@ -664,7 +576,7 @@ open_persist_pipe(int iindex, char *command)
         }
         if (strncmp(buf, "PONG", 4)) {
             DEBUGMSGTL(("ucd-snmp/pass_persist",
-                        "open_persist_pipe: PONG not received!\n"));
+                        "open_persist_pipe: Got %s instead of PONG!\n", buf));
             close_persist_pipe(iindex);
             recurse = 0;
             return 0;
@@ -674,17 +586,6 @@ open_persist_pipe(int iindex, char *command)
     recurse = 0;
     return 1;
 }
-
-#if HAVE_STRUCT_SIGACTION_SA_SIGACTION
-/*
- * Generic handler 
- */
-void
-sigpipe_handler(int sig, siginfo_t * sip, void *uap)
-{
-    return;
-}
-#endif
 
 static int
 write_persist_pipe(int iindex, const char *data)
@@ -696,17 +597,17 @@ write_persist_pipe(int iindex, const char *data)
     /*
      * Don't write to a non-existant process 
      */
-    if (persist_pipes[iindex].pid == -1) {
+    if (persist_pipes[iindex].pid == NETSNMP_NO_SUCH_PROCESS) {
+        DEBUGMSGTL(("ucd-snmp/pass_persist",
+                    "write_persist_pipe: not writing %s, process is non-existent",
+                    data));
         return 0;
     }
 
     /*
-     * Setup our signal action to catch SIGPIPEs 
+     * Setup our signal action to ignore SIGPIPEs 
      */
-    sa.sa_handler = NULL;
-#if HAVE_STRUCT_SIGACTION_SA_SIGACTION
-    sa.sa_sigaction = &sigpipe_handler;
-#endif
+    sa.sa_handler = SIG_IGN;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     if (sigaction(SIGPIPE, &sa, &osa)) {
@@ -726,10 +627,10 @@ write_persist_pipe(int iindex, const char *data)
     sigaction(SIGPIPE, &osa, (struct sigaction *) 0);
 
     if (wret < 0) {
-        if (werrno != EINTR) {
+        if (werrno != EPIPE) {
             DEBUGMSGTL(("ucd-snmp/pass_persist",
-                        "write_persist_pipe: write returned unknown error %d\n",
-                        errno));
+                        "write_persist_pipe: write returned unknown error %d (%s)\n",
+                        werrno, strerror(werrno)));
         }
         close_persist_pipe(iindex);
         return 0;
@@ -782,7 +683,14 @@ close_persist_pipe(int iindex)
         persist_pipes[iindex].fOut = (FILE *) 0;
     }
     if (persist_pipes[iindex].fdOut != -1) {
+#ifndef WIN32
+        /*
+         * The sequence open()/fdopen()/fclose()/close() triggers an access
+         * violation with the MSVC runtime. Hence skip the close() call when
+         * using the MSVC runtime.
+         */
         close(persist_pipes[iindex].fdOut);
+#endif
         persist_pipes[iindex].fdOut = -1;
     }
     if (persist_pipes[iindex].fIn) {
@@ -790,27 +698,33 @@ close_persist_pipe(int iindex)
         persist_pipes[iindex].fIn = (FILE *) 0;
     }
     if (persist_pipes[iindex].fdIn != -1) {
+#ifndef WIN32
+        /*
+         * The sequence open()/fdopen()/fclose()/close() triggers an access
+         * violation with the MSVC runtime. Hence skip the close() call when
+         * using the MSVC runtime.
+         */
         close(persist_pipes[iindex].fdIn);
+#endif
         persist_pipes[iindex].fdIn = -1;
     }
 
-#if defined(WIN32) && !defined (mingw32) && !defined (HAVE_SIGNAL)
-    if (!CloseHandle((HANDLE)persist_pipes[iindex].pid)) {
-          DEBUGMSGTL(("ucd-snmp/pass_persist","close_persist_pipe pid: close error\n"));
-        } 
-#endif
-    
 #ifdef __uClinux__
 	/*remove the pipes*/
 	unlink(fifo_in_path);
 	unlink(fifo_out_path);
 #endif
 
-    if (persist_pipes[iindex].pid != -1) {
+    if (persist_pipes[iindex].pid != NETSNMP_NO_SUCH_PROCESS) {
 #if HAVE_SYS_WAIT_H
         waitpid(persist_pipes[iindex].pid, NULL, 0);
 #endif
-        persist_pipes[iindex].pid = -1;
+#if defined(WIN32) && !defined (mingw32) && !defined (HAVE_SIGNAL)
+        if (!CloseHandle(persist_pipes[iindex].pid)) {
+            DEBUGMSGTL(("ucd-snmp/pass_persist","close_persist_pipe pid: close error\n"));
+        }
+#endif
+        persist_pipes[iindex].pid = NETSNMP_NO_SUCH_PROCESS;
     }
 
 }

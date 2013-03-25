@@ -9,11 +9,16 @@
  * distributed with the Net-SNMP package.
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/data_access/swrun.h>
 
+netsnmp_feature_child_of(software_running, libnetsnmpmibs)
+
+netsnmp_feature_child_of(swrun_max_processes, software_running)
+netsnmp_feature_child_of(swrun_count_processes_by_name, software_running)
 
 /**---------------------------------------------------------------------*/
 /*
@@ -52,8 +57,6 @@ init_swrun(void)
 {
     DEBUGMSGTL(("swrun:access", "init\n"));
 
-    netsnmp_assert(0 == _swrun_init); /* who is calling twice? */
-
     if (1 == _swrun_init)
         return;
 
@@ -78,12 +81,15 @@ swrun_count_processes( void )
     return ( swrun_container ? CONTAINER_SIZE(swrun_container) : 0 );
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_SWRUN_MAX_PROCESSES
 int
 swrun_max_processes( void )
 {
     return _swrun_max;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_SWRUN_MAX_PROCESSES */
 
+#ifndef NETSNMP_FEATURE_REMOVE_SWRUN_COUNT_PROCESSES_BY_NAME
 int
 swrun_count_processes_by_name( char *name )
 {
@@ -104,7 +110,7 @@ swrun_count_processes_by_name( char *name )
 
     return i;
 }
-
+#endif /* NETSNMP_FEATURE_REMOVE_SWRUN_COUNT_PROCESSES_BY_NAME */
 
 /**---------------------------------------------------------------------*/
 /*

@@ -1,10 +1,20 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: interface_linux.c 18886 2010-05-27 11:19:06Z jsafranek $
+ * $Id$
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
+
+netsnmp_feature_require(fd_event_manager)
+netsnmp_feature_require(delete_prefix_info)
+netsnmp_feature_require(create_prefix_info)
+netsnmp_feature_child_of(interface_arch_set_admin_status, interface_all)
+
+#ifdef NETSNMP_FEATURE_REQUIRE_INTERFACE_ARCH_SET_ADMIN_STATUS
+netsnmp_feature_require(interface_ioctl_flags_set)
+#endif /* NETSNMP_FEATURE_REQUIRE_INTERFACE_ARCH_SET_ADMIN_STATUS */
 
 #ifdef HAVE_PCI_LOOKUP_NAME
 #include <pci/pci.h>
@@ -12,8 +22,8 @@ static struct pci_access *pci_access;
 #endif
 
 #ifdef HAVE_LINUX_ETHTOOL_H
-#ifndef HAVE_PCI_LOOKUP_NAME
 #include <linux/types.h>
+#ifndef HAVE_PCI_LOOKUP_NAME
 typedef __u64 u64;         /* hack, so we may include kernel's ethtool.h */
 typedef __u32 u32;         /* ditto */
 typedef __u16 u16;         /* ditto */
@@ -43,6 +53,7 @@ typedef __u8 u8;           /* ditto */
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <linux/sockios.h>
 #include <linux/if_ether.h>
@@ -60,13 +71,12 @@ typedef __u8 u8;           /* ditto */
 #endif
 
 #ifdef NETSNMP_ENABLE_IPV6
-#if defined(HAVE_PTHREAD_H) && defined(HAVE_LINUX_RTNETLINK_H)
-#include <pthread.h>
+#if defined(HAVE_LINUX_RTNETLINK_H)
 #include <linux/rtnetlink.h>
 #ifdef RTMGRP_IPV6_PREFIX
 #define SUPPORT_PREFIX_FLAGS 1
 #endif  /* RTMGRP_IPV6_PREFIX */
-#endif  /* HAVE_PTHREAD_H && HAVE_LINUX_RTNETLINK_H */
+#endif  /* HAVE_LINUX_RTNETLINK_H */
 #endif  /* NETSNMP_ENABLE_IPV6 */
 unsigned long long
 netsnmp_linux_interface_get_if_speed(int fd, const char *name,
@@ -129,6 +139,7 @@ netsnmp_arch_interface_init(void)
     else {
         proc_sys_basereachable_time = PROC_SYS_NET_IPVx_BASE_REACHABLE_TIME;
     }
+
 #ifdef SUPPORT_PREFIX_FLAGS
     list_info.list_head = &prefix_head_list;
     netsnmp_prefix_listen();
@@ -137,9 +148,9 @@ netsnmp_arch_interface_init(void)
 #ifdef HAVE_PCI_LOOKUP_NAME
     pci_access = pci_alloc();
     if (pci_access)
-        pci_init(pci_access);
+	pci_init(pci_access);
     else
-        snmp_log(LOG_ERR, "Unable to create pci access method\n");
+	snmp_log(LOG_ERR, "Unable to create pci access method\n");
 #endif
 }
 
@@ -246,79 +257,6 @@ _arch_interface_has_ipv6(oid if_index, u_int *flags,
 /**
  * @internal
  */
-#ifdef HAVE_PCI_LOOKUP_NAME
-
-/* Get value from sysfs file */
-static int sysfs_get_id(const char *path, unsigned short *id)
-{
-    FILE *fin;
-    int n;
-
-    if (!(fin = fopen(path, "r"))) {
-        DEBUGMSGTL(("access:interface",
-                    "Failed to open %s\n", path));
-        return 0;
-    }
-
-    n = fscanf(fin, "%hx", id);
-    fclose(fin);
-
-    return n == 1;
-}
-
-/* Get interface description for PCI device
- * by using sysfs to find vendor and device
- * then lookup name (-lpci)
- *
- * For software interfaces there is no PCI information
- * so description will not be set.
- */
-static void
-_arch_interface_description_get(netsnmp_interface_entry *entry)
-{
-    unsigned short vendor_id, device_id;
-    int cc;
-    char devbuf[128], lbuf[128], slot[64], buf[256];
-
-    if (!pci_access)
-        return;
-
-    snprintf(buf, sizeof(buf),
-             "/sys/class/net/%s/device", entry->name);
-
-    /* read sysfs link to get "../../../0000:07:00.0" */
-    cc = readlink(buf, lbuf, sizeof(lbuf));
-    if (cc < 0) {
-        DEBUGMSGTL(("access:interface",
-                    "readlink %s failed", buf));
-        return;
-    }
-    lbuf[cc] = 0;
-
-    snprintf(buf, sizeof(buf),
-             "/sys/class/net/%s/device/vendor", entry->name);
-
-    if (!sysfs_get_id(buf, &vendor_id))
-        return;
-
-    snprintf(buf, sizeof(buf),
-             "/sys/class/net/%s/device/device", entry->name);
-
-    if (!sysfs_get_id(buf, &device_id))
-        return;
-
-    /* Produce "000:08:00.0 Mycontroller Group 91010 Ethernet Controller" */
-    snprintf(buf, sizeof(buf), "%s %s", basename(lbuf),
-             pci_lookup_name(pci_access, devbuf, sizeof(devbuf),
-                             PCI_LOOKUP_VENDOR | PCI_LOOKUP_DEVICE,
-                             vendor_id, device_id));
-    if (entry->descr)
-            free(entry->descr);
-
-    entry->descr = strdup(buf);
-}
-#endif
-
 static void
 _arch_interface_flags_v4_get(netsnmp_interface_entry *entry)
 {
@@ -342,6 +280,69 @@ _arch_interface_flags_v4_get(netsnmp_interface_entry *entry)
         fclose(fin);
     }
 }
+
+#ifdef HAVE_PCI_LOOKUP_NAME
+
+/* Get value from sysfs file */
+static int sysfs_get_id(const char *path, unsigned short *id)
+{
+    FILE *fin;
+    int n;
+
+    if (!(fin = fopen(path, "r"))) {
+        DEBUGMSGTL(("access:interface",
+                    "Failed to open %s\n", path));
+	return 0;
+    }
+
+    n = fscanf(fin, "%hx", id);
+    fclose(fin);
+
+    return n == 1;
+}
+
+/* Get interface description for PCI device
+ * by using sysfs to find vendor and device
+ * then lookup name (-lpci)
+ *
+ * For software interfaces there is no PCI information
+ * so description will not be set.
+ */
+static void
+_arch_interface_description_get(netsnmp_interface_entry *entry)
+{
+    const char *descr;
+    char buf[256];
+    unsigned short vendor_id, device_id;
+
+    if (!pci_access)
+	return;
+
+    snprintf(buf, sizeof(buf),
+	     "/sys/class/net/%s/device/vendor", entry->name);
+
+    if (!sysfs_get_id(buf, &vendor_id))
+	return;
+
+    snprintf(buf, sizeof(buf),
+	     "/sys/class/net/%s/device/device", entry->name);
+
+    if (!sysfs_get_id(buf, &device_id))
+	return;
+
+    descr = pci_lookup_name(pci_access, buf, sizeof(buf),
+			    PCI_LOOKUP_VENDOR | PCI_LOOKUP_DEVICE,
+			    vendor_id, device_id, 0, 0);
+    if (descr) {
+	free(entry->descr);
+	entry->descr = strdup(descr);
+    } else {
+        DEBUGMSGTL(("access:interface",
+                    "Failed pci_lookup_name vendor=%#hx device=%#hx\n",
+		    vendor_id, device_id));
+    }
+}
+#endif
 
 
 #ifdef NETSNMP_ENABLE_IPV6
@@ -459,7 +460,7 @@ _parse_stats(netsnmp_interface_entry *entry, char *stats, int expected)
 
     if ((*stats == 'N') &&
         (0 == strncmp(stats, "No statistics available",
-                      sizeof("No statistics available"))))
+                      strlen("No statistics available"))))
         return -1;
 
     /*
@@ -589,6 +590,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
     fd = socket(AF_INET, SOCK_DGRAM, 0);
     if(fd < 0) {
         snmp_log(LOG_ERR, "could not create socket\n");
+        fclose(devin);
         return -2;
     }
 
@@ -700,7 +702,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
         entry->ns_flags = flags; /* initial flags; we'll set more later */
 
 #ifdef HAVE_PCI_LOOKUP_NAME
-        _arch_interface_description_get(entry);
+	_arch_interface_description_get(entry);
 #endif
 
 
@@ -727,6 +729,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
                 {IANAIFTYPE_ISO88025TOKENRING, "tr"},
                 {IANAIFTYPE_FASTETHER, "feth"},
                 {IANAIFTYPE_GIGABITETHERNET,"gig"},
+                {IANAIFTYPE_INFINIBAND,"ib"},
                 {IANAIFTYPE_PPP, "ppp"},
                 {IANAIFTYPE_SLIP, "sl"},
                 {IANAIFTYPE_TUNNEL, "sit"},
@@ -736,10 +739,10 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
                 {0, NULL}                  /* end of list */
             };
 
-            int             ii, len;
+            int             len;
             register pmatch_if pm;
             
-            for (ii = 0, pm = lmatch_if; pm->mi_name; pm++) {
+            for (pm = lmatch_if; pm->mi_name; pm++) {
                 len = strlen(pm->mi_name);
                 if (0 == strncmp(entry->name, pm->mi_name, len)) {
                     entry->type = pm->mi_type;
@@ -864,6 +867,7 @@ netsnmp_arch_interface_container_load(netsnmp_container* container,
     return 0;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_INTERFACE_ARCH_SET_ADMIN_STATUS
 int
 netsnmp_arch_set_admin_status(netsnmp_interface_entry * entry,
                               int ifAdminStatus_val)
@@ -880,6 +884,7 @@ netsnmp_arch_set_admin_status(netsnmp_interface_entry * entry,
     return netsnmp_access_interface_ioctl_flags_set(-1, entry,
                                                     IFF_UP, and_complement);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_INTERFACE_ARCH_SET_ADMIN_STATUS */
 
 #ifdef HAVE_LINUX_ETHTOOL_H
 /**
@@ -889,38 +894,38 @@ unsigned long long
 netsnmp_linux_interface_get_if_speed(int fd, const char *name,
             unsigned long long defaultspeed)
 {
+    int ret;
     struct ifreq ifr;
     struct ethtool_cmd edata;
-    __u32 speed;
+    uint16_t speed_hi;
+    uint32_t speed;
 
     memset(&ifr, 0, sizeof(ifr));
+    memset(&edata, 0, sizeof(edata));
     edata.cmd = ETHTOOL_GSET;
-    edata.speed = 0;
     
-    strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name)-1);
+    strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
     ifr.ifr_data = (char *) &edata;
     
-    if (ioctl(fd, SIOCETHTOOL, &ifr) == -1) {
-        DEBUGMSGTL(("mibII/interfaces", "ETHTOOL_GSET on %s failed\n",
-                    ifr.ifr_name));
-        return netsnmp_linux_interface_get_if_speed_mii(fd,name,defaultspeed);
-    }
-    
-    speed = edata.speed;
-#if HAVE_STRUCT_ETHTOOL_CMD_SPEED_HI
-    speed |= edata.speed_hi << 16;
-#endif
-    if (speed == 0 || speed == (__u16)(-1) || speed == (__u32)(-1)) {
-        DEBUGMSGTL(("mibII/interfaces", "speed is not known for %s\n",
-                        ifr.ifr_name));
-        /* try MII */
+    ret = ioctl(fd, SIOCETHTOOL, &ifr);
+    if (ret == -1 || edata.speed == 0) {
+        DEBUGMSGTL(("mibII/interfaces", "ETHTOOL_GSET on %s failed (%d / %d)\n",
+                    ifr.ifr_name, ret, edata.speed));
         return netsnmp_linux_interface_get_if_speed_mii(fd,name,defaultspeed);
     }
 
+#ifdef HAVE_STRUCT_ETHTOOL_CMD_SPEED_HI
+    speed_hi = edata.speed_hi;
+#else
+    speed_hi = 0;
+#endif
+    speed = speed_hi << 16 | edata.speed;
+    if (speed == 0xffff || speed == 0xffffffffUL /*SPEED_UNKNOWN*/)
+        speed = defaultspeed;
     /* return in bps */
-    DEBUGMSGTL(("mibII/interfaces", "ETHTOOL_GSET on %s speed = %d\n",
-                ifr.ifr_name, speed));
-    return speed*1000LL*1000LL;
+    DEBUGMSGTL(("mibII/interfaces", "ETHTOOL_GSET on %s speed = %#x -> %d\n",
+                ifr.ifr_name, speed_hi << 16 | edata.speed, speed));
+    return speed * 1000LL * 1000LL;
 }
 #endif
  
@@ -950,8 +955,7 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name,
     const unsigned long long media_speeds[] = {10000000, 10000000, 100000000, 100000000, 10000000, 0};
     /* It corresponds to "10baseT", "10baseT-FD", "100baseTx", "100baseTx-FD", "100baseT4", "Flow-control", 0, */
 
-    strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
-    ifr.ifr_name[ sizeof(ifr.ifr_name)-1 ] = 0;
+    strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
     data[0] = 0;
     
     /*
@@ -972,7 +976,7 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name,
         if(ioctl(fd, SIOCGMIIREG, &ifr) <0){
             DEBUGMSGTL(("mibII/interfaces", "SIOCGMIIREG on %s failed\n", ifr.ifr_name));
         }
-        mii_val[mii_reg] = data[3];             
+        mii_val[mii_reg] = data[3];		
     }
     /*Parsing of mii values*/
     /*Invalid basic mode control register*/
@@ -981,10 +985,10 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name,
         return retspeed;
     }
     /* Descriptive rename. */
-    bmcr = mii_val[0];    /*basic mode control register*/
-    bmsr = mii_val[1];    /* basic mode status register*/
+    bmcr = mii_val[0]; 	  /*basic mode control register*/
+    bmsr = mii_val[1]; 	  /* basic mode status register*/
     nway_advert = mii_val[4]; /* autonegotiation advertisement*/
-    lkpar = mii_val[5];           /*link partner ability*/
+    lkpar = mii_val[5]; 	  /*link partner ability*/
     
     /*Check for link existence, returns 0 if link is absent*/
     if ((bmsr & 0x0016) != 0x0004){
@@ -998,13 +1002,13 @@ netsnmp_linux_interface_get_if_speed(int fd, const char *name,
         retspeed = bmcr & 0x2000 ? 100000000 : 10000000;
         return retspeed;
     }
-    /* Link partner got our advertised abilities */     
+    /* Link partner got our advertised abilities */	
     if (lkpar & 0x4000) {
         int negotiated = nway_advert & lkpar & 0x3e0;
         int max_capability = 0;
         /* Scan for the highest negotiated capability, highest priority
            (100baseTx-FDX) to lowest (10baseT-HDX). */
-        int media_priority[] = {8, 9, 7, 6, 5};         /* media_names[i-5] */
+        int media_priority[] = {8, 9, 7, 6, 5}; 	/* media_names[i-5] */
         for (i = 0; media_priority[i]; i++){
             if (negotiated & (1 << media_priority[i])) {
                 max_capability = media_priority[i];
@@ -1038,6 +1042,10 @@ int netsnmp_prefix_listen()
     unsigned           groups = 0;
 
     int fd = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
+    if (fd < 0) {
+        snmp_log(LOG_ERR, "netsnmp_prefix_listen: Cannot create socket.\n");
+        return -1;
+    }
 
     memset(&localaddrinfo, 0, sizeof(struct sockaddr_nl));
 
@@ -1048,6 +1056,7 @@ int netsnmp_prefix_listen()
 
     if (bind(fd, (struct sockaddr*)&localaddrinfo, sizeof(localaddrinfo)) < 0) {
         snmp_log(LOG_ERR,"netsnmp_prefix_listen: Bind failed.\n");
+        close(fd);
         return -1;
     }
 
@@ -1062,11 +1071,13 @@ int netsnmp_prefix_listen()
     status = send(fd, &req, req.n.nlmsg_len, 0);
     if (status < 0) {
         snmp_log(LOG_ERR,"netsnmp_prefix_listen: send failed\n");
+        close(fd);
         return -1;
     }
 
     if (register_readfd(fd, netsnmp_prefix_process, NULL) != 0) {
         snmp_log(LOG_ERR,"netsnmp_prefix_listen: error registering netlink socket\n");
+        close(fd);
         return -1;
     }
     return 0;
@@ -1098,6 +1109,8 @@ void netsnmp_prefix_process(int fd, void *data)
 
     status = recv(fd, buf, sizeof(buf), 0);
     if (status < 0) {
+        if (errno == EINTR)
+            return;
         snmp_log(LOG_ERR,"netsnmp_prefix_listen: Receive failed.\n");
         return;
     }

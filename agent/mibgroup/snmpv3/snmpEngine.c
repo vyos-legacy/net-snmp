@@ -3,6 +3,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/sysORTable.h>
@@ -10,9 +11,14 @@
 #include "util_funcs/header_generic.h"
 #include "snmpEngine.h"
 
+netsnmp_feature_child_of(snmpengine_all, libnetsnmpmibs)
+
+netsnmp_feature_child_of(register_snmpEngine_scalars_context, snmpengine_all)
+
 struct variable2 snmpEngine_variables[] = {
     {SNMPENGINEID, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
      var_snmpEngine, 1, {1}},
+#ifndef NETSNMP_NO_WRITE_SUPPORT 
 #ifdef NETSNMP_ENABLE_TESTING_CODE
     {SNMPENGINEBOOTS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
      var_snmpEngine, 1, {2}},
@@ -24,6 +30,12 @@ struct variable2 snmpEngine_variables[] = {
     {SNMPENGINETIME, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
      var_snmpEngine, 1, {3}},
 #endif                          /* NETSNMP_ENABLE_TESTING_CODE */
+#else  /* !NETSNMP_NO_WRITE_SUPPORT */ 
+    {SNMPENGINEBOOTS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_snmpEngine, 1, {2}},
+    {SNMPENGINETIME, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_snmpEngine, 1, {3}},
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */ 
     {SNMPENGINEMAXMESSAGESIZE, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
      var_snmpEngine, 1, {4}},
 };
@@ -41,6 +53,7 @@ register_snmpEngine_scalars(void)
                  snmpEngine_variables_oid);
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_REGISTER_SNMPENGINE_SCALARS_CONTEXT
 void
 register_snmpEngine_scalars_context(const char *contextName)
 {
@@ -53,6 +66,7 @@ register_snmpEngine_scalars_context(const char *contextName)
                          DEFAULT_MIB_PRIORITY, 0, 0, NULL,
                          contextName, -1, 0);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_REGISTER_SNMPENGINE_SCALARS_CONTEXT */
 
 void
 init_snmpEngine(void)
@@ -62,12 +76,14 @@ init_snmpEngine(void)
     register_snmpEngine_scalars();
 }
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 #ifdef NETSNMP_ENABLE_TESTING_CODE
 int             write_engineBoots(int, u_char *, u_char, size_t, u_char *,
                                   oid *, size_t);
 int             write_engineTime(int, u_char *, u_char, size_t, u_char *,
                                  oid *, size_t);
 #endif                          /* NETSNMP_ENABLE_TESTING_CODE */
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 u_char         *
 var_snmpEngine(struct variable *vp,
@@ -101,16 +117,20 @@ var_snmpEngine(struct variable *vp,
         return (unsigned char *) engineID;
 
     case SNMPENGINEBOOTS:
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 #ifdef NETSNMP_ENABLE_TESTING_CODE
         *write_method = write_engineBoots;
 #endif                          /* NETSNMP_ENABLE_TESTING_CODE */
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
         long_ret = snmpv3_local_snmpEngineBoots();
         return (unsigned char *) &long_ret;
 
     case SNMPENGINETIME:
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 #ifdef NETSNMP_ENABLE_TESTING_CODE
         *write_method = write_engineTime;
 #endif                          /* NETSNMP_ENABLE_TESTING_CODE */
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
         long_ret = snmpv3_local_snmpEngineTime();
         return (unsigned char *) &long_ret;
 
@@ -125,6 +145,8 @@ var_snmpEngine(struct variable *vp,
     return NULL;
 }
 
+
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 #ifdef NETSNMP_ENABLE_TESTING_CODE
 /*
  * write_engineBoots():
@@ -221,3 +243,4 @@ write_engineTime(int action,
 }
 
 #endif                          /* NETSNMP_ENABLE_TESTING_CODE */
+#endif /* NETSNMP_NO_WRITE_SUPPORT */

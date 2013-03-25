@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $Id: mib2c-update 18484 2010-04-08 14:57:14Z rstory $
+# $Id$
 #
 # script to merge custom code into updated mib2c code
 #

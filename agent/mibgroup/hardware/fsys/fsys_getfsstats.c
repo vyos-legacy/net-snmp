@@ -24,7 +24,7 @@
 #define NSFS_NAMELEN  MNAMELEN
 #endif
 
-#if defined(HAVE_GETVFSSTAT)
+#if defined(HAVE_GETVFSSTAT) && defined(__NetBSD__)
 #define NSFS_GETFSSTAT  getvfsstat
 #define NSFS_STATFS     statvfs
 #define NSFS_FLAGS      f_flag
@@ -150,21 +150,28 @@ netsnmp_fsys_arch_load( void )
         if (!entry)
             continue;
 
-        memcpy( entry->path,   stats[i].f_mntonname,   sizeof(entry->path)  );
+        strlcpy( entry->path,   stats[i].f_mntonname,   sizeof(entry->path));
         entry->path[sizeof(entry->path)-1] = '\0';
-        memcpy( entry->device, stats[i].f_mntfromname, sizeof(entry->device));
+        strlcpy( entry->device, stats[i].f_mntfromname, sizeof(entry->device));
         entry->device[sizeof(entry->device)-1] = '\0';
         entry->units = stats[i].f_bsize;    /* or f_frsize */
         entry->size  = stats[i].f_blocks;
-        entry->used  = stats[i].f_bfree;
-        entry->avail = stats[i].f_bavail;
+        entry->used  = (stats[i].f_blocks - stats[i].f_bfree);
+        /* entry->avail is currently unsigned, so protect against negative
+         * values!
+         * This should be changed to a signed field.
+         */
+        if (stats[i].f_bavail < 0)
+            entry->avail = 0;
+        else
+            entry->avail = stats[i].f_bavail;
         entry->inums_total = stats[i].f_files;
         entry->inums_avail = stats[i].f_ffree;
 
         entry->type = _fs_type( stats[i].f_fstypename );
         entry->flags |= NETSNMP_FS_FLAG_ACTIVE;
 
-        if (! stats[i].NSFS_FLAGS & MNT_LOCAL ) {
+        if (! (stats[i].NSFS_FLAGS & MNT_LOCAL )) {
             entry->flags |= NETSNMP_FS_FLAG_REMOTE;
         }
         if (  stats[i].NSFS_FLAGS & MNT_RDONLY ) {
@@ -173,6 +180,8 @@ netsnmp_fsys_arch_load( void )
         if (  stats[i].NSFS_FLAGS & MNT_ROOTFS ) {
             entry->flags |= NETSNMP_FS_FLAG_BOOTABLE;
         }
-        
+        netsnmp_fsys_calculate32(entry);
     }
+
+    free(stats);
 }

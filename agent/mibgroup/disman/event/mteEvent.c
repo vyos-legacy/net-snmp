@@ -4,11 +4,16 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include "disman/event/mteEvent.h"
 #include "disman/event/mteTrigger.h"
 #include "disman/event/mteObjects.h"
+
+netsnmp_feature_child_of(disman_debugging, libnetsnmpmibs)
+netsnmp_feature_child_of(mteevent, libnetsnmpmibs)
+netsnmp_feature_child_of(mteevent_removeentry, mteevent)
 
 netsnmp_tdata *event_table_data;
 
@@ -119,6 +124,7 @@ _init_link_mteEvent( const char *event, const char *oname, int specific )
      *
      * =================================================== */
 
+#ifndef NETSNMP_FEATURE_REMOVE_DISMAN_DEBUGGING
 void
 _mteEvent_dump(void)
 {
@@ -140,7 +146,7 @@ _mteEvent_dump(void)
     }
     DEBUGMSGTL(("disman:event:dump", "EventTable %d entries\n", i));
 }
-
+#endif /* NETSNMP_FEATURE_REMOVE_DISMAN_DEBUGGING */
 
 /*
  * Create a new row in the event table 
@@ -196,6 +202,7 @@ mteEvent_createEntry(const char *mteOwner, const char *mteEName, int fixed)
 }
 
 
+#ifndef NETSNMP_FEATURE_REMOVE_MTEEVENT_REMOVEENTRY
 /*
  * Remove a row from the event table 
  */
@@ -208,9 +215,9 @@ mteEvent_removeEntry(netsnmp_tdata_row *row)
         return;                 /* Nothing to remove */
     entry = (struct mteEvent *)
         netsnmp_tdata_remove_and_delete_row(event_table_data, row);
-    if (entry)
-        SNMP_FREE(entry);
+    SNMP_FREE(entry);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_MTEEVENT_REMOVEENTRY */
 
     /* ===================================================
      *
@@ -222,10 +229,12 @@ int
 _mteEvent_fire_notify( struct mteEvent    *event,
                        struct mteTrigger  *trigger,
                        oid *suffix, size_t sfx_len );
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 int
 _mteEvent_fire_set(    struct mteEvent    *event,
                        struct mteTrigger  *trigger,
                        oid *suffix, size_t sfx_len );
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 int
 mteEvent_fire( char *owner, char *event,      /* Event to invoke    */
@@ -261,11 +270,13 @@ mteEvent_fire( char *owner, char *event,      /* Event to invoke    */
         _mteEvent_fire_notify( entry, trigger, suffix, s_len );
         fired = 1;
     }
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     if (entry->mteEventActions & MTE_EVENT_SET) {
         DEBUGMSGTL(("disman:event:fire", "Firing set event\n"));
         _mteEvent_fire_set( entry, trigger, suffix, s_len );
         fired = 1;
     }
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
     if (!fired)
         DEBUGMSGTL(("disman:event:fire", "Matched event is empty\n"));
@@ -434,6 +445,7 @@ _mteEvent_fire_notify( struct mteEvent   *entry,     /* The event to fire  */
 }
 
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 int
 _mteEvent_fire_set( struct mteEvent   *entry,      /* The event to fire */
                     struct mteTrigger *trigger,    /* Trigger that fired */
@@ -477,4 +489,4 @@ _mteEvent_fire_set( struct mteEvent   *entry,      /* The event to fire */
 
     /* XXX - Need to check result */
 }
-
+#endif /* NETSNMP_NO_WRITE_SUPPORT */

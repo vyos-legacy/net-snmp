@@ -1,5 +1,7 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -10,6 +12,34 @@
 #else
 #include <strings.h>
 #endif
+
+netsnmp_feature_child_of(table_dataset_all, mib_helpers)
+netsnmp_feature_child_of(table_dataset, table_dataset_all)
+netsnmp_feature_child_of(table_dataset_remove_row, table_dataset_all)
+netsnmp_feature_child_of(table_data_set_column, table_dataset_all)
+netsnmp_feature_child_of(table_dataset_get_newrow, table_dataset_all)
+netsnmp_feature_child_of(table_set_add_indexes, table_dataset_all)
+netsnmp_feature_child_of(delete_table_data_set, table_dataset_all)
+netsnmp_feature_child_of(table_set_multi_add_default_row, table_dataset_all)
+netsnmp_feature_child_of(table_dataset_unregister_auto_data_table, table_dataset_all)
+
+#ifdef NETSNMP_FEATURE_REQUIRE_TABLE_DATASET
+netsnmp_feature_require(table_get_or_create_row_stash)
+netsnmp_feature_require(table_data_delete_table)
+netsnmp_feature_require(table_data)
+netsnmp_feature_require(oid_stash_get_data)
+netsnmp_feature_require(oid_stash_add_data)
+#endif /* NETSNMP_FEATURE_REQUIRE_TABLE_DATASET */
+
+#ifndef NETSNMP_FEATURE_REMOVE_TABLE_DATASET
+
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(oid_stash)
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
+
+#ifndef NETSNMP_DISABLE_MIB_LOADING
+netsnmp_feature_require(mib_to_asn_type)
+#endif /* NETSNMP_DISABLE_MIB_LOADING */
 
 static netsnmp_data_list *auto_tables;
 
@@ -134,6 +164,7 @@ netsnmp_table_dataset_replace_row(netsnmp_table_data_set *table,
 }
 
 /** removes a row from the table, but doesn't delete/free the column values */
+#ifndef NETSNMP_FEATURE_REMOVE_TABLE_DATASET_REMOVE_ROW
 NETSNMP_INLINE void
 netsnmp_table_dataset_remove_row(netsnmp_table_data_set *table,
                                  netsnmp_table_row *row)
@@ -143,6 +174,7 @@ netsnmp_table_dataset_remove_row(netsnmp_table_data_set *table,
 
     netsnmp_table_data_remove_and_delete_row(table->table, row);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_TABLE_DATASET_REMOVE_ROW */
 
 /** removes a row from the table and then deletes it (and all its data) */
 NETSNMP_INLINE void
@@ -172,6 +204,7 @@ netsnmp_create_table_data_set(const char *table_name)
     return table_set;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_DELETE_TABLE_DATA_SET
 void netsnmp_delete_table_data_set(netsnmp_table_data_set *table_set)
 {
     netsnmp_table_data_set_storage *ptr, *next;
@@ -190,6 +223,7 @@ void netsnmp_delete_table_data_set(netsnmp_table_data_set *table_set)
     netsnmp_table_data_delete_table(table_set->table);
     free(table_set);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_DELETE_TABLE_DATA_SET */
 
 /** clones a dataset row, including all data. */
 netsnmp_table_row *
@@ -250,9 +284,10 @@ netsnmp_table_data_set_create_row_from_defaults
     for (; defrow; defrow = defrow->next) {
         netsnmp_set_row_column(row, defrow->column, defrow->type,
                                defrow->data.voidp, defrow->data_len);
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         if (defrow->writable)
             netsnmp_mark_row_column_writable(row, defrow->column, 1);
-
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     }
     return row;
 }
@@ -328,6 +363,7 @@ netsnmp_table_set_add_default_row(netsnmp_table_data_set *table_set,
  *  this is a wrapper around calling netsnmp_table_set_add_default_row
  *  repeatedly for you.
  */
+#ifndef NETSNMP_FEATURE_REMOVE_TABLE_SET_MULTI_ADD_DEFAULT_ROW
 void
 netsnmp_table_set_multi_add_default_row(netsnmp_table_data_set *tset, ...)
 {
@@ -350,7 +386,7 @@ netsnmp_table_set_multi_add_default_row(netsnmp_table_data_set *tset, ...)
 
     va_end(debugargs);
 }
-
+#endif /* NETSNMP_FEATURE_REMOVE_TABLE_SET_MULTI_ADD_DEFAULT_ROW */
 
 /* ==================================
  *
@@ -390,6 +426,8 @@ netsnmp_register_table_data_set(netsnmp_handler_registration *reginfo,
                                 netsnmp_table_data_set *data_set,
                                 netsnmp_table_registration_info *table_info)
 {
+    int ret;
+
     if (NULL == table_info) {
         /*
          * allocate the table if one wasn't allocated 
@@ -427,8 +465,11 @@ netsnmp_register_table_data_set(netsnmp_handler_registration *reginfo,
 
     netsnmp_inject_handler(reginfo,
                            netsnmp_get_table_data_set_handler(data_set));
-    return netsnmp_register_table_data(reginfo, data_set->table,
+    ret = netsnmp_register_table_data(reginfo, data_set->table,
                                        table_info);
+    if (ret == SNMPERR_SUCCESS && reginfo->handler)
+        netsnmp_handler_owns_table_info(reginfo->handler->next);
+    return ret;
 }
 
 newrow_stash   *
@@ -489,6 +530,7 @@ netsnmp_table_data_set_helper_handler(netsnmp_mib_handler *handler,
         row = netsnmp_extract_table_row(request);
         table_info = netsnmp_extract_table_info(request);
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         if (MODE_IS_SET(reqinfo->mode)) {
 
             /*
@@ -557,12 +599,17 @@ netsnmp_table_data_set_helper_handler(netsnmp_mib_handler *handler,
                 reqinfo->mode == MODE_SET_RESERVE2)
                 row = newrow;
         }
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
         if (row)
             data = (netsnmp_table_data_set_storage *) row->data;
 
         if (!row || !table_info || !data) {
-            if (!MODE_IS_SET(reqinfo->mode) || !table_info) {
+            if (!table_info
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+                || !MODE_IS_SET(reqinfo->mode)
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
+                ) {
                 netsnmp_set_request_error(reqinfo, request,
                                           SNMP_NOSUCHINSTANCE);
                 continue;
@@ -593,6 +640,7 @@ netsnmp_table_data_set_helper_handler(netsnmp_mib_handler *handler,
             }
             break;
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         case MODE_SET_RESERVE1:
             if (data) {
                 /*
@@ -809,6 +857,12 @@ netsnmp_table_data_set_helper_handler(netsnmp_mib_handler *handler,
 		newrow = NULL;
             }
             break;
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
+
+        default:
+            snmp_log(LOG_ERR,
+                     "table_dataset: unknown mode passed into the handler\n");
+            return SNMP_ERR_GENERR;
         }
     }
 
@@ -829,6 +883,7 @@ netsnmp_extract_table_data_set(netsnmp_request_info *request)
 /**
  * extracts a netsnmp_table_data_set pointer from a given request
  */
+#ifndef NETSNMP_FEATURE_REMOVE_TABLE_DATA_SET_COLUMN
 netsnmp_table_data_set_storage *
 netsnmp_extract_table_data_set_column(netsnmp_request_info *request,
                                      unsigned int column)
@@ -840,7 +895,7 @@ netsnmp_extract_table_data_set_column(netsnmp_request_info *request,
     }
     return data;
 }
-
+#endif /* NETSNMP_FEATURE_REMOVE_TABLE_DATA_SET_COLUMN */
 
 /* ==================================
  *
@@ -868,8 +923,22 @@ netsnmp_register_auto_data_table(netsnmp_table_data_set *table_set,
     if (!registration_name) {
         registration_name = table_set->table->name;
     }
-    netsnmp_add_list_data(&auto_tables, netsnmp_create_data_list(registration_name, tables, NULL));     /* XXX */
+    netsnmp_add_list_data(&auto_tables,
+                          netsnmp_create_data_list(registration_name,
+                                                   tables, free));     /* XXX */
 }
+
+#ifndef NETSNMP_FEATURE_REMOVE_TABLE_DATASET_UNREGISTER_AUTO_DATA_TABLE
+/** Undo the effect of netsnmp_register_auto_data_table().
+ */
+void
+netsnmp_unregister_auto_data_table(netsnmp_table_data_set *table_set,
+				   char *registration_name)
+{
+    netsnmp_remove_list_node(&auto_tables, registration_name
+			     ? registration_name : table_set->table->name);
+}
+#endif /* NETSNMP_FEATURE_REMOVE_TABLE_DATASET_UNREGISTER_AUTO_DATA_TABLE */
 
 #ifndef NETSNMP_DISABLE_MIB_LOADING
 static void
@@ -1036,9 +1105,11 @@ netsnmp_config_parse_table_set(const char *token, char *line)
         switch (tp->access) {
         case MIB_ACCESS_CREATE:
             table_set->allow_creation = 1;
+            /* fallthrough */
         case MIB_ACCESS_READWRITE:
         case MIB_ACCESS_WRITEONLY:
             canwrite = 1;
+            /* fallthrough */
         case MIB_ACCESS_READONLY:
             DEBUGMSGTL(("table_set_add_table",
                         "adding column %ld of type %d\n", tp->subid, type));
@@ -1131,8 +1202,10 @@ netsnmp_config_parse_add_row(const char *token, char *line)
                     "adding data at column %d of type %d\n", dr->column,
                     dr->type));
         netsnmp_set_row_column(row, dr->column, dr->type, buf, buf_size);
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         if (dr->writable)
             netsnmp_mark_row_column_writable(row, dr->column, 1);       /* make writable */
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     }
     rc = netsnmp_table_data_add_row(tables->table_set->table, row);
     if (SNMPERR_SUCCESS != rc) {
@@ -1145,6 +1218,7 @@ netsnmp_config_parse_add_row(const char *token, char *line)
 }
 
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 netsnmp_oid_stash_node **
 netsnmp_table_dataset_get_or_create_stash(netsnmp_agent_request_info *reqinfo,
                                           netsnmp_table_data_set *datatable,
@@ -1175,6 +1249,7 @@ netsnmp_table_dataset_get_or_create_stash(netsnmp_agent_request_info *reqinfo,
     return stashp;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_TABLE_DATASET_GET_NEWROW
 netsnmp_table_row *
 netsnmp_table_dataset_get_newrow(netsnmp_request_info *request,
                                  netsnmp_agent_request_info *reqinfo,
@@ -1198,6 +1273,8 @@ netsnmp_table_dataset_get_newrow(netsnmp_request_info *request,
 
     return newrowstash->newrow;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_TABLE_DATASET_GET_NEWROW */
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /* ==================================
  *
@@ -1246,6 +1323,7 @@ netsnmp_table_data_set_find_column(netsnmp_table_data_set_storage *start,
     return start;
 }
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 /**
  * marks a given column in a row as writable or not.
  */
@@ -1279,6 +1357,7 @@ netsnmp_mark_row_column_writable(netsnmp_table_row *row, int column,
     }
     return SNMPERR_SUCCESS;
 }
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /**
  * Sets a given column in a row with data given a type, value,
@@ -1353,6 +1432,7 @@ netsnmp_set_row_column(netsnmp_table_row *row, unsigned int column,
     return SNMPERR_SUCCESS;
 }
 
+
 /* ==================================
  *
  * Data Set API: Index operations
@@ -1370,6 +1450,7 @@ netsnmp_table_dataset_add_index(netsnmp_table_data_set *table, u_char type)
 
 /** adds multiple indexes to a table_dataset helper object.
  *  To end the list, use a 0 after the list of ASN index types. */
+#ifndef NETSNMP_FEATURE_REMOVE_TABLE_SET_ADD_INDEXES
 void
 netsnmp_table_set_add_indexes(netsnmp_table_data_set *tset,
                               ...)
@@ -1385,6 +1466,10 @@ netsnmp_table_set_add_indexes(netsnmp_table_data_set *tset,
 
     va_end(debugargs);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_TABLE_SET_ADD_INDEXES */
 
+#else /* NETSNMP_FEATURE_REMOVE_TABLE_DATASET */
+netsnmp_feature_unused(table_dataset);
+#endif /* NETSNMP_FEATURE_REMOVE_TABLE_DATASET */
 /** @} 
  */

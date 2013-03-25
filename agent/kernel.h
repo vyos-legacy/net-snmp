@@ -16,8 +16,8 @@
 /***********************************************************************/
 
 #ifdef NETSNMP_CAN_USE_NLIST
-extern void     init_kmem(const char *);
-extern int      klookup(unsigned long, char *, int);
+extern int      init_kmem(const char *);
+extern int      klookup(unsigned long, void *, size_t);
 extern void     free_kmem(void);
 #define NETSNMP_KLOOKUP(x,y,z) klookup((unsigned long) x,y,z)
 #else

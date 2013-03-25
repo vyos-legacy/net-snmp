@@ -15,6 +15,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <sys/types.h>
 #ifdef HAVE_STDLIB_H
@@ -39,6 +40,9 @@
 #include <netinet/in.h>
 #endif
 
+#if HAVE_UNISTD_H
+#include <unistd.h>
+#endif
 #if HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
@@ -46,6 +50,11 @@
 #include <net-snmp/types.h>
 #include <net-snmp/output_api.h>
 #include <net-snmp/utilities.h>
+
+netsnmp_feature_child_of(usm_support, libnetsnmp)
+netsnmp_feature_child_of(usm_scapi, usm_support)
+
+#ifndef NETSNMP_FEATURE_REMOVE_USM_SCAPI
 
 #ifdef NETSNMP_USE_INTERNAL_MD5
 #include <net-snmp/library/md5.h>
@@ -65,6 +74,7 @@
 #include <net-snmp/library/openssl_des.h>
 #include <net-snmp/library/openssl_aes.h>
 #endif
+
 #ifdef NETSNMP_USE_OPENSSL
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
@@ -106,12 +116,12 @@
 
 #ifdef NETSNMP_USE_INTERNAL_CRYPTO
 static
-int SHA1_hmac(u_char * data, size_t len, u_char * mac, size_t maclen,
-              u_char * secret, size_t secretlen);
+int SHA1_hmac(const u_char * data, size_t len, u_char * mac, size_t maclen,
+              const u_char * secret, size_t secretlen);
 
 static
-int MD5_hmac(u_char * data, size_t len, u_char * mac, size_t maclen,
-             u_char * secret, size_t secretlen);
+int MD5_hmac(const u_char * data, size_t len, u_char * mac, size_t maclen,
+             const u_char * secret, size_t secretlen);
 #endif
 
 /*
@@ -140,6 +150,8 @@ sc_get_properlength(const oid * hashtype, u_int hashtype_len)
     return SNMPERR_GENERR;
 }
 
+netsnmp_feature_child_of(scapi_get_proper_priv_length, netsnmp_unused)
+#ifndef NETSNMP_FEATURE_REMOVE_SCAPI_GET_PROPER_PRIV_LENGTH
 int
 sc_get_proper_priv_length(const oid * privtype, u_int privtype_len)
 {
@@ -156,6 +168,7 @@ sc_get_proper_priv_length(const oid * privtype, u_int privtype_len)
 #endif
     return properlength;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_SCAPI_GET_PROPER_PRIV_LENGTH */
 
 
 /*******************************************************************-o-******
@@ -177,7 +190,7 @@ sc_init(void)
 
     gettimeofday(&tv, (struct timezone *) 0);
 
-    srandom(tv.tv_sec ^ tv.tv_usec);
+    srandom((unsigned)(tv.tv_sec ^ tv.tv_usec));
 #elif NETSNMP_USE_PKCS11
     DEBUGTRACE;
     rval = pkcs_init();
@@ -207,7 +220,7 @@ sc_random(u_char * buf, size_t * buflen)
 #if defined(NETSNMP_USE_INTERNAL_MD5) || defined(NETSNMP_USE_OPENSSL) || defined(NETSNMP_USE_PKCS11) || defined(NETSNMP_USE_INTERNAL_CRYPTO)
 {
     int             rval = SNMPERR_SUCCESS;
-#if defined(NETSNMP_USE_INTERNAL_MD5) || defined(NETSNMP_USE_INTERNAL_CRYPTO)
+#if !defined(NETSNMP_USE_OPENSSL) && !defined(NETSNMP_USE_PKCS11)
     int             i;
     int             rndval;
     u_char         *ucp = buf;
@@ -366,9 +379,12 @@ sc_generate_keyed_hash(const oid * authtype, size_t authtypelen,
 #elif NETSNMP_USE_INTERNAL_CRYPTO
     if (*maclen > properlength)
         *maclen = properlength;
+#ifndef NETSNMP_DISABLE_MD5
     if (ISTRANSFORM(authtype, HMACMD5Auth))
         rval = MD5_hmac(message, msglen, MAC, *maclen, key, keylen);
-    else if (ISTRANSFORM(authtype, HMACSHA1Auth))
+    else
+#endif
+         if (ISTRANSFORM(authtype, HMACSHA1Auth))
         rval = SHA1_hmac(message, msglen, MAC, *maclen, key, keylen);
     else {
         QUITFUN(SNMPERR_GENERR, sc_generate_keyed_hash_quit);
@@ -430,13 +446,15 @@ sc_hash(const oid * hashtype, size_t hashtypelen, const u_char * buf,
 {
 #if defined(NETSNMP_USE_OPENSSL) || defined(NETSNMP_USE_PKCS11) || defined(NETSNMP_USE_INTERNAL_CRYPTO)
     int            rval = SNMPERR_SUCCESS;
+#endif
+#if defined(NETSNMP_USE_OPENSSL) || defined(NETSNMP_USE_PKCS11)
     unsigned int   tmp_len;
 #endif
     int            ret;
 
 #ifdef NETSNMP_USE_OPENSSL
     const EVP_MD   *hashfn;
-    EVP_MD_CTX     ctx, *cptr;
+    EVP_MD_CTX     *cptr;
 #endif
 #ifdef NETSNMP_USE_INTERNAL_CRYPTO
     MD5_CTX        cmd5;
@@ -467,42 +485,32 @@ sc_hash(const oid * hashtype, size_t hashtypelen, const u_char * buf,
     }
 
 /** initialize the pointer */
-    memset(&ctx, 0, sizeof(ctx));
-    cptr = &ctx;
+#ifdef HAVE_EVP_MD_CTX_CREATE
+    cptr = EVP_MD_CTX_create();
+#else
+    cptr = malloc(sizeof(*cptr));
 #if defined(OLD_DES)
-    EVP_DigestInit(cptr, hashfn);
-#else /* !OLD_DES */
-    /* this is needed if the runtime library is different than the compiled
-       library since the openssl versions are very different. */
-    if (SSLeay() < 0x907000) {
-        /* the old version of the struct was bigger and thus more
-           memory is needed. should be 152, but we use 256 for safety. */
-        cptr = (EVP_MD_CTX *)malloc(256);
-        EVP_DigestInit(cptr, hashfn);
-    } else {
-        EVP_MD_CTX_init(cptr);
-        EVP_DigestInit(cptr, hashfn);
-    }
+    memset(cptr, 0, sizeof(*cptr));
+#else
+    EVP_MD_CTX_init(cptr);
 #endif
+#endif
+    EVP_DigestInit(cptr, hashfn);
 
 /** pass the data */
     EVP_DigestUpdate(cptr, buf, buf_len);
 
 /** do the final pass */
-#if defined(OLD_DES)
     EVP_DigestFinal(cptr, MAC, &tmp_len);
     *MAC_len = tmp_len;
-#else /* !OLD_DES */
-    if (SSLeay() < 0x907000) {
-        EVP_DigestFinal(cptr, MAC, &tmp_len);
-        *MAC_len = tmp_len;
-        free(cptr);
-    } else {
-        EVP_DigestFinal_ex(cptr, MAC, &tmp_len);
-        *MAC_len = tmp_len;
-        EVP_MD_CTX_cleanup(cptr);
-    }
-#endif                          /* OLD_DES */
+#ifdef HAVE_EVP_MD_CTX_DESTROY
+    EVP_MD_CTX_destroy(cptr);
+#else
+#if !defined(OLD_DES)
+    EVP_MD_CTX_cleanup(cptr);
+#endif
+    free(cptr);
+#endif
     return (rval);
 
 #elif NETSNMP_USE_INTERNAL_CRYPTO
@@ -1153,8 +1161,8 @@ sc_decrypt(const oid * privtype, size_t privtypelen,
  * of data, and prepended with a secret in the standard fashion 
  */
 static int
-MD5_hmac(u_char * data, size_t len, u_char * mac, size_t maclen,
-         u_char * secret, size_t secretlen)
+MD5_hmac(const u_char * data, size_t len, u_char * mac, size_t maclen,
+         const u_char * secret, size_t secretlen)
 {
 #define MD5_HASHKEYLEN 64
 #define MD5_SECRETKEYLEN 16
@@ -1165,7 +1173,8 @@ MD5_hmac(u_char * data, size_t len, u_char * mac, size_t maclen,
     u_char          extendedAuthKey[MD5_HASHKEYLEN];
     u_char          buf[MD5_HASHKEYLEN];
     size_t          i;
-    u_char         *cp, *newdata = NULL;
+    const u_char   *cp;
+    u_char         *newdata = NULL;
     int             rc = 0;
 
     /*
@@ -1250,8 +1259,8 @@ MD5_hmac(u_char * data, size_t len, u_char * mac, size_t maclen,
 }
 
 static int
-SHA1_hmac(u_char * data, size_t len, u_char * mac, size_t maclen,
-         u_char * secret, size_t secretlen)
+SHA1_hmac(const u_char * data, size_t len, u_char * mac, size_t maclen,
+          const u_char * secret, size_t secretlen)
 {
 #define SHA1_HASHKEYLEN   64
 #define SHA1_SECRETKEYLEN 20
@@ -1262,7 +1271,8 @@ SHA1_hmac(u_char * data, size_t len, u_char * mac, size_t maclen,
     u_char          extendedAuthKey[SHA1_HASHKEYLEN];
     u_char          buf[SHA1_HASHKEYLEN];
     size_t          i;
-    u_char         *cp, *newdata = NULL;
+    const u_char   *cp;
+    u_char         *newdata = NULL;
     int             rc = 0;
 
     /*
@@ -1346,3 +1356,4 @@ SHA1_hmac(u_char * data, size_t len, u_char * mac, size_t maclen,
     return rc;
 }
 #endif /* NETSNMP_USE_INTERNAL_CRYPTO */
+#endif /*  NETSNMP_FEATURE_REMOVE_USM_SCAPI  */

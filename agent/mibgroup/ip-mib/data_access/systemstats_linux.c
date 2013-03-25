@@ -1,7 +1,7 @@
 /*
  *  ipSystemStatsTable and ipIfStatsTable interface MIB architecture support
  *
- * $Id: systemstats_linux.c 19699 2010-11-30 04:58:34Z hardaker $
+ * $Id$
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>
@@ -356,7 +356,6 @@ _systemstats_v6_load_file(netsnmp_systemstats_entry *entry, FILE *devin)
     char            line[1024];
     char           *stats, *start = line;
     int             len, rc;
-    int             scan_count;
     uintmax_t       scan_val;
 
     /*
@@ -516,8 +515,6 @@ _systemstats_v6_load_file(netsnmp_systemstats_entry *entry, FILE *devin)
         
         if (rc)
             DEBUGMSGTL(("access:systemstats", "unknown stat %s\n", line));
-        else
-            ++scan_count;
     }
     /*
      * Let DiscontinuityTime and RefreshRate active
@@ -550,9 +547,8 @@ _systemstats_v6_load_systemstats(netsnmp_container* container, u_int load_flags)
      */
     if (!(devin = fopen(filename, "r"))) {
         DEBUGMSGTL(("access:systemstats",
-                    "Failed to load Systemstats Table (linux1)\n"));
-        NETSNMP_LOGONCE((LOG_ERR, "cannot open %s ...\n", filename));
-        free(entry);
+                "Failed to load Systemstats Table (linux1), cannot open %s\n",
+                filename));
         return 0;
     }
     
@@ -589,7 +585,6 @@ _systemstats_v6_load_ifstats(netsnmp_container* container, u_int load_flags)
     FILE           *devin;
     char           line[1024];
     char           *start = line;
-    int            rc;
     char           *scan_str;
     uintmax_t       scan_val;
     netsnmp_systemstats_entry *entry = NULL;
@@ -607,7 +602,6 @@ _systemstats_v6_load_ifstats(netsnmp_container* container, u_int load_flags)
     /*
      * Read each per interface statistics proc file
      */
-    rc = 0;
     while ((dev_snmp6_entry = readdir(dev_snmp6_dir)) != NULL) {
         if (dev_snmp6_entry->d_name[0] == '.')
             continue;

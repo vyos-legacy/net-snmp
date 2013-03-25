@@ -8,6 +8,7 @@
  * standard Net-SNMP includes 
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -18,6 +19,8 @@
 
 
 #include "ipDefaultRouterTable_data_access.h"
+
+netsnmp_feature_require(container_lifo)
 
 /** @ingroup interface
  * @addtogroup data_access data_access: Routines to access data
@@ -360,7 +363,7 @@ ipDefaultRouterTable_container_load(netsnmp_container * container)
     }
 
     DEBUGMSGT(("verbose:ipDefaultRouterTable:ipDefaultRouterTable_container_load",
-               "%d records\n", CONTAINER_SIZE(container)));
+               "%" NETSNMP_PRIz "d records\n", CONTAINER_SIZE(container)));
 
     return MFD_SUCCESS;
 }

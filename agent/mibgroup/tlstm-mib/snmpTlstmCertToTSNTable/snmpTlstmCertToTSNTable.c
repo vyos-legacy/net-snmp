@@ -4,6 +4,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <openssl/ssl.h>
@@ -11,6 +12,19 @@
 #include <net-snmp/library/cert_util.h>
 #include "tlstm-mib.h"
 #include "snmpTlstmCertToTSNTable.h"
+
+netsnmp_feature_require(table_tdata)
+netsnmp_feature_require(cert_fingerprints)
+netsnmp_feature_require(table_tdata_delete_table)
+netsnmp_feature_require(table_tdata_extract_table)
+netsnmp_feature_require(table_tdata_remove_row)
+netsnmp_feature_require(tls_fingerprint_build)
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(check_vb_storagetype)
+netsnmp_feature_require(check_vb_type_and_max_size)
+netsnmp_feature_require(check_vb_rowstatus_with_storagetype)
+netsnmp_feature_require(table_tdata_insert_row)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /** XXX - move these to table_data header? */
 #define FATE_NEWLY_CREATED    1
@@ -205,7 +219,7 @@ init_snmpTlstmCertToTSNTable_context(const char *contextName)
     else {
         if (NULL != contextName)
             reg->contextName = strdup(contextName);
-        netsnmp_register_watched_scalar(reg, watcher);
+        netsnmp_register_watched_scalar2(reg, watcher);
     }
 
     /*

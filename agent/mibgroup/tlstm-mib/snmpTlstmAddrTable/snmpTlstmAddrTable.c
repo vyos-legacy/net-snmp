@@ -4,6 +4,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <openssl/ssl.h>
@@ -11,6 +12,17 @@
 #include <net-snmp/library/cert_util.h>
 #include "tlstm-mib.h"
 #include "snmpTlstmAddrTable.h"
+
+netsnmp_feature_require(table_tdata)
+netsnmp_feature_require(tlstmaddr_container)
+netsnmp_feature_require(table_tdata_delete_table)
+netsnmp_feature_require(table_tdata_extract_table)
+netsnmp_feature_require(table_tdata_remove_row)
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(check_vb_storagetype)
+netsnmp_feature_require(check_vb_type_and_max_size)
+netsnmp_feature_require(table_tdata_insert_row)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /** XXX - move these to table_data header? */
 #define FATE_NEWLY_CREATED    1
@@ -198,7 +210,7 @@ init_snmpTlstmAddrTable(void)
         snmp_log(LOG_ERR,
                  "could not create handler for snmpTlstmAddrTableLastChanged\n");
     else
-        netsnmp_register_watched_scalar(reg, watcher);
+        netsnmp_register_watched_scalar2(reg, watcher);
 
     /*
      * Initialise the contents of the table here 
@@ -1403,8 +1415,7 @@ _tlstmAddrTable_row_restore_mib(const char *token, char *buf)
         addr->hashType = hashType;
         addr->flags = TLSTM_ADDR_FROM_MIB | TLSTM_ADDR_NONVOLATILE;
 
-        if (netsnmp_tlstmAddr_add(addr) != 0)
-            netsnmp_tlstmAddr_free(addr);
+        netsnmp_tlstmAddr_add(addr);
     }
     else {
         netsnmp_tdata_row     *row;

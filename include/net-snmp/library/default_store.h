@@ -37,7 +37,8 @@ extern          "C" {
      * begin storage definitions 
      */
 /**
- * @def NETSNMP_DS_LIBRARY_ID These definitions correspond with the "storid" argument to the API 
+ * @def NETSNMP_DS_LIBRARY_ID
+ * These definitions correspond with the "storid" argument to the API.
  */
 #define NETSNMP_DS_LIBRARY_ID     0
 #define NETSNMP_DS_APPLICATION_ID 1
@@ -92,6 +93,8 @@ extern          "C" {
 #define NETSNMP_DS_LIB_NO_DISCOVERY        38 /* don't support RFC5343 contextEngineID discovery */
 #define NETSNMP_DS_LIB_TSM_USE_PREFIX      39 /* TSM's simple security name mapping */
 #define NETSNMP_DS_LIB_DONT_LOAD_HOST_FILES 40 /* don't read host.conf files */
+#define NETSNMP_DS_LIB_DNSSEC_WARN_ONLY     41 /* tread DNSSEC errors as warnings */
+#define NETSNMP_DS_LIB_MAX_BOOL_ID          48 /* match NETSNMP_DS_MAX_SUBIDS */
 
     /*
      * library integers 
@@ -112,6 +115,9 @@ extern          "C" {
 #define NETSNMP_DS_SSHDOMAIN_DIR_PERM      12
 #define NETSNMP_DS_SSHDOMAIN_SOCK_USER     12
 #define NETSNMP_DS_SSHDOMAIN_SOCK_GROUP    13
+#define NETSNMP_DS_LIB_TIMEOUT             14
+#define NETSNMP_DS_LIB_RETRIES             15
+#define NETSNMP_DS_LIB_MAX_INT_ID          48 /* match NETSNMP_DS_MAX_SUBIDS */
     
     /*
      * special meanings for the default SNMP version slot (NETSNMP_DS_LIB_SNMPVERSION) 
@@ -158,6 +164,12 @@ extern          "C" {
 #define NETSNMP_DS_LIB_HOSTNAME          27
 #define NETSNMP_DS_LIB_X509_CRL_FILE     28
 #define NETSNMP_DS_LIB_TLS_ALGORITMS     29
+#define NETSNMP_DS_LIB_TLS_LOCAL_CERT    30
+#define NETSNMP_DS_LIB_TLS_PEER_CERT     31
+#define NETSNMP_DS_LIB_SSH_USERNAME      32
+#define NETSNMP_DS_LIB_SSH_PUBKEY        33
+#define NETSNMP_DS_LIB_SSH_PRIVKEY       34
+#define NETSNMP_DS_LIB_MAX_STR_ID        48 /* match NETSNMP_DS_MAX_SUBIDS */
 
     /*
      * end storage definitions 

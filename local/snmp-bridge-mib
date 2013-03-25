@@ -46,26 +46,30 @@ my %oid_next;
 my (%indexes, %interfaces, %macs, %ages, %locals, %vlans, %tagged);
 my $oid;
 
-my $subagent=0;
+$subagent=0;
 my $netdir="/sys/class/net/";
+my $targetbridge;
 
 $cache_timout=60;
 $last_populated=0;
 
 my $regoid = ".1.3.6.1.2.1.17";
-
-if ( $#ARGV != 0) {
-	usage($0);
-	exit();
-}
-
-my $targetbridge = $ARGV[0];
-
 # are we running embedded ? If not, register as subagent
 if (!$agent) {
     $agent = new NetSNMP::agent('Name' => 'dot1qbridge',
 				'AgentX' => 1);
     $subagent = 1;
+    if ( $#ARGV != 0) {
+	usage($0);
+	exit();
+    }
+    $targetbridge = $ARGV[0];
+} else {
+    if (!defined($bridge)) {
+	usage($0);
+	exit();
+    }
+    $targetbridge = $bridge;
 }
 
 $agent->register("dot1qbridge", ".1.3.6.1.2.1.17", \&request_handler) or die "registration of handler failed !\n";
@@ -85,15 +89,16 @@ if ($subagent) {
 
 sub usage {
 	my $name = shift;
-
-	print $name."\n\n";
-	print "usage: \t$name <bridge>	start snmp bridge module".
-		" for bridge <bridge>\n\n";
-	print "arguments:	bridge		name of the Linux bridge".
-		" which you want to provide info via snmp for.\n\n";
-
+	if ($subagent) {
+		print $name."\n\n";
+		print "usage: \t$name <bridge>	start snmp bridge module".
+			" for bridge <bridge>\n\n";
+		print "arguments:	bridge		name of the Linux bridge".
+			" which you want to provide info via snmp for.\n\n";
+	} else {
+		print 'usage in snmpd.conf: perl $bridge="br0"; perl do <path to $name>\n';
+	}
 	print "number of arguments given $#ARGV\n\n";
-
 }
 
 sub request_handler {
@@ -123,19 +128,44 @@ sub mode_get{
 	reply($request, $noid) if (exists $oid_value{$noid});
 }
 
+sub find_next{
+	my ($noid) = @_;
+	my $nextoid = $oid_next{$noid};
+	if(!defined($nextoid) || !defined($oid_value{$nextoid})) {
+		# find the lowest OID whis is higher than $noid
+		$prev = ".1.3.6.1.2.1.18";
+		$prev_oid = new NetSNMP::OID($prev);
+		$noid_oid = new NetSNMP::OID($noid);
+		#print "looking for next of $noid\n";
+		for my $candidate (keys %oid_value) {
+			#print "evaluating $candidate\n";
+			$candidate_oid = new NetSNMP::OID($candidate);
+			if ($noid_oid < $candidate_oid && $prev_oid > $candidate_oid) {
+				#print "found candidate $candidate\n";
+				$prev = $candidate;
+				$prev_oid = $candidate_oid;
+			}
+		}
+		if ($prev eq ".1.3.6.1.2.1.18") {
+			return; # no OID higher than $noid found
+		}
+		$nextoid = $prev;
+	}
+	return $nextoid;
+}
+
 sub mode_get_next{
 	my ($request)=@_;
 	my $oid=$request->getOID();
 	$SNMP::use_numeric = 1;
 	my $noid=SNMP::translateObj($oid);
-
-	my $nextoid = $oid_next{$noid};
-	my $type = $oid_type{$nextoid};
-	my $value = $oid_value{$nextoid};
-
+	my $nextoid = find_next($noid);
+	#print "found $nextoid\n";
 	if(defined($nextoid)) {
+		my $type = $oid_type{$nextoid};
+		my $value = $oid_value{$nextoid};
 		if (defined($type) and defined($value)) {
-			reply($request,	$oid_next{$noid});
+			reply($request,	$nextoid);
 		}
 	}
 }
@@ -345,7 +375,7 @@ sub createports()
 	$baseport=1;
 	my $oid= '.1.3.6.1.2.1.17.1.4.1';
 
-	foreach my $port (keys %{$indexes{$bridge}}) {
+	foreach my $port (keys %{$interfaces{$bridge}}) {
 		unless(defined($first_baseport)){
 			$first_baseport=$baseport;
 			$oid_next{$oid.".1"}=$oid.".1.".$baseport;
@@ -974,7 +1004,7 @@ sub readindexes()
 		next if  $if eq "..";
 
 		my $port=hex(readfile($brifdir.$if."/port_no", 0));
-		my $index=readfile($netdir.$if."/ifindex", STP_PROP_HEX);
+		my $index=readfile($netdir.$if."/ifindex", 0);
 
 		$indexes{$bridge}{$port}=$index;
 		$interfaces{$bridge}{$port}=$if;
@@ -1033,17 +1063,16 @@ sub tracevlan{
 			my $pif=$1;
 			$brifdir=$netdir.$pif."/brport/bridge/brif/";
 			$port=hex(readfile($brifdir.$pif."/port_no", 0));
-			$index=readfile($netdir.$pif."/ifindex", STP_PROP_HEX);
+			$index=readfile($netdir.$pif."/ifindex", 0);
 			#$indexes{$bridge}{$port}=$index;
 			#$interfaces{$bridge}{$port}=$if;
 			$tagged{$vlan}{$port}=1;
 		}else{
-			my $brid=readfile($netdir.$if."/brport/bridge/ifindex",
-						STP_PROP_HEX);
+			my $brid=readfile($netdir.$if."/brport/bridge/ifindex",	0);
 			$brifdir=$netdir.$if."/brport/bridge/brif/";
 			$port=hex(readfile($brifdir.$if."/port_no", 0));
 			$port=$brid*1000+$port; #create a unique port number
-			$index=readfile($netdir.$if."/ifindex", STP_PROP_HEX);
+			$index=readfile($netdir.$if."/ifindex", 0);
 			$indexes{$bridge}{$port}=$index;
 			$interfaces{$bridge}{$port}=$if;
 			$tagged{$vlan}{$port}=0;
@@ -1053,8 +1082,7 @@ sub tracevlan{
 	}
 	close(DIR);
 
-	my $brid=readfile($netdir.$interface."/brport/bridge/ifindex",
-					 STP_PROP_HEX);
+	my $brid=readfile($netdir.$interface."/brport/bridge/ifindex", 0);
 	my $fdb=$netdir.$interface."/brport/bridge/brforward";
 
 	my $vbridge=$bridge."_vlan".$vlan;

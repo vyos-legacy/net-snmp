@@ -6,7 +6,16 @@
 
 #include <net-snmp/net-snmp-includes.h>
 
-#if defined(NETSNMP_USE_OPENSSL) && defined(HAVE_LIBSSL)
+#include <net-snmp/net-snmp-features.h>
+
+#if defined(NETSNMP_USE_OPENSSL) && defined(HAVE_LIBSSL) && !defined(NETSNMP_FEATURE_REMOVE_CERT_UTIL)
+
+netsnmp_feature_require(container_free_all)
+
+netsnmp_feature_child_of(openssl_cert_get_subjectAltNames, netsnmp_unused)
+netsnmp_feature_child_of(openssl_ht2nid, netsnmp_unused)
+netsnmp_feature_child_of(openssl_err_log, netsnmp_unused)
+netsnmp_feature_child_of(cert_dump_names, netsnmp_unused)
 
 #include <ctype.h>
 
@@ -131,6 +140,7 @@ netsnmp_openssl_cert_get_commonName(X509 *ocert, char **buf, int *len)
     return _cert_get_name(ocert, NID_commonName, buf, len, 0);
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_CERT_DUMP_NAMES
 /** netsnmp_openssl_cert_dump_name: dump subject names in cert
  */
 void
@@ -146,7 +156,7 @@ netsnmp_openssl_cert_dump_names(X509 *ocert)
 
     osubj_name = X509_get_subject_name(ocert);
     if (NULL == osubj_name) {
-        DEBUGMSGT(("openssl:dump_names", "no subject name!\n"));
+        DEBUGMSGT(("9:cert:dump:names", "no subject name!\n"));
         return;
     }
 
@@ -167,13 +177,14 @@ netsnmp_openssl_cert_dump_names(X509 *ocert)
             prefix_short = OBJ_nid2sn(onid);
         }
 
-        DEBUGMSGT(("9:openssl:dump_names",
+        DEBUGMSGT(("9:cert:dump:names",
                    "[%02d] NID type %d, ASN type %d\n", i, onid,
                    oname_entry->value->type));
-        DEBUGMSGT(("openssl:dump_names", "%s/%s: '%s'\n", prefix_long,
+        DEBUGMSGT(("9:cert:dump:names", "%s/%s: '%s'\n", prefix_long,
                    prefix_short, ASN1_STRING_data(oname_entry->value)));
     }
 }
+#endif /* NETSNMP_FEATURE_REMOVE_CERT_DUMP_NAMES */
 
 static char *
 _cert_get_extension(X509_EXTENSION  *oext, char **buf, int *len, int flags)
@@ -368,34 +379,7 @@ _extract_oname(const GENERAL_NAME *oname)
     return rtn;
 }
 
-/**
- */
-/**
- */
-void
-netsnmp_openssl_cert_dump_san(X509 *ocert /*X509_EXTENSION *oext*/)
-{
-    GENERAL_NAMES      *onames;
-    const GENERAL_NAME *oname;
-    char               *buf;
-    int                 count, i;
- 
-    onames = (GENERAL_NAMES *)X509_get_ext_d2i(ocert, NID_subject_alt_name,
-                                               NULL, NULL );
-    if (NULL == onames)
-        return;
-
-    count = sk_GENERAL_NAME_num(onames);
-
-    for (i=0 ; i <count; ++i)  {
-        oname = sk_GENERAL_NAME_value(onames, i);
-        buf = _extract_oname( oname );
-        DEBUGMSGT(("openssl:cert:extension:san", "#%d type %d: %s\n", i,
-                   oname->type, buf ? buf : "NULL"));
-        free(buf);
-    }
-}
-
+#ifndef NETSNMP_FEATURE_REMOVE_OPENSSL_CERT_GET_SUBJECTALTNAMES
 /** netsnmp_openssl_cert_get_subjectAltName: get subjectAltName for cert.
  * if a pointer to a buffer and its length are specified, they will be
  * used. otherwise, a new buffer will be allocated, which the caller will
@@ -406,31 +390,48 @@ netsnmp_openssl_cert_get_subjectAltNames(X509 *ocert, char **buf, int *len)
 {
     return _cert_get_extension_id_str(ocert, NID_subject_alt_name, buf, len, 0);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_OPENSSL_CERT_GET_SUBJECTALTNAMES */
 
 void
 netsnmp_openssl_cert_dump_extensions(X509 *ocert)
 {
     X509_EXTENSION  *extension;
     const char      *extension_name;
-    char             buf[SNMP_MAXBUF_SMALL], *buf_ptr = buf, *str;
+    char             buf[SNMP_MAXBUF_SMALL], *buf_ptr = buf, *str, *lf;
     int              i, num_extensions, buf_len, nid;
 
     if (NULL == ocert)
         return;
 
+    DEBUGIF("9:cert:dump") 
+        ;
+    else
+        return; /* bail if debug not enabled */
+
     num_extensions = X509_get_ext_count(ocert);
-    DEBUGMSGT(("9:cert:dump:extension", "%02d extensions\n", num_extensions));
+    if (0 == num_extensions)
+        DEBUGMSGT(("9:cert:dump", "    0 extensions\n"));
     for(i = 0; i < num_extensions; i++) {
         extension = X509_get_ext(ocert, i);
         nid = OBJ_obj2nid(X509_EXTENSION_get_object(extension));
         extension_name = OBJ_nid2sn(nid);
         buf_len = sizeof(buf);
         str = _cert_get_extension_str_at(ocert, i, &buf_ptr, &buf_len, 0);
-        DEBUGMSGT(("cert:dump:extension", "    %2d: %s = %s\n", i,
+        lf = strchr(str, '\n'); /* look for multiline strings */
+        if (NULL != lf)
+            *lf = '\0'; /* only log first line of multiline here */
+        DEBUGMSGT(("9:cert:dump", "    %2d: %s = %s\n", i,
                    extension_name, str));
-        if (NID_subject_alt_name == nid)
-            DEBUGIF("9:cert:dump:extension")
-                netsnmp_openssl_cert_dump_san(ocert);
+        while(lf) { /* log remaining parts of multiline string */
+            str = ++lf;
+            if (*str == '\0')
+               break;
+            lf = strchr(str, '\n');
+            if (NULL == lf) 
+                break;
+            *lf = '\0';
+            DEBUGMSGT(("9:cert:dump", "        %s\n", str));
+        }
     }
 }
 
@@ -450,6 +451,7 @@ _nid2ht(int nid)
     return 0;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_OPENSSL_HT2NID
 int
 _ht2nid(int ht)
 {
@@ -457,6 +459,7 @@ _ht2nid(int ht)
         return 0;
     return _htmap[ht];
 }
+#endif /* NETSNMP_FEATURE_REMOVE_OPENSSL_HT2NID */
 
 /**
  * returns allocated pointer caller must free.
@@ -505,7 +508,7 @@ netsnmp_openssl_cert_get_fingerprint(X509 *ocert, int alg)
             digest = EVP_sha1();
             break;
 
-#ifndef OPENSSL_NO_SHA256
+#ifdef HAVE_EVP_SHA224
         case NS_HASH_SHA224:
             digest = EVP_sha224();
             break;
@@ -515,7 +518,7 @@ netsnmp_openssl_cert_get_fingerprint(X509 *ocert, int alg)
             break;
 
 #endif
-#ifndef OPENSSL_NO_SHA512
+#ifdef HAVE_EVP_SHA384
         case NS_HASH_SHA384:
             digest = EVP_sha384();
             break;
@@ -569,7 +572,7 @@ netsnmp_openssl_get_cert_chain(SSL *ssl)
         snmp_log(LOG_ERR, "SSL peer has no certificate\n");
         return NULL;
     }
-    DEBUGIF("openssl:dump:extensions") {
+    DEBUGIF("9:cert:dump") {
         netsnmp_openssl_cert_dump_extensions(ocert);
     }
 
@@ -734,7 +737,7 @@ _cert_get_san_type(X509 *ocert, int mapType)
     if (lower)
         for ( ; *lower; ++lower )
             if (isascii(*lower))
-                *lower = tolower(*lower);
+                *lower = tolower(0xFF & *lower);
     DEBUGMSGT(("openssl:cert:extension:san", "#%d type %d: %s\n", i,
                oname ? oname->type : -1, buf ? buf : "NULL"));
 
@@ -809,6 +812,7 @@ netsnmp_openssl_cert_issued_by(X509 *issuer, X509 *cert)
 }
 
 
+#ifndef NETSNMP_FEATURE_REMOVE_OPENSSL_ERR_LOG
 void
 netsnmp_openssl_err_log(const char *prefix)
 {
@@ -819,12 +823,13 @@ netsnmp_openssl_err_log(const char *prefix)
                  ERR_GET_LIB(err), ERR_GET_FUNC(err), ERR_GET_REASON(err));
     }
 }
+#endif /* NETSNMP_FEATURE_REMOVE_OPENSSL_ERR_LOG */
 
 void
 netsnmp_openssl_null_checks(SSL *ssl, int *null_auth, int *null_cipher)
 {
     const SSL_CIPHER *cipher;
-    char           *description, tmp_buf[128], *cipher_alg, *auth_alg;
+    char           tmp_buf[128], *cipher_alg, *auth_alg;
 
     if (null_auth)
         *null_auth = -1; /* unknown */
@@ -838,7 +843,7 @@ netsnmp_openssl_null_checks(SSL *ssl, int *null_auth, int *null_cipher)
         DEBUGMSGTL(("ssl:cipher", "no cipher yet\n"));
         return;
     }
-    description = SSL_CIPHER_description(NETSNMP_REMOVE_CONST(SSL_CIPHER *, cipher), tmp_buf, sizeof(tmp_buf));
+    SSL_CIPHER_description(NETSNMP_REMOVE_CONST(SSL_CIPHER *, cipher), tmp_buf, sizeof(tmp_buf));
     /** no \n since tmp_buf already has one */
     DEBUGMSGTL(("ssl:cipher", "current cipher: %s", tmp_buf));
 
@@ -871,4 +876,4 @@ netsnmp_openssl_null_checks(SSL *ssl, int *null_auth, int *null_cipher)
     }
 }
 
-#endif /* NETSNMP_USE_OPENSSL && HAVE_LIBSSL */
+#endif /* NETSNMP_USE_OPENSSL && HAVE_LIBSSL && !defined(NETSNMP_FEATURE_REMOVE_CERT_UTIL) */

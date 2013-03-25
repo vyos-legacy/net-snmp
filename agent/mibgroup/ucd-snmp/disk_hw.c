@@ -1,5 +1,5 @@
 /*
- * disk.c
+ * disk_hw.c
  */
 
 #include <net-snmp/net-snmp-config.h>
@@ -137,6 +137,7 @@ disk_free_config(void)
   if (disks) {
      free( disks );
      disks = NULL;
+     maxdisks = numdisks = 0;
   }
   allDisksIncluded = 0;
 }
@@ -189,7 +190,7 @@ disk_parse_config(const char *token, char *cptr)
   if ( entry ) {
       entry->minspace   = minspace;
       entry->minpercent = minpercent;
-      entry->flags     |= ~NETSNMP_FS_FLAG_UCD;
+      entry->flags     |= NETSNMP_FS_FLAG_UCD;
       disks[numdisks++] = entry;
   }
 }
@@ -229,7 +230,7 @@ disk_parse_config_all(const char *token, char *cptr)
               continue;
           entry->minspace   = -1;
           entry->minpercent = minpercent;
-          entry->flags     &= NETSNMP_FS_FLAG_UCD;
+          entry->flags     |= NETSNMP_FS_FLAG_UCD;
           /*
            * Ensure there is space for the new entry
            */
@@ -244,8 +245,17 @@ disk_parse_config_all(const char *token, char *cptr)
 }
 
 
-static int _percent( int value, int total ) {
-    return (int)( value * 100 ) / total;
+static int _percent( unsigned long long value, unsigned long long total ) {
+    float v=value, t=total, pct;
+
+    /* avoid division by zero */
+    if (total == 0)
+        return 0;
+
+    pct  = (v*100)/t;   /* Calculate percentage using floating point
+                           arithmetic, to avoid overflow errors */
+    pct += 0.5;         /* rounding */
+    return (int)pct;
 }
 
 static netsnmp_fsys_info **
@@ -312,7 +322,7 @@ tryAgain:
 
     switch (vp->magic) {
     case MIBINDEX:
-        long_ret = disknum;
+        long_ret = disknum + 1;
         return ((u_char *) (&long_ret));
     case ERRORNAME:            /* DISKPATH */
         *var_len = strlen(entry->path);
@@ -379,8 +389,9 @@ tryAgain:
 
     case ERRORFLAG:
         long_ret = 0;
+        val = netsnmp_fsys_avail_ull(entry);
         if (( entry->minspace >= 0 ) &&
-            ( entry->avail < entry->minspace ))
+            ( val < entry->minspace ))
             long_ret = 1;
         else if (( entry->minpercent >= 0 ) &&
                  (_percent( entry->avail, entry->size ) < entry->minpercent ))
@@ -389,12 +400,13 @@ tryAgain:
 
     case ERRORMSG:
         errmsg[0] = 0;
+        val = netsnmp_fsys_avail_ull(entry);
         if (( entry->minspace >= 0 ) &&
-            ( entry->avail < entry->minspace ))
+            ( val < entry->minspace ))
                 snprintf(errmsg, sizeof(errmsg),
                         "%s: less than %d free (= %d)",
                         entry->path, entry->minspace,
-                        (int) entry->avail);
+                        (int) val);
         else if (( entry->minpercent >= 0 ) &&
                  (_percent( entry->avail, entry->size ) < entry->minpercent ))
                 snprintf(errmsg, sizeof(errmsg),

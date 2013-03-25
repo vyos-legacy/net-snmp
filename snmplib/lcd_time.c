@@ -6,6 +6,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <sys/types.h>
 #include <stdio.h>
@@ -31,6 +32,9 @@
 #include <netinet/in.h>
 #endif
 
+#if HAVE_UNISTD_H
+#include <unistd.h>
+#endif
 #if HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
@@ -48,6 +52,11 @@
 #include <net-snmp/library/snmpv3.h>
 
 #include <net-snmp/library/transform_oids.h>
+
+netsnmp_feature_child_of(usm_support, libnetsnmp)
+netsnmp_feature_child_of(usm_lcd_time, usm_support)
+
+#ifndef NETSNMP_FEATURE_REMOVE_USM_LCD_TIME
 
 /*
  * Global static hashlist to contain Enginetime entries.
@@ -91,7 +100,7 @@ get_enginetime(const u_char * engineID,
                u_int * engine_time, u_int authenticated)
 {
     int             rval = SNMPERR_SUCCESS;
-    time_t          timediff = 0;
+    int             timediff = 0;
     Enginetime      e = NULL;
 
 
@@ -123,7 +132,7 @@ get_enginetime(const u_char * engineID,
         *engine_time = e->engineTime;
         *engineboot = e->engineBoot;
 
-       timediff = snmpv3_local_snmpEngineTime() - e->lastReceivedEngineTime;
+       timediff = (int) (snmpv3_local_snmpEngineTime() - e->lastReceivedEngineTime);
 
 #ifdef LCD_TIME_SYNC_OPT
     }
@@ -187,7 +196,7 @@ get_enginetime_ex(u_char * engineID,
                   u_int * last_engine_time, u_int authenticated)
 {
     int             rval = SNMPERR_SUCCESS;
-    time_t          timediff = 0;
+    int             timediff = 0;
     Enginetime      e = NULL;
 
 
@@ -219,7 +228,7 @@ get_enginetime_ex(u_char * engineID,
         *last_engine_time = *engine_time = e->engineTime;
         *engineboot = e->engineBoot;
 
-       timediff = snmpv3_local_snmpEngineTime() - e->lastReceivedEngineTime;
+       timediff = (int) (snmpv3_local_snmpEngineTime() - e->lastReceivedEngineTime);
 
 #ifdef LCD_TIME_SYNC_OPT
     }
@@ -596,3 +605,4 @@ dump_etimelist(void)
 
 }                               /* end dump_etimelist() */
 #endif                          /* NETSNMP_ENABLE_TESTING_CODE */
+#endif /* NETSNMP_FEATURE_REMOVE_USM_LCD_TIME */

@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #if HAVE_LIMITS_H
 #include <limits.h>
@@ -111,12 +112,17 @@
 #include "util_funcs/header_generic.h"
 #include "vmstat.h"
 
+netsnmp_feature_require(hardware_cpu_load)
+
+
 FindVarMethod var_extensible_vmstat;
 
 static int has_vmstat = 1;
 static int has_cpu_26 = 1;
 static time_t cache_time;
 #define CACHE_TIMEOUT	5
+#define MAX_INT32 0x7fffffff
+#define MAX_COUNTER 0xffffffff
 
 #define STAT_FILE	"/proc/stat"
 #define VMSTAT_FILE	"/proc/vmstat"
@@ -236,7 +242,13 @@ getstat(unsigned long *cuse, unsigned long *cice, unsigned long *csys,
             statfd = open(STAT_FILE, O_RDONLY, 0);
         }
         close(statfd);
-	if (has_vmstat && (vmstatfd = open(VMSTAT_FILE, O_RDONLY, 0)) != -1) {
+
+	if (has_vmstat) {
+          vmstatfd = open(VMSTAT_FILE, O_RDONLY, 0);
+          if (vmstatfd == -1) {
+                snmp_log(LOG_ERR, "cannot open %s\n", VMSTAT_FILE);
+                has_vmstat = 0;
+          } else {
 	    if (vmbsize == 0) {
 		vmbsize = 256;
 		vmbuff = malloc(vmbsize);
@@ -248,9 +260,8 @@ getstat(unsigned long *cuse, unsigned long *cice, unsigned long *csys,
 		vmstatfd = open(VMSTAT_FILE, O_RDONLY, 0);
 	    }
 	    close(vmstatfd);
+          }
 	}
-	else
-	    has_vmstat = 0;
 	cache_time = now;
     }
 
@@ -482,76 +493,76 @@ var_extensible_vmstat(struct variable *vp,
         *var_len = strlen(errmsg);
         return ((u_char *) (errmsg));
     case SWAPIN:
-        long_ret = vmstat(swapin);
+        long_ret = vmstat(swapin) & MAX_INT32;
         return ((u_char *) (&long_ret));
     case SWAPOUT:
-        long_ret = vmstat(swapout);
+        long_ret = vmstat(swapout) & MAX_INT32;
         return ((u_char *) (&long_ret));
     case RAWSWAPIN:
-        long_ret = vmstat(rawswapin);
+        long_ret = vmstat(rawswapin) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case RAWSWAPOUT:
-        long_ret = vmstat(rawswapout);
+        long_ret = vmstat(rawswapout) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case IOSENT:
-        long_ret = vmstat(iosent);
+        long_ret = vmstat(iosent) & MAX_INT32;
         return ((u_char *) (&long_ret));
     case IORECEIVE:
-        long_ret = vmstat(ioreceive);
+        long_ret = vmstat(ioreceive) & MAX_INT32;
         return ((u_char *) (&long_ret));
     case IORAWSENT:
-        long_ret = vmstat(rawiosent);
+        long_ret = vmstat(rawiosent) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case IORAWRECEIVE:
-        long_ret = vmstat(rawioreceive);
+        long_ret = vmstat(rawioreceive) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case SYSINTERRUPTS:
-        long_ret = vmstat(sysinterrupts);
+        long_ret = vmstat(sysinterrupts) & MAX_INT32;
         return ((u_char *) (&long_ret));
     case SYSCONTEXT:
-        long_ret = vmstat(syscontext);
+        long_ret = vmstat(syscontext) & MAX_INT32;
         return ((u_char *) (&long_ret));
     case CPUUSER:
-        long_ret = vmstat(cpuuser);
+        long_ret = vmstat(cpuuser) & MAX_INT32;
         return ((u_char *) (&long_ret));
     case CPUSYSTEM:
-        long_ret = vmstat(cpusystem);
+        long_ret = vmstat(cpusystem) & MAX_INT32;
         return ((u_char *) (&long_ret));
     case CPUIDLE:
-        long_ret = vmstat(cpuidle);
+        long_ret = vmstat(cpuidle) & MAX_INT32;
         return ((u_char *) (&long_ret));
     case CPURAWUSER:
-        long_ret = vmstat(cpurawuser);
+        long_ret = vmstat(cpurawuser) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case CPURAWNICE:
-        long_ret = vmstat(cpurawnice);
+        long_ret = vmstat(cpurawnice) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case CPURAWSYSTEM:
-        long_ret = vmstat(cpurawsystem)+vmstat(cpurawinter)+vmstat(cpurawsoft);
+        long_ret = (vmstat(cpurawsystem)+vmstat(cpurawinter)+vmstat(cpurawsoft)) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case CPURAWKERNEL:
-        long_ret = vmstat(cpurawsystem);
+        long_ret = vmstat(cpurawsystem) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case CPURAWIDLE:
-        long_ret = vmstat(cpurawidle);
+        long_ret = vmstat(cpurawidle) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case SYSRAWINTERRUPTS:
-	long_ret = vmstat(rawinterrupts);
+	long_ret = vmstat(rawinterrupts) & MAX_COUNTER;
 	return (u_char *)&long_ret;
     case SYSRAWCONTEXT:
-	long_ret = vmstat(rawcontext);
+	long_ret = vmstat(rawcontext) & MAX_COUNTER;
 	return (u_char *)&long_ret;
     case CPURAWWAIT:
 	if (!has_cpu_26) return NULL;
-        long_ret = vmstat(cpurawwait);
+        long_ret = vmstat(cpurawwait) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case CPURAWINTR:
 	if (!has_cpu_26) return NULL;
-        long_ret = vmstat(cpurawinter);
+        long_ret = vmstat(cpurawinter) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
     case CPURAWSOFTIRQ:
 	if (!has_cpu_26) return NULL;
-        long_ret = vmstat(cpurawsoft);
+        long_ret = vmstat(cpurawsoft) & MAX_COUNTER;
         return ((u_char *) (&long_ret));
 		
         /*

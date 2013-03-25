@@ -3,7 +3,7 @@
  *
  *  Based on patch 1362403, submited by Rojer
  *
- * $Id: interface_sysctl.h 15068 2006-08-24 14:30:04Z rstory $
+ * $Id$
  */
 #ifndef INTERFACE_SYSCTL_H
 #define INTERFACE_SYSCTL_H 

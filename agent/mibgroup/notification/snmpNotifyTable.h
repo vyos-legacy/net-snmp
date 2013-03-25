@@ -57,16 +57,19 @@ config_add_mib(SNMP-NOTIFICATION-MIB)
 
 
      void            init_snmpNotifyTable(void);
+     void            shutdown_snmpNotifyTable(void);
      FindVarMethod   var_snmpNotifyTable;
      void            parse_snmpNotifyTable(const char *, char *);
 
      int             snmpNotifyTable_add(struct snmpNotifyTable_data
                                          *thedata);
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
      WriteMethod     write_snmpNotifyTag;
      WriteMethod     write_snmpNotifyType;
      WriteMethod     write_snmpNotifyStorageType;
      WriteMethod     write_snmpNotifyRowStatus;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
 
 
 

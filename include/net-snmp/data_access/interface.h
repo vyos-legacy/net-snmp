@@ -1,7 +1,7 @@
 /*
  * interface data access header
  *
- * $Id: interface.h 18886 2010-05-27 11:19:06Z jsafranek $
+ * $Id$
  */
 #ifndef NETSNMP_ACCESS_INTERFACE_H
 #define NETSNMP_ACCESS_INTERFACE_H
@@ -291,6 +291,9 @@ void
 Interface_Scan_Init(void);
 int
 Interface_Scan_Next(short *index, char *name, netsnmp_interface_entry **entry,
+                    void *dc);
+int
+Interface_Scan_NextInt(int *index, char *name, netsnmp_interface_entry **entry,
                     void *dc);
 #endif
 

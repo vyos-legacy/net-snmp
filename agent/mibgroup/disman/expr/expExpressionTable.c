@@ -7,11 +7,20 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include "utilities/iquery.h"
 #include "disman/expr/expExpression.h"
 #include "disman/expr/expExpressionTable.h"
+
+netsnmp_feature_require(iquery)
+netsnmp_feature_require(table_tdata)
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(check_vb_type_and_max_size)
+netsnmp_feature_require(table_tdata_insert_row)
+netsnmp_feature_require(iquery_pdu_session)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /* Initializes the expExpressionTable module */
 void
@@ -79,6 +88,9 @@ expExpressionTable_handler(netsnmp_mib_handler *handler,
          */
     case MODE_GET:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             entry = (struct expExpression *)
                     netsnmp_tdata_extract_entry(request);
             tinfo = netsnmp_extract_table_info(request);
@@ -141,6 +153,9 @@ expExpressionTable_handler(netsnmp_mib_handler *handler,
          */
     case MODE_SET_RESERVE1:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             entry = (struct expExpression *)
                 netsnmp_tdata_extract_entry(request);
             tinfo = netsnmp_extract_table_info(request);
@@ -195,6 +210,9 @@ expExpressionTable_handler(netsnmp_mib_handler *handler,
 
     case MODE_SET_RESERVE2:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             tinfo = netsnmp_extract_table_info(request);
 
             switch (tinfo->colnum) {
@@ -227,6 +245,9 @@ expExpressionTable_handler(netsnmp_mib_handler *handler,
 
     case MODE_SET_FREE:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             tinfo = netsnmp_extract_table_info(request);
 
             switch (tinfo->colnum) {
@@ -252,6 +273,9 @@ expExpressionTable_handler(netsnmp_mib_handler *handler,
 
     case MODE_SET_ACTION:
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             tinfo = netsnmp_extract_table_info(request);
             entry = (struct expExpression *)
                     netsnmp_tdata_extract_entry(request);
@@ -277,6 +301,9 @@ expExpressionTable_handler(netsnmp_mib_handler *handler,
          *  (reasonably) safe to apply them in the Commit phase
          */
         for (request = requests; request; request = request->next) {
+            if (request->processed)
+                continue;
+
             entry = (struct expExpression *)
                 netsnmp_tdata_extract_entry(request);
             tinfo = netsnmp_extract_table_info(request);

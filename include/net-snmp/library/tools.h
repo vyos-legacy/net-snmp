@@ -113,7 +113,7 @@ extern          "C" {
  *  Expands to string with value of the s. 
  *  If s is macro, the resulting string is value of the macro.
  *  Example: 
- *   #define TEST 1234
+ *   \#define TEST 1234
  *   SNMP_MACRO_VAL_TO_STR(TEST) expands to "1234"
  *   SNMP_MACRO_VAL_TO_STR(TEST+1) expands to "1234+1"
  */
@@ -228,6 +228,9 @@ extern          "C" {
     NETSNMP_IMPORT
     int             memdup(u_char ** to, const void * from, size_t size);
 
+    void            netsnmp_check_definedness(const void *packet,
+                                              size_t length);
+
     NETSNMP_IMPORT
     u_int           netsnmp_binary_to_hex(u_char ** dest, size_t *dest_len,
                                           int allow_realloc,
@@ -278,19 +281,32 @@ extern          "C" {
     NETSNMP_IMPORT
     void            atime_setMarker(marker_t pm);
     NETSNMP_IMPORT
+    void            netsnmp_get_monotonic_clock(struct timeval* tv);
+    NETSNMP_IMPORT
+    void            netsnmp_set_monotonic_marker(marker_t *pm);
+    NETSNMP_IMPORT
     long            atime_diff(const_marker_t first, const_marker_t second);
     u_long          uatime_diff(const_marker_t first, const_marker_t second);       /* 1/1000th sec */
     NETSNMP_IMPORT
     u_long          uatime_hdiff(const_marker_t first, const_marker_t second);      /* 1/100th sec */
     NETSNMP_IMPORT
-    int             atime_ready(const_marker_t pm, int deltaT);
-    int             uatime_ready(const_marker_t pm, unsigned int deltaT);
+    int             atime_ready(const_marker_t pm, int delta_ms);
+    NETSNMP_IMPORT
+    int             netsnmp_ready_monotonic(const_marker_t pm, int delta_ms);
+    int             uatime_ready(const_marker_t pm, unsigned int delta_ms);
 
     int             marker_tticks(const_marker_t pm);
     int             timeval_tticks(const struct timeval *tv);
+    NETSNMP_IMPORT
     char            *netsnmp_getenv(const char *name);
+    NETSNMP_IMPORT
+    int             netsnmp_setenv(const char *envname, const char *envval,
+                                   int overwrite);
 
     int             netsnmp_addrstr_hton(char *ptr, size_t len);
+
+    NETSNMP_IMPORT
+    int             netsnmp_string_time_to_secs(const char *time_string);
 
 #ifdef __cplusplus
 }

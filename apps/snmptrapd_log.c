@@ -460,8 +460,6 @@ realloc_handle_time_fmt(u_char ** buf, size_t * buf_len, size_t * out_len,
     struct tm      *parsed_time;        /* parsed version of current time */
     char           *safe_bfr = NULL;
     char            fmt_cmd = options->cmd;     /* the format command to use */
-    int             offset = 0; /* offset into string to display */
-    size_t          year_len;   /* length of year string */
 
     if ((safe_bfr = (char *) calloc(30, 1)) == NULL) {
         return 0;
@@ -536,11 +534,6 @@ realloc_handle_time_fmt(u_char ** buf, size_t * buf_len, size_t * out_len,
         case CHR_CUR_YEAR:
         case CHR_UP_YEAR:
             sprintf(safe_bfr, "%d", parsed_time->tm_year + 1900);
-            if (options->precision != UNDEF_PRECISION) {
-                year_len = (size_t) strlen(safe_bfr);
-                if (year_len > (size_t)options->precision)
-                    offset = year_len - options->precision;
-            }
             break;
 
             /*
@@ -655,7 +648,7 @@ realloc_handle_ip_fmt(u_char ** buf, size_t * buf_len, size_t * out_len,
          */
         if (!netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
                                     NETSNMP_DS_APP_NUMERIC_IP)) {
-            host = gethostbyaddr((char *) pdu->agent_addr, 4, AF_INET);
+            host = netsnmp_gethostbyaddr((char *) pdu->agent_addr, 4, AF_INET);
         }
         if (host != NULL) {
             if (!snmp_strcat(&temp_buf, &temp_buf_len, &temp_out_len, 1,
@@ -999,7 +992,7 @@ realloc_handle_auth_fmt(u_char ** buf, size_t * buf_len, size_t * out_len,
 {
     char            fmt_cmd = options->cmd;     /* what we're outputting */
     u_char         *temp_buf = NULL;
-    size_t          tbuf_len = 64, tout_len = 0;
+    size_t          tbuf_len = 64;
     unsigned int    i;
 
     if ((temp_buf = (u_char*)calloc(tbuf_len, 1)) == NULL) {
@@ -1009,11 +1002,11 @@ realloc_handle_auth_fmt(u_char ** buf, size_t * buf_len, size_t * out_len,
     switch (fmt_cmd) {
 
     case CHR_SNMP_VERSION:
-        tout_len = snprintf((char*)temp_buf, tbuf_len, "%ld", pdu->version);
+        snprintf((char*)temp_buf, tbuf_len, "%ld", pdu->version);
         break;
 
     case CHR_SNMP_SECMOD:
-        tout_len = snprintf((char*)temp_buf, tbuf_len, "%d", pdu->securityModel);
+        snprintf((char*)temp_buf, tbuf_len, "%d", pdu->securityModel);
         break;
 
     case CHR_SNMP_USER:
@@ -1027,6 +1020,8 @@ realloc_handle_auth_fmt(u_char ** buf, size_t * buf_len, size_t * out_len,
 #if !defined(NETSNMP_DISABLE_SNMPV1) || !defined(NETSNMP_DISABLE_SNMPV2C)
             while ((*out_len + pdu->community_len + 1) >= *buf_len) {
                 if (!(allow_realloc && snmp_realloc(buf, buf_len))) {
+                    if (temp_buf)
+                        free(temp_buf);
                     return 0;
                 }
             }
@@ -1043,7 +1038,7 @@ realloc_handle_auth_fmt(u_char ** buf, size_t * buf_len, size_t * out_len,
             break;
 #endif
         default:
-            tout_len = snprintf((char*)temp_buf, tbuf_len, "%s", pdu->securityName);
+            snprintf((char*)temp_buf, tbuf_len, "%s", pdu->securityName);
         }
         break;
 
@@ -1373,7 +1368,7 @@ realloc_format_plain_trap(u_char ** buf, size_t * buf_len,
      */
     if (!netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID, 
                                 NETSNMP_DS_APP_NUMERIC_IP)) {
-        host = gethostbyaddr((char *) pdu->agent_addr, 4, AF_INET);
+        host = netsnmp_gethostbyaddr((char *) pdu->agent_addr, 4, AF_INET);
     }
     if (host != (struct hostent *) NULL) {
         if (!snmp_strcat

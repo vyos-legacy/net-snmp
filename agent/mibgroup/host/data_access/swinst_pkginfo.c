@@ -3,6 +3,7 @@
  *     hrSWInstalledTable data access:
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <stdio.h>
 #include <sys/stat.h>
@@ -37,6 +38,8 @@
 #include <net-snmp/library/snmp_debug.h>
 #include <net-snmp/data_access/swinst.h>
 
+netsnmp_feature_require(date_n_time)
+
    /*
     * Location of package directory.
     * Used for:
@@ -56,8 +59,10 @@ netsnmp_swinst_arch_init(void)
     snprintf( pkg_directory, SNMP_MAXPATH, "/system" );
 #elif defined(hpux10) ||  defined(hpux11) 
     snprintf( pkg_directory, SNMP_MAXPATH, "/var/adm/sw/products" );
-#elif defined(freebsd2)
+#elif defined(freebsd2) || defined(openbsd)
     snprintf( pkg_directory, SNMP_MAXPATH, "/var/db/pkg" );
+#elif defined(linux)
+    snprintf( pkg_directory, SNMP_MAXPATH, "/var/cache/hrmib" );
 #else
     pkg_directory[0] = '\0';
     snmp_log( LOG_ERR, "SWInst: No package directory\n" );
@@ -86,10 +91,11 @@ netsnmp_swinst_arch_load( netsnmp_container *container, u_int flags)
 #ifdef HAVE_PKGINFO
     char                 *v, *c;
 #endif
-    char                  buf[ BUFSIZ ], *cp;
+    char                  buf[ BUFSIZ ];
+    unsigned char        *cp;
     time_t                install_time;
     size_t                date_len;
-    int                   rc, i = 1;
+    int                   i = 1;
     netsnmp_swinst_entry *entry;
 
     if ( !pkg_directory[0] ) {
@@ -97,13 +103,15 @@ netsnmp_swinst_arch_load( netsnmp_container *container, u_int flags)
                          if there isn't a list of them! */
     }
     d = opendir( pkg_directory );
-    while (NULL != (dp = readdir( d ))) {
+    if (!d)
+	return 1;
+    while ((dp = readdir(d)) != NULL) {
         if ( '.' == dp->d_name[0] )
             continue;
         entry = netsnmp_swinst_entry_create( i++ );
         if (NULL == entry)
             continue;   /* error already logged by function */
-        rc = CONTAINER_INSERT(container, entry);
+        CONTAINER_INSERT(container, entry);
 
 #ifdef HAVE_PKGINFO
         v = pkgparam( dp->d_name, "VERSION" );

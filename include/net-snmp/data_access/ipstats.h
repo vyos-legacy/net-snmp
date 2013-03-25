@@ -1,7 +1,7 @@
 /*
  * ipstats data access header
  *
- * $Id: ipstats.h 17260 2008-10-15 12:57:09Z jsafranek $
+ * $Id$
  */
 #ifndef NETSNMP_ACCESS_IPSTATS_H
 #define NETSNMP_ACCESS_IPSTATS_H

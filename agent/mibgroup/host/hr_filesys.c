@@ -14,6 +14,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/hardware/memory.h>
@@ -63,6 +64,10 @@
 #include <sys/statfs.h>
 #endif
 
+netsnmp_feature_require(se_find_free_value_in_slist)
+netsnmp_feature_require(date_n_time)
+netsnmp_feature_require(ctime_to_timet)
+
 #if defined(bsdi4) || defined(freebsd3) || defined(freebsd4) || defined(freebsd5) || defined(darwin)
 #if HAVE_GETFSSTAT && defined(MFSNAMELEN)
 #define MOUNT_NFS	"nfs"
@@ -110,6 +115,12 @@ struct mnttab  *HRFS_entry = &HRFS_entry_struct;
 #define	HRFS_statfs	statvfs
 
 #elif defined(HAVE_STATVFS) && defined(__NetBSD__)
+
+#if !defined(MFSNAMELEN) && defined(_VFS_NAMELEN)
+#define MFSNAMELEN _VFS_NAMELEN
+#endif
+
+#define getfsstat getvfsstat
 
 static struct statvfs	*fsstats = NULL;
 struct statvfs		*HRFS_entry;
@@ -350,15 +361,13 @@ var_hrfilesys(struct variable *vp,
         long_return = fsys_idx;
         return (u_char *) & long_return;
     case HRFSYS_MOUNT:
-        snprintf(string, sizeof(string), "%s", HRFS_entry->HRFS_mount);
-        string[ sizeof(string)-1 ] = 0;
+        strlcpy(string, HRFS_entry->HRFS_mount, sizeof(string));
         *var_len = strlen(string);
         return (u_char *) string;
     case HRFSYS_RMOUNT:
-        if (Check_HR_FileSys_NFS()) {
-            snprintf(string, sizeof(string), "%s", HRFS_entry->HRFS_name);
-            string[ sizeof(string)-1 ] = 0;
-        } else
+        if (Check_HR_FileSys_NFS())
+            strlcpy(string, HRFS_entry->HRFS_name, sizeof(string));
+        else
             string[0] = '\0';
         *var_len = strlen(string);
         return (u_char *) string;
@@ -934,17 +943,14 @@ cook_device(char *dev)
     static char     cooked_dev[SNMP_MAXPATH+1];
 
     if (!strncmp(dev, RAW_DEVICE_PREFIX, strlen(RAW_DEVICE_PREFIX))) {
-        strncpy(cooked_dev, COOKED_DEVICE_PREFIX, sizeof(cooked_dev)-1);
-        cooked_dev[ sizeof(cooked_dev)-1 ] = 0;
-        strncat(cooked_dev, dev + strlen(RAW_DEVICE_PREFIX),
-                sizeof(cooked_dev)-strlen(cooked_dev)-1);
-        cooked_dev[ sizeof(cooked_dev)-1 ] = 0;
+        strlcpy(cooked_dev, COOKED_DEVICE_PREFIX, sizeof(cooked_dev));
+        strlcat(cooked_dev, dev + strlen(RAW_DEVICE_PREFIX),
+                sizeof(cooked_dev));
     } else {
-        strncpy(cooked_dev, dev, sizeof(cooked_dev)-1);
-        cooked_dev[ sizeof(cooked_dev)-1 ] = 0;
+        strlcpy(cooked_dev, dev, sizeof(cooked_dev));
     }
 
-    return (cooked_dev);
+    return cooked_dev;
 }
 
 

@@ -49,8 +49,10 @@
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
 #endif
+#if !defined(dragonfly)
 #ifdef HAVE_SYS_VNODE_H
 #include <sys/vnode.h>
+#endif
 #endif
 #ifdef HAVE_UFS_UFS_QUOTA_H
 #include <ufs/ufs/quota.h>
@@ -135,8 +137,7 @@ seterrorstatus(const char *to, int prior)
 {
     if (errorstatusprior <= prior ||
         (NETSNMP_ERRORTIMELENGTH < (time(NULL) - errorstatustime))) {
-        strncpy(errorstring, to, sizeof(errorstring));
-        errorstring[ sizeof(errorstring)-1 ] = 0;
+        strlcpy(errorstring, to, sizeof(errorstring));
         errorstatusprior = prior;
         errorstatustime = time(NULL);
     }
@@ -217,8 +218,7 @@ var_extensible_errors(struct variable *vp,
         return ((u_char *) (&long_ret));
     case ERRORMSG:
         if ((NETSNMP_ERRORTIMELENGTH >= time(NULL) - errorstatustime) ? 1 : 0) {
-            strncpy(errmsg, errorstring, sizeof(errmsg));
-            errmsg[ sizeof(errmsg)-1 ] = 0;
+            strlcpy(errmsg, errorstring, sizeof(errmsg));
         } else
             errmsg[0] = 0;
         *var_len = strlen(errmsg);

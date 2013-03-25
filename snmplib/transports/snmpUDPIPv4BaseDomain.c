@@ -40,7 +40,9 @@
 
 #include <net-snmp/library/snmpSocketBaseDomain.h>
 
-#if defined(linux) && defined(IP_PKTINFO)
+#if (defined(linux) && defined(IP_PKTINFO)) \
+    || defined(IP_RECVDSTADDR) && HAVE_STRUCT_MSGHDR_MSG_CONTROL \
+                               && HAVE_STRUCT_MSGHDR_MSG_FLAGS
 
 int netsnmp_udpipv4_recvfrom(int s, void *buf, int len, struct sockaddr *from,
                              socklen_t *fromlen, struct sockaddr *dstip,
@@ -55,17 +57,21 @@ int netsnmp_udpipv4_sendto(int fd, struct in_addr *srcip, int if_index,
 {
     return netsnmp_udpbase_sendto(fd, srcip, if_index, remote, data, len);
 }
-#endif /* linux && IP_PKTINFO */
+#endif /* (linux && IP_PKTINFO) || IP_RECVDSTADDR */
 
 netsnmp_transport *
 netsnmp_udpipv4base_transport(struct sockaddr_in *addr, int local)
 {
     netsnmp_transport *t = NULL;
     int             rc = 0, rc2;
-    char           *str = NULL;
     char           *client_socket = NULL;
     netsnmp_indexed_addr_pair addr_pair;
     socklen_t       local_addr_len;
+
+#ifdef NETSNMP_NO_LISTEN_SUPPORT
+    if (local)
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
 
     if (addr == NULL || addr->sin_family != AF_INET) {
         return NULL;
@@ -77,11 +83,13 @@ netsnmp_udpipv4base_transport(struct sockaddr_in *addr, int local)
     t = SNMP_MALLOC_TYPEDEF(netsnmp_transport);
     netsnmp_assert_or_return(t != NULL, NULL);
 
-    str = netsnmp_udp_fmtaddr(NULL, (void *)&addr_pair,
-                                 sizeof(netsnmp_indexed_addr_pair));
-    DEBUGMSGTL(("netsnmp_udpbase", "open %s %s\n", local ? "local" : "remote",
-                str));
-    free(str);
+    DEBUGIF("netsnmp_udpbase") {
+        char *str = netsnmp_udp_fmtaddr(NULL, (void *)&addr_pair,
+                                        sizeof(netsnmp_indexed_addr_pair));
+        DEBUGMSGTL(("netsnmp_udpbase", "open %s %s\n",
+                    local ? "local" : "remote", str));
+        free(str);
+    }
 
     t->sock = socket(PF_INET, SOCK_DGRAM, 0);
     DEBUGMSGTL(("UDPBase", "openned socket %d as local=%d\n", t->sock, local)); 
@@ -93,13 +101,14 @@ netsnmp_udpipv4base_transport(struct sockaddr_in *addr, int local)
     _netsnmp_udp_sockopt_set(t->sock, local);
 
     if (local) {
+#ifndef NETSNMP_NO_LISTEN_SUPPORT
         /*
          * This session is inteneded as a server, so we must bind on to the
          * given IP address, which may include an interface address, or could
          * be INADDR_ANY, but certainly includes a port number.
          */
 
-      t->local = (u_char *) malloc(6);
+        t->local = (u_char *) malloc(6);
         if (t->local == NULL) {
             netsnmp_transport_free(t);
             return NULL;
@@ -120,6 +129,17 @@ netsnmp_udpipv4base_transport(struct sockaddr_in *addr, int local)
             }
             DEBUGMSGTL(("netsnmp_udpbase", "set IP_PKTINFO\n"));
         }
+#elif defined(IP_RECVDSTADDR)
+        {
+            int sockopt = 1;
+            if (setsockopt(t->sock, IPPROTO_IP, IP_RECVDSTADDR, &sockopt, sizeof sockopt) == -1) {
+                DEBUGMSGTL(("netsnmp_udp", "couldn't set IP_RECVDSTADDR: %s\n",
+                            strerror(errno)));
+                netsnmp_transport_free(t);
+                return NULL;
+            }
+            DEBUGMSGTL(("netsnmp_udp", "set IP_RECVDSTADDR\n"));
+        }
 #endif
         rc = bind(t->sock, (struct sockaddr *) addr,
                   sizeof(struct sockaddr));
@@ -130,6 +150,9 @@ netsnmp_udpipv4base_transport(struct sockaddr_in *addr, int local)
         }
         t->data = NULL;
         t->data_length = 0;
+#else /* NETSNMP_NO_LISTEN_SUPPORT */
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
     } else {
         /*
          * This is a client session.  If we've been given a
@@ -158,10 +181,12 @@ netsnmp_udpipv4base_transport(struct sockaddr_in *addr, int local)
             netsnmp_assert(rc2 == 0);
         }
 
-        str = netsnmp_udp_fmtaddr(NULL, (void *)&addr_pair,
-                 sizeof(netsnmp_indexed_addr_pair));
-        DEBUGMSGTL(("netsnmp_udpbase", "client open %s\n", str));
-        free(str);
+        DEBUGIF("netsnmp_udpbase") {
+            char *str = netsnmp_udp_fmtaddr(NULL, (void *)&addr_pair,
+                                            sizeof(netsnmp_indexed_addr_pair));
+            DEBUGMSGTL(("netsnmp_udpbase", "client open %s\n", str));
+            free(str);
+        }
 
         /*
          * Save the (remote) address in the

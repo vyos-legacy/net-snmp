@@ -1,7 +1,7 @@
 /*
  * systemstats data access header
  *
- * $Id: systemstats.h 18483 2010-04-08 10:55:42Z jsafranek $
+ * $Id$
  */
 #ifndef NETSNMP_ACCESS_SYSTEMSTATS_H
 #define NETSNMP_ACCESS_SYSTEMSTATS_H

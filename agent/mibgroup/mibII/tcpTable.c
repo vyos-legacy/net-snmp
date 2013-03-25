@@ -15,6 +15,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include "mibII_common.h"
 
 #if HAVE_NETINET_TCP_H
@@ -41,6 +42,10 @@
 
 #include "tcp.h"
 #include "tcpTable.h"
+
+netsnmp_feature_child_of(tcptable_all, libnetsnmpmibs)
+
+netsnmp_feature_child_of(tcp_count_connections, tcptable_all)
 
 #ifdef hpux11
 #define	TCPTABLE_ENTRY_TYPE	mib_tcpConnEnt 
@@ -95,6 +100,7 @@ struct netsnmp_inpcb_s {
     int             state;
     netsnmp_inpcb  *inp_next;
 };
+#undef INP_NEXT_SYMBOL
 #define INP_NEXT_SYMBOL		inp_next
 #define	TCPTABLE_ENTRY_TYPE	netsnmp_inpcb 
 #define	TCPTABLE_STATE		state 
@@ -141,6 +147,7 @@ init_tcpTable(void)
     netsnmp_table_registration_info *table_info;
     netsnmp_iterator_info           *iinfo;
     netsnmp_handler_registration    *reginfo;
+    int                              rc;
 
     DEBUGMSGTL(("mibII/tcpTable", "Initialising TCP Table\n"));
     /*
@@ -180,7 +187,9 @@ init_tcpTable(void)
             tcpTable_handler,
             tcpTable_oid, OID_LENGTH(tcpTable_oid),
             HANDLER_CAN_RONLY),
-    netsnmp_register_table_iterator(reginfo, iinfo);
+    rc = netsnmp_register_table_iterator2(reginfo, iinfo);
+    if (rc != SNMPERR_SUCCESS)
+        return;
 
     /*
      * .... with a local cache
@@ -269,12 +278,14 @@ tcpTable_handler(netsnmp_mib_handler          *handler,
 
     case MODE_GETNEXT:
     case MODE_GETBULK:
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     case MODE_SET_RESERVE1:
     case MODE_SET_RESERVE2:
     case MODE_SET_ACTION:
     case MODE_SET_COMMIT:
     case MODE_SET_FREE:
     case MODE_SET_UNDO:
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
         snmp_log(LOG_WARNING, "mibII/tcpTable: Unsupported mode (%d)\n",
                                reqinfo->mode);
         break;
@@ -287,10 +298,13 @@ tcpTable_handler(netsnmp_mib_handler          *handler,
     return SNMP_ERR_NOERROR;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_TCP_COUNT_CONNECTIONS
 int
 TCP_Count_Connections( void ) {
+    tcpTable_load(NULL, NULL);
     return tcp_estab;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_TCP_COUNT_CONNECTIONS */
 
 	/*
 	 * Two forms of iteration hook routines:
@@ -538,7 +552,7 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
     }
 
     if (tcp_size > 0) {
-        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table\n"));
+        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table (hpux11)\n"));
         return 0;
     }
     DEBUGMSGTL(("mibII/tcpTable", "Failed to load TCP Table (hpux11)\n"));
@@ -712,7 +726,7 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
 
     fclose(in);
 
-    DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table\n"));
+    DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table (linux)\n"));
     return 0;
 }
 #else                           /* linux */
@@ -768,7 +782,7 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
     }
 
     if (tcp_head) {
-        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table\n"));
+        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table (solaris)\n"));
         return 0;
     }
     DEBUGMSGTL(("mibII/tcpTable", "Failed to load TCP Table (solaris)\n"));
@@ -801,7 +815,7 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
     if (status == NO_ERROR) {
         int           i;
 
-        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table\n"));
+        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table (WIN32)\n"));
         tcp_size = pTcpTable->dwNumEntries -1;  /* entries are counted starting with 0 */
         tcp_head = pTcpTable->table;
 
@@ -838,9 +852,14 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
     size_t   len;
     int      sname[] = { CTL_NET, PF_INET, IPPROTO_TCP, TCPCTL_PCBLIST };
     char     *tcpcb_buf = NULL;
+#if defined(dragonfly)
+    struct xinpcb  *xig = NULL;
+    int      StateMap[] = { 1, 1, 2, 3, 4, 5, 8, 6, 10, 9, 7, 11 };
+#else
     struct xinpgen *xig = NULL;
-    netsnmp_inpcb  *nnew;
     int      StateMap[] = { 1, 2, 3, 4, 5, 8, 6, 10, 9, 7, 11 };
+#endif
+    netsnmp_inpcb  *nnew;
 
     tcpTable_free(NULL, NULL);
 
@@ -860,10 +879,19 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
      *  Unpick this into the constituent 'xinpgen' structures, and extract
      *     the 'inpcb' elements into a linked list (built in reverse)
      */
+#if defined(dragonfly)
+    xig = (struct xinpcb  *) tcpcb_buf;
+#else
     xig = (struct xinpgen *) tcpcb_buf;
     xig = (struct xinpgen *) ((char *) xig + xig->xig_len);
+#endif
 
-    while (xig && (xig->xig_len > sizeof(struct xinpgen))) {
+#if defined(dragonfly)
+    while (xig && ((char *)xig + xig->xi_len < tcpcb_buf + len))
+#else
+    while (xig && (xig->xig_len > sizeof(struct xinpgen)))
+#endif
+    {
         nnew = SNMP_MALLOC_TYPEDEF(netsnmp_inpcb);
         if (!nnew)
             break;
@@ -874,14 +902,22 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
         memcpy(&(nnew->pcb), &(((NS_ELEM *) xig)->xt_inp),
                            sizeof(struct inpcb));
 
-	nnew->inp_next = tcp_head;
-	tcp_head   = nnew;
+	if (nnew->pcb.inp_vflag & INP_IPV6)
+	    free(nnew);
+	else {
+	    nnew->inp_next = tcp_head;
+	    tcp_head   = nnew;
+	}
+#if defined(dragonfly)
+        xig = (struct xinpcb  *) ((char *) xig + xig->xi_len);
+#else
         xig = (struct xinpgen *) ((char *) xig + xig->xig_len);
+#endif
     }
 
     free(tcpcb_buf);
     if (tcp_head) {
-        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table\n"));
+        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table (sysctl)\n"));
         return 0;
     }
     DEBUGMSGTL(("mibII/tcpTable", "Failed to load TCP Table (sysctl)\n"));
@@ -939,7 +975,7 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
     }
 
     if (tcp_head) {
-        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table\n"));
+        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table (pcb_table)\n"));
         return 0;
     }
     DEBUGMSGTL(("mibII/tcpTable", "Failed to load TCP Table (pcb_table)\n"));
@@ -999,7 +1035,7 @@ tcpTable_load(netsnmp_cache *cache, void *vmagic)
     }
 
     if (tcp_head) {
-        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table\n"));
+        DEBUGMSGTL(("mibII/tcpTable", "Loaded TCP Table (tcp_symbol)\n"));
         return 0;
     }
     DEBUGMSGTL(("mibII/tcpTable", "Failed to load TCP Table (tcp_symbol)\n"));

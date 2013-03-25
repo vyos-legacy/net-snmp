@@ -1,6 +1,6 @@
 /*
  * watched.c
- * $Id: watched.c 17587 2009-04-30 06:57:27Z magfr $
+ * $Id$
  *
  */
 /**  @example watched.c

@@ -9,6 +9,7 @@
 
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 
 #include <net-snmp/library/snmptsm.h>
@@ -25,6 +26,9 @@
 #ifdef NETSNMP_TRANSPORT_DTLSSCTP_DOMAIN
 #include <net-snmp/library/snmpDTLSSCTPDomain.h>
 #endif
+
+netsnmp_feature_require(snmpv3_probe_contextEngineID_rfc5343)
+netsnmp_feature_require(row_create)
 
 #include <unistd.h>
 
@@ -65,6 +69,12 @@ init_tsm(void)
     netsnmp_ds_register_config(ASN_BOOLEAN, "snmp", "tsmUseTransportPrefix",
 			       NETSNMP_DS_LIBRARY_ID,
                                NETSNMP_DS_LIB_TSM_USE_PREFIX);
+}
+
+/** shutdown the TSM security module */
+void
+shutdown_tsm(void)
+{
 }
 
 /*
@@ -183,6 +193,7 @@ tsm_rgenerate_out_msg(struct snmp_secmod_outgoing_params *parms)
     size_t         *wholeMsgLen = parms->wholeMsgLen;
     netsnmp_tsmSecurityReference *tsmSecRef;
     netsnmp_tmStateReference *tmStateRef;
+    int             tmStateRefLocal = 0;
     
     DEBUGMSGTL(("tsm", "Starting TSM processing\n"));
 
@@ -219,7 +230,8 @@ tsm_rgenerate_out_msg(struct snmp_secmod_outgoing_params *parms)
            tmStateReference cache. */
         tmStateRef = SNMP_MALLOC_TYPEDEF(netsnmp_tmStateReference);
         netsnmp_assert_or_return(NULL != tmStateRef, SNMPERR_GENERR);
-        
+        tmStateRefLocal = 1;
+
         /* XXX: we don't actually use this really in our implementation */
         /* 4.2, step 2: Set tmTransportDomain to the value of
            transportDomain, tmTransportAddress to the value of
@@ -253,6 +265,7 @@ tsm_rgenerate_out_msg(struct snmp_secmod_outgoing_params *parms)
                    incremented, an error indication is returned to the
                    calling module, and message processing stops. */
                 snmp_increment_statistic(STAT_TSM_SNMPTSMUNKNOWNPREFIXES);
+                SNMP_FREE(tmStateRef);
                 return SNMPERR_GENERR;
             }
 
@@ -271,6 +284,7 @@ tsm_rgenerate_out_msg(struct snmp_secmod_outgoing_params *parms)
                 /* Note: since we're assiging the prefixes above the
                    prefix lengths always meet the 1-4 criteria */
                 snmp_increment_statistic(STAT_TSM_SNMPTSMINVALIDPREFIXES);
+                SNMP_FREE(tmStateRef);
                 return SNMPERR_GENERR;
             }
 
@@ -305,6 +319,8 @@ tsm_rgenerate_out_msg(struct snmp_secmod_outgoing_params *parms)
     DEBUGINDENTLESS();
     if (rc == 0) {
         DEBUGMSGTL(("tsm", "building msgSecurityParameters failed.\n"));
+        if (tmStateRefLocal)
+            SNMP_FREE(tmStateRef);
         return SNMPERR_TOO_LONG;
     }
     
@@ -314,6 +330,8 @@ tsm_rgenerate_out_msg(struct snmp_secmod_outgoing_params *parms)
     while ((*wholeMsgLen - *offset) < parms->globalDataLen) {
         if (!asn_realloc(wholeMsg, wholeMsgLen)) {
             DEBUGMSGTL(("tsm", "building global data failed.\n"));
+            if (tmStateRefLocal)
+                SNMP_FREE(tmStateRef);
             return SNMPERR_TOO_LONG;
         }
     }
@@ -337,6 +355,8 @@ tsm_rgenerate_out_msg(struct snmp_secmod_outgoing_params *parms)
                                                ASN_CONSTRUCTOR), *offset);
     if (rc == 0) {
         DEBUGMSGTL(("tsm", "building master packet sequence failed.\n"));
+        if (tmStateRefLocal)
+            SNMP_FREE(tmStateRef);
         return SNMPERR_TOO_LONG;
     }
 
@@ -354,6 +374,8 @@ tsm_rgenerate_out_msg(struct snmp_secmod_outgoing_params *parms)
     }
     parms->pdu->transport_data_length = sizeof(*tmStateRef);
 
+    if (tmStateRefLocal)
+        SNMP_FREE(tmStateRef);
     DEBUGMSGTL(("tsm", "TSM processing completed.\n"));
     return SNMPERR_SUCCESS;
 }
@@ -530,7 +552,7 @@ tsm_process_in_msg(struct snmp_secmod_incoming_params *parms)
        message.*/
     if (parms->secLevel > tmStateRef->transportSecurityLevel) {
         snmp_increment_statistic(STAT_TSM_SNMPTSMINADEQUATESECURITYLEVELS);
-        DEBUGMSGTL(("tsm", "inadequate security level %d\n", parms->secLevel));
+        DEBUGMSGTL(("tsm", "inadequate security level: %d\n", parms->secLevel));
         /* net-snmp returns error codes not OIDs, which are dealt with later */
         return SNMPERR_UNSUPPORTED_SEC_LEVEL;
     }

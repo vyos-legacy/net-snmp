@@ -1,6 +1,6 @@
 /*
  * container_binary_array.c
- * $Id: container_binary_array.c 19017 2010-06-16 20:16:22Z dts12 $
+ * $Id$
  *
  * see comments in header file.
  *
@@ -155,9 +155,7 @@ void
 netsnmp_binary_array_release(netsnmp_container *c)
 {
     binary_array_table *t = (binary_array_table*)c->container_data;
-    if (t->data != NULL) {
-	SNMP_FREE(t->data);
-    }
+    SNMP_FREE(t->data);
     SNMP_FREE(t);
     SNMP_FREE(c);
 }
@@ -240,7 +238,7 @@ netsnmp_binary_array_remove_at(netsnmp_container *c, size_t index, void **save)
          * otherwise, shift array down
          */
         memmove(&t->data[index], &t->data[index+1],
-                sizeof(void *) * (t->count - index));
+                sizeof(void*) * (t->count - index));
 
         ++c->sync;
     }
@@ -348,16 +346,14 @@ netsnmp_binary_array_insert(netsnmp_container *c, const void *entry)
      * check if we need to resize the array
      */
     if (t->max_size <= t->count) {
-        void **new_data;
-
         /*
-         * Table is full, so extend it to double the size
+         * Table is full, so extend it to double the size, or use 10 elements
+         * if it is empty.
          */
-        new_max = 2 * t->max_size;
-        if (new_max == 0)
-            new_max = 10;       /* Start with 10 entries */
+        size_t const new_max = t->max_size > 0 ? 2 * t->max_size : 10;
+        void ** const new_data =
+            (void**) realloc(t->data, new_max * sizeof(void*));
 
-        new_data = realloc(t->data, new_max * sizeof(void *));
         if (new_data == NULL)
             return -1;
 
@@ -426,7 +422,7 @@ binary_search_for_start(netsnmp_index *val, netsnmp_container *c)
 void          **
 netsnmp_binary_array_get_subset(netsnmp_container *c, void *key, int *len)
 {
-    binary_array_table *t = (binary_array_table*)c->container_data;
+    binary_array_table *t;
     void          **subset;
     int             start, end;
     size_t          i;
@@ -456,9 +452,9 @@ netsnmp_binary_array_get_subset(netsnmp_container *c, void *key, int *len)
     }
 
     *len = end - start + 1;
-    subset = (void **)malloc((*len) * sizeof(void *));
+    subset = (void **)malloc((*len) * sizeof(void*));
     if (subset)
-        memcpy(subset, &t->data[start], sizeof(void *) * (*len));
+        memcpy(subset, &t->data[start], sizeof(void*) * (*len));
 
     return subset;
 }
@@ -584,15 +580,15 @@ _ba_duplicate(netsnmp_container *c, void *ctx, u_int flags)
     /*
      * shallow copy
      */
-    dupt->data = (void**) calloc(dupt->max_size, sizeof(void *));
+    dupt->data = (void**) malloc(dupt->max_size * sizeof(void*));
     if (NULL == dupt->data) {
         snmp_log(LOG_ERR, "no memory for binary array duplicate\n");
         netsnmp_binary_array_release(dup);
         return NULL;
     }
 
-    memcpy(dupt->data, t->data, dupt->max_size * sizeof(void *));
-    
+    memcpy(dupt->data, t->data, dupt->max_size * sizeof(void*));
+
     return dup;
 }
 

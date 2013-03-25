@@ -292,6 +292,13 @@ init_snmpTargetParamsEntry(void)
                            store_snmpTargetParamsEntry, NULL);
 }                               /*  init_snmpTargetParmsEntry  */
 
+void
+shutdown_snmpTargetParamsEntry(void)
+{
+    while (aPTable)
+	snmpTargetParamTable_remFromList(aPTable, &aPTable);
+}
+
 
 int
 snmpTargetParams_addParamName(struct targetParamTable_struct *entry,
@@ -312,9 +319,7 @@ snmpTargetParams_addParamName(struct targetParamTable_struct *entry,
                         "ERROR snmpTargetParamsEntry: param name out of range in config string\n"));
             return (0);
         }
-        entry->paramName = (char *) malloc(len + 1);
-        strncpy(entry->paramName, cptr, len);
-        entry->paramName[len] = '\0';
+        entry->paramName = strdup(cptr);
     }
     return (1);
 }
@@ -375,16 +380,12 @@ int
 snmpTargetParams_addSecName(struct targetParamTable_struct *entry,
                             char *cptr)
 {
-    size_t          len;
     if (cptr == NULL) {
         DEBUGMSGTL(("snmpTargetParamsEntry",
                     "ERROR snmpTargetParamsEntry: no security name in config string\n"));
         return (0);
     } else {
-        len = strlen(cptr);
-        entry->secName = (char *) malloc(len + 1);
-        strncpy(entry->secName, cptr, len);
-        entry->secName[len] = '\0';
+        entry->secName = strdup(cptr);
     }
     return (1);
 }                               /* snmpTargetParams_addSecName  */
@@ -614,6 +615,7 @@ var_snmpTargetParamsEntry(struct variable * vp,
     struct targetParamTable_struct *temp_struct;
 
     switch (vp->magic) {
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     case SNMPTARGETPARAMSMPMODEL:
         *write_method = write_snmpTargetParamsMPModel;
         break;
@@ -632,11 +634,13 @@ var_snmpTargetParamsEntry(struct variable * vp,
     case SNMPTARGETPARAMSROWSTATUS:
         *write_method = write_snmpTargetParamsRowStatus;
         break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     default:
         *write_method = NULL;
     }
 
-    *var_len = sizeof(long_ret);        /* assume an integer and change later if not */
+    /* assume an integer and change later if not */
+    *var_len = sizeof(long_ret);
 
     /*
      * look for OID in current table 
@@ -709,9 +713,12 @@ var_snmpTargetParamsEntry(struct variable * vp,
                     "unknown sub-id %d in var_snmpTargetParamsEntry\n",
                     vp->magic));
     }
+
     return NULL;
 }                               /* var_snmpTargetParamsEntry */
 
+
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 /*
  * Assign a value to the mpModel variable.  
  */
@@ -1367,6 +1374,7 @@ write_snmpTargetParamsRowStatus(int action,
                 update_timestamp(params);
             }
         }
+        snmp_store_needed(NULL);
     } else if (action == UNDO || action == FREE) {
         snmpTargetParamsOID[snmpTargetParamsOIDLen - 1] =
             SNMPTARGETPARAMSROWSTATUSCOLUMN;
@@ -1382,6 +1390,9 @@ write_snmpTargetParamsRowStatus(int action,
     }
     return SNMP_ERR_NOERROR;
 }
+
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
+
 
 struct targetParamTable_struct *
 get_paramEntry(char *name)

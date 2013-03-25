@@ -4,6 +4,8 @@
 
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-features.h>
+
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/sysORTable.h>
@@ -12,8 +14,11 @@
 
 #include <net-snmp/agent/snmp_get_statistic.h>
 
-#define snmpMPDMIBObjects 1, 3, 6, 1, 6, 3, 11, 2
-#define snmpMPDMIBCompliances snmpMPDMIBObjects, 3, 1
+#define snmpMPDMIB 1, 3, 6, 1, 6, 3, 11
+#define snmpMPDMIBObjects snmpMPDMIB, 2
+#define snmpMPDMIBCompliances snmpMPDMIB, 3, 1
+
+netsnmp_feature_require(helper_statistics)
 
 static oid snmpMPDStats[] = { snmpMPDMIBObjects, 1 };
 

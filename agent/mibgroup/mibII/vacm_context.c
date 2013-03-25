@@ -105,7 +105,7 @@ init_vacm_context(void)
     iinfo->get_first_data_point = get_first_context;
     iinfo->get_next_data_point = get_next_context;
     iinfo->table_reginfo = table_info;
-    netsnmp_register_table_iterator(my_handler, iinfo);
+    netsnmp_register_table_iterator2(my_handler, iinfo);
 }
 
 /*
@@ -149,7 +149,6 @@ vacm_context_handler(netsnmp_mib_handler *handler,
                                      strlen(context_ptr->context_name));
 
             break;
-
         default:
             /*
              * We should never get here, getnext already have been
@@ -159,8 +158,6 @@ vacm_context_handler(netsnmp_mib_handler *handler,
                      "vacm_context table accessed as mode=%d.  We're improperly registered!",
                      reqinfo->mode);
             break;
-
-
         }
     }
 

@@ -4,6 +4,7 @@
 #
 
 top_builddir=..
+mysubdir=apps
 
 # use GNU vpath, if available, to only set a path for source and headers
 # VPATH will pick up objects too, which is bad if you are sharing a
@@ -19,16 +20,35 @@ top_builddir=..
 
 @NETSNMP_BUILD_SSH_PROG_TRUE@SSHINSTALLBINPROG = sshtosnmp$(EXEEXT)
 @NETSNMP_BUILD_SSH_PROG_FALSE@SSHINSTALLBINPROG =
+@NETSNMP_BUILD_SSH_PROG_TRUE@SSHFEATUREPROG = sshtosnmp.ft
+@NETSNMP_BUILD_SSH_PROG_FALSE@SSHFEATUREPROG =
 @NETSNMP_BUILD_TLS_PROG_TRUE@TLSINSTALLBINPROG = snmptls$(EXEEXT)
 @NETSNMP_BUILD_TLS_PROG_FALSE@TLSINSTALLBINPROG =
+@NETSNMP_BUILD_TLS_PROG_TRUE@TLSFEATUREPROG = snmptls.ft
+@NETSNMP_BUILD_TLS_PROG_FALSE@TLSFEATUREPROG =
+@NETSNMP_BUILD_USM_PROG_TRUE@USMINSTALLBINPROG = snmpusm$(EXEEXT)
+@NETSNMP_BUILD_USM_PROG_FALSE@USMINSTALLBINPROG =
+@NETSNMP_BUILD_USM_PROG_TRUE@USMFEATUREPROG = snmpusm.ft
+@NETSNMP_BUILD_USM_PROG_FALSE@USMFEATUREPROG =
+@NETSNMP_BUILD_USM_PROG_TRUE@EKCSTALLBINPROG = encode_keychange$(EXEEXT)
+@NETSNMP_BUILD_USM_PROG_FALSE@EKCSTALLBINPROG =
+@NETSNMP_BUILD_USM_PROG_TRUE@EKCFEATUREPROG = encode_keychange.ft
+@NETSNMP_BUILD_USM_PROG_FALSE@EKCFEATUREPROG =
+@NETSNMP_BUILD_SET_PROG_TRUE@SNMPSETINSTALLBINPROG = snmpset$(EXEEXT)
+@NETSNMP_BUILD_SET_PROG_FALSE@SNMPSETINSTALLBINPROG = 
+@NETSNMP_BUILD_SET_PROG_TRUE@SNMPSETFEATUREPROG = snmpset.ft
+@NETSNMP_BUILD_SET_PROG_FALSE@SNMPSETFEATUREPROG = 
+@NETSNMP_BUILD_SET_PROG_TRUE@SNMPVACMINSTALLBINPROG = snmpvacm$(EXEEXT)
+@NETSNMP_BUILD_SET_PROG_FALSE@SNMPVACMINSTALLBINPROG = 
+@NETSNMP_BUILD_SET_PROG_TRUE@SNMPVACMFEATUREPROG = snmpvacm.ft
+@NETSNMP_BUILD_SET_PROG_FALSE@SNMPVACMFEATUREPROG = 
 
 @NETSNMP_HAVE_AGENTX_LIBS_TRUE@AGENTXTRAP = agentxtrap$(EXEEXT)
 @NETSNMP_HAVE_AGENTX_LIBS_FALSE@AGENTXTRAP =
 
 INSTALLBINPROGS	= snmpget$(EXEEXT) 			\
 		snmpgetnext$(EXEEXT) 			\
-		snmpset$(EXEEXT) 			\
-		snmpusm$(EXEEXT)			\
+		$(SNMPSETINSTALLBINPROG)	        \
 		snmpwalk$(EXEEXT) 			\
 		snmpbulkwalk$(EXEEXT) 			\
 		snmptable$(EXEEXT)			\
@@ -38,17 +58,19 @@ INSTALLBINPROGS	= snmpget$(EXEEXT) 			\
 		snmpstatus$(EXEEXT) 			\
 		snmpdelta$(EXEEXT) 			\
 		snmptest$(EXEEXT)			\
-		encode_keychange$(EXEEXT) 		\
 		snmpdf$(EXEEXT) 			\
 		$(AGENTXTRAP)				\
-		snmpvacm$(EXEEXT)                       \
-                $(SSHINSTALLBINPROG) $(TLSINSTALLBINPROG)
+		$(SNMPVACMINSTALLBINPROG)	        \
+                $(SSHINSTALLBINPROG) $(TLSINSTALLBINPROG) \
+		$(USMINSTALLBINPROG) $(EKCSTALLBINPROG)
 
 INSTALLSBINPROGS = snmptrapd$(EXEEXT)
 
 INSTALLLIBS     = libnetsnmptrapd.$(LIB_EXTENSION)$(LIB_VERSION)
 
 SUBDIRS		= snmpnetstat
+
+FEATUREFILE=../include/net-snmp/features-apps.h
 
 #
 # build variables.
@@ -62,17 +84,15 @@ USEAGENTLIBS	= $(MIBLIB) $(AGENTLIB) $(USELIBS)
 MYSQL_LIBS	= @MYSQL_LIBS@
 MYSQL_INCLUDES	= @MYSQL_INCLUDES@
 
-#
-# link path in src dir
-LOCAL_LIBS	= -L../snmplib/.libs -L../snmplib -L../agent/.libs -L../agent
-LIBS		= $(USELIBS) @LIBS@
+VAL_LIBS	= @VAL_LIBS@
+LIBS		= $(USELIBS) $(VAL_LIBS) @LIBS@
 PERLLDOPTS_FOR_APPS = @PERLLDOPTS_FOR_APPS@
 PERLLDOPTS_FOR_LIBS = @PERLLDOPTS_FOR_LIBS@
 
 #
 # hack for compiling trapd when agent is disabled
-TRAPDWITHAGENT  = $(USETRAPLIBS) $(MYSQL_LIBS) @AGENTLIBS@
-TRAPDWITHOUTAGENT = $(LIBS) $(MYSQL_LIBS)
+TRAPDWITHAGENT  = $(USETRAPLIBS) $(MYSQL_LIBS) $(VAL_LIBS) @AGENTLIBS@
+TRAPDWITHOUTAGENT = $(LIBS) $(MYSQL_LIBS) $(VAL_LIBS)
 
 # these will be set by configure to one of the above 2 lines
 TRAPLIBS	= @TRAPLIBS@ $(PERLLDOPTS_FOR_APPS)
@@ -88,8 +108,31 @@ LIBTRAPD_OBJS   = snmptrapd_handlers.o  snmptrapd_log.o \
 		  snmptrapd_auth.o snmptrapd_sql.o
 LLIBTRAPD_OBJS  = snmptrapd_handlers.lo snmptrapd_log.lo \
 		  snmptrapd_auth.lo snmptrapd_sql.lo
+LIBTRAPD_FTS    = snmptrapd_handlers.ft snmptrapd_log.ft \
+		  snmptrapd_auth.ft snmptrapd_sql.ft
 OBJS  = *.o
 LOBJS = *.lo
+FTOBJS=$(LIBTRAPD_FTS) \
+       snmpwalk.ft \
+       snmpbulkwalk.ft \
+       snmpbulkget.ft \
+       snmptranslate.ft \
+       snmpstatus.ft \
+       snmpget.ft \
+       snmpdelta.ft \
+       snmptable.ft \
+       snmptest.ft \
+       snmptrapd.ft \
+       snmptrap.ft \
+       $(SNMPSETFEATUREPROG) \
+       $(SNMPVACMFEATUREPROG) \
+       $(USMFEATUREPROG) \
+       $(TLSFEATUREPROG) \
+       agentxtrap.ft \
+       snmpgetnext.ft \
+       $(EKCFEATUREPROG) \
+       snmpdf.ft \
+       $(SSHFEATUREPROG)
 
 all: standardall
 
@@ -100,65 +143,65 @@ OTHERUNINSTALL=snmpinformuninstall snmptrapdperluninstall
 # build rules
 #
 snmpwalk$(EXEEXT):    snmpwalk.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpwalk.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpwalk.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmpbulkwalk$(EXEEXT):    snmpbulkwalk.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpbulkwalk.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpbulkwalk.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmpbulkget$(EXEEXT):    snmpbulkget.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpbulkget.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpbulkget.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmptranslate$(EXEEXT):    snmptranslate.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmptranslate.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmptranslate.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmpstatus$(EXEEXT):    snmpstatus.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpstatus.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpstatus.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmpget$(EXEEXT):    snmpget.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpget.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpget.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmpdelta$(EXEEXT):    snmpdelta.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpdelta.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpdelta.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmptable$(EXEEXT):    snmptable.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmptable.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmptable.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmptest$(EXEEXT):    snmptest.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmptest.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmptest.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmptrapd$(EXEEXT):    $(TRAPD_OBJECTS) $(USETRAPLIBS) $(INSTALLLIBS)
-	$(LINK) ${CFLAGS} -o $@ $(TRAPD_OBJECTS) $(INSTALLLIBS) $(LOCAL_LIBS) ${LDFLAGS} ${TRAPLIBS}
+	$(LINK) ${CFLAGS} -o $@ $(TRAPD_OBJECTS) $(INSTALLLIBS) ${LDFLAGS} ${TRAPLIBS}
 
 snmptrap$(EXEEXT):    snmptrap.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmptrap.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmptrap.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmpinform$(EXEEXT): snmptrap$(EXEEXT)
 	rm -f snmpinform
 	$(LN_S) snmptrap$(EXEEXT) snmpinform$(EXEEXT)
 
 snmpset$(EXEEXT):    snmpset.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpset.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpset.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmpusm$(EXEEXT):    snmpusm.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpusm.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpusm.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmpvacm$(EXEEXT):    snmpvacm.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpvacm.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpvacm.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmptls$(EXEEXT):    snmptls.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmptls.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmptls.$(OSUFFIX) ${LDFLAGS} ${LIBS} 
 
 agentxtrap$(EXEEXT):    agentxtrap.$(OSUFFIX) $(USEAGENTLIBS)
-	$(LINK) ${CFLAGS} -o $@ agentxtrap.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} $(USEAGENTLIBS) $(PERLLDOPTS_FOR_APPS) ${LIBS}
+	$(LINK) ${CFLAGS} -o $@ agentxtrap.$(OSUFFIX) ${LDFLAGS} $(USEAGENTLIBS) $(PERLLDOPTS_FOR_APPS) ${LIBS}
 
 snmpgetnext$(EXEEXT):    snmpgetnext.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpgetnext.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpgetnext.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 encode_keychange$(EXEEXT):    encode_keychange.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ encode_keychange.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ encode_keychange.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 snmpdf$(EXEEXT):    snmpdf.$(OSUFFIX) $(USELIBS)
-	$(LINK) ${CFLAGS} -o $@ snmpdf.$(OSUFFIX) $(LOCAL_LIBS) ${LDFLAGS} ${LIBS} 
+	$(LINK) ${CFLAGS} -o $@ snmpdf.$(OSUFFIX) ${LDFLAGS} ${LIBS}
 
 libnetsnmptrapd.$(LIB_EXTENSION)$(LIB_VERSION): $(LLIBTRAPD_OBJS)
 	$(LIB_LD_CMD) $@ ${LLIBTRAPD_OBJS} $(MIBLIB) $(USELIBS) $(PERLLDOPTS_FOR_LIBS) $(LIB_LD_LIBS)

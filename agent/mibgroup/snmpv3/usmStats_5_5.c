@@ -4,6 +4,8 @@
 
 #include <net-snmp/net-snmp-config.h>
 
+#include <net-snmp/net-snmp-features.h>
+
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/sysORTable.h>
@@ -20,6 +22,8 @@ static oid usmStats[] = { snmpUsmMIB, 1, 1 };
 static netsnmp_handler_registration* usmStats_reg = NULL;
 static oid usmMIBCompliance[] = { usmMIBCompliances, 1 };
 
+netsnmp_feature_require(helper_statistics)
+
 void
 init_usmStats_5_5(void)
 {
@@ -30,7 +34,8 @@ init_usmStats_5_5(void)
     if (s &&
 	NETSNMP_REGISTER_STATISTIC_HANDLER(s, 1, USM) == MIB_REGISTERED_OK) {
         REGISTER_SYSOR_ENTRY(usmMIBCompliance,
-                             "The MIB for Message Processing and Dispatching.");
+                             "The management information definitions for the "
+                             "SNMP User-based Security Model.");
         usmStats_reg = s;
     }
 }

@@ -214,7 +214,7 @@ wait_for_peak_start(int period, int peak)
     /*
      * Now figure out the amount of time to sleep 
      */
-    target = (SecondsAtNextHour - tv->tv_sec) % seconds;
+    target = (int)(SecondsAtNextHour - tv->tv_sec) % seconds;
 
     return target;
 }
@@ -471,7 +471,7 @@ main(int argc, char *argv[])
                 printf("\t%s", vip->descriptor);
         } else {
             vip->oidlen = 0;
-            strcpy(vip->descriptor, SumFile);
+            strlcpy(vip->descriptor, SumFile, sizeof(vip->descriptor));
         }
         vip->value = 0;
         zeroU64(&vip->c64value);

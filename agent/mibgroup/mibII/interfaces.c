@@ -15,6 +15,9 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
+
+netsnmp_feature_provide(interface_legacy)
 
 #if defined(NETSNMP_IFNET_NEEDS_KERNEL) && !defined(_KERNEL) && !defined(NETSNMP_IFNET_NEEDS_KERNEL_LATE)
 #define _KERNEL 1
@@ -220,6 +223,7 @@ struct variable3 interfaces_variables[] = {
      var_ifEntry, 3, {2, 1, 5}},
     {NETSNMP_IFPHYSADDRESS, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
      var_ifEntry, 3, {2, 1, 6}},
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 #if defined (WIN32) || defined (cygwin)
     {NETSNMP_IFADMINSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
      var_ifEntry, 3, {2, 1, 7}},
@@ -227,6 +231,10 @@ struct variable3 interfaces_variables[] = {
     {NETSNMP_IFADMINSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
      var_ifEntry, 3, {2, 1, 7}},
 #endif
+#else  /* !NETSNMP_NO_WRITE_SUPPORT */
+    {NETSNMP_IFADMINSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_ifEntry, 3, {2, 1, 7}},
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     {NETSNMP_IFOPERSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
      var_ifEntry, 3, {2, 1, 8}},
     {NETSNMP_IFLASTCHANGE, ASN_TIMETICKS, NETSNMP_OLDAPI_RONLY,
@@ -455,10 +463,8 @@ Interface_Scan_By_Index(int iindex,
                     a = get_address(ifp + 1, ifp->ifm_addrs, RTA_IFP);
                     if (a == NULL)
                         return 0;
-                    strncpy(if_name,
-                            ((const struct sockaddr_in *) a)->sin_zero,
-                            ((const u_char *) a)[5]);
-                    if_name[((const u_char *) a)[5]] = 0;
+                    sprintf(if_name, "%.*s", ((const u_char *) a)[5],
+                            ((const struct sockaddr_in *) a)->sin_zero);
                     *if_msg = *ifp;
                     ++have_ifinfo;
                 }
@@ -682,7 +688,12 @@ var_ifEntry(struct variable *vp,
         long_return = 0;
 #else
         if (if_msg.ifm_data.ifi_lastchange.tv_sec == 0 &&
-            if_msg.ifm_data.ifi_lastchange.tv_usec == 0)
+#if STRUCT_IFNET_HAS_IF_LASTCHANGE_TV_NSEC
+            if_msg.ifm_data.ifi_lastchange.tv_nsec == 0
+#else
+            if_msg.ifm_data.ifi_lastchange.tv_usec == 0
+#endif
+           )
             long_return = 0;
         else if (if_msg.ifm_data.ifi_lastchange.tv_sec < starttime.tv_sec)
             long_return = 0;
@@ -690,8 +701,13 @@ var_ifEntry(struct variable *vp,
             long_return = (u_long)
                 ((if_msg.ifm_data.ifi_lastchange.tv_sec -
                   starttime.tv_sec) * 100 +
-                 (if_msg.ifm_data.ifi_lastchange.tv_usec -
-                  starttime.tv_usec) / 10000);
+                 (
+#if STRUCT_IFNET_HAS_IF_LASTCHANGE_TV_NSEC
+                  if_msg.ifm_data.ifi_lastchange.tv_nsec / 1000
+#else
+                  if_msg.ifm_data.ifi_lastchange.tv_usec
+#endif
+                  - starttime.tv_usec) / 10000);
         }
 #endif
         return (u_char *) & long_return;
@@ -702,6 +718,14 @@ var_ifEntry(struct variable *vp,
 
 int
 Interface_Scan_Next(short *Index,
+                    char *Name,
+                    struct ifnet *Retifnet, struct in_ifaddr *Retin_ifaddr)
+{
+    return 0;
+}
+
+int
+Interface_Scan_NextInt(int *Index,
                     char *Name,
                     struct ifnet *Retifnet, struct in_ifaddr *Retin_ifaddr)
 {
@@ -1503,7 +1527,7 @@ Interface_Scan_Init(void)
 
 #ifdef linux
     /*  disallow reloading of structures too often */
-    gettimeofday ( &et, ( struct timezone * ) 0 );  /*  get time-of-day */
+    netsnmp_get_monotonic_clock(&et);
     if ( et.tv_sec < LastLoad + MINLOADFREQ ) {     /*  only reload so often */
       ifnetaddr = ifnetaddr_list;                   /*  initialize pointer */
       return;
@@ -1568,10 +1592,6 @@ Interface_Scan_Init(void)
         struct ifnet   *nnew;
         char           *stats, *ifstart = line;
 
-	/* Ignore interfaces with no statistics. */
-	if (strstr(line, "No statistics available."))
-	    continue;
-
         if (line[strlen(line) - 1] == '\n')
             line[strlen(line) - 1] = '\0';
 
@@ -1589,8 +1609,7 @@ Interface_Scan_Init(void)
         }
 
         *stats   = 0;
-        strncpy(ifname_buf, ifstart, sizeof(ifname_buf));
-        ifname_buf[ sizeof(ifname_buf)-1 ] = 0;
+        strlcpy(ifname_buf, ifstart, sizeof(ifname_buf));
         *stats++ = ':';
         while (*stats == ' ')
             stats++;
@@ -1605,7 +1624,7 @@ Interface_Scan_Init(void)
                                                &coll) != 5)) {
             if ((scan_line_to_use == scan_line_2_2)
                 && !strstr(line, "No statistics available"))
-                snmp_log(LOG_DEBUG,
+                snmp_log(LOG_ERR,
                          "/proc/net/dev data format error, line ==|%s|",
                          line);
             continue;
@@ -1657,31 +1676,27 @@ Interface_Scan_Init(void)
         nnew->if_unit = strdup(*ptr ? ptr : "");
         *ptr = 0;
 
-        strncpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
-        ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
+        strlcpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
         if (ioctl(fd, SIOCGIFADDR, &ifrq) < 0)
             memset((char *) &nnew->if_addr, 0, sizeof(nnew->if_addr));
         else
             nnew->if_addr = ifrq.ifr_addr;
 
-        strncpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
-        ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
+        strlcpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
         if (ioctl(fd, SIOCGIFBRDADDR, &ifrq) < 0)
             memset((char *) &nnew->ifu_broadaddr, 0,
                    sizeof(nnew->ifu_broadaddr));
         else
             nnew->ifu_broadaddr = ifrq.ifr_broadaddr;
 
-        strncpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
-        ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
+        strlcpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
         if (ioctl(fd, SIOCGIFNETMASK, &ifrq) < 0)
             memset((char *) &nnew->ia_subnetmask, 0,
                    sizeof(nnew->ia_subnetmask));
         else
             nnew->ia_subnetmask = ifrq.ifr_netmask;
 
-        strncpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
-        ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
+        strlcpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
         nnew->if_flags = ioctl(fd, SIOCGIFFLAGS, &ifrq) < 0
             ? 0 : ifrq.ifr_flags;
 
@@ -1693,8 +1708,7 @@ Interface_Scan_Init(void)
          * 4 bytes of sa_data.
          */
         memset(ifrq.ifr_hwaddr.sa_data, (0), IFHWADDRLEN);
-        strncpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
-        ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
+        strlcpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
         if (ioctl(fd, SIOCGIFHWADDR, &ifrq) < 0)
             memset(nnew->if_hwaddr, (0), IFHWADDRLEN);
         else {
@@ -1751,14 +1765,12 @@ Interface_Scan_Init(void)
 #endif
         }
 
-        strncpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
-        ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
+        strlcpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
         nnew->if_metric = ioctl(fd, SIOCGIFMETRIC, &ifrq) < 0
             ? 0 : ifrq.ifr_metric;
 
 #ifdef SIOCGIFMTU
-        strncpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
-        ifrq.ifr_name[ sizeof(ifrq.ifr_name)-1 ] = 0;
+        strlcpy(ifrq.ifr_name, ifname, sizeof(ifrq.ifr_name));
         nnew->if_mtu = (ioctl(fd, SIOCGIFMTU, &ifrq) < 0)
             ? 0 : ifrq.ifr_mtu;
 #else
@@ -1837,6 +1849,22 @@ Interface_Scan_Next(short *Index,
                     char *Name,
                     struct ifnet *Retifnet, struct in_ifaddr *dummy)
 {
+    int returnIndex = 0;
+    int ret;
+    if (Index)
+        returnIndex = *Index;
+
+    ret = Interface_Scan_NextInt( &returnIndex, Name, Retifnet, dummy );
+    if (Index)
+        *Index = (returnIndex & 0x8fff);
+    return ret;
+}
+
+int
+Interface_Scan_NextInt(int *Index,
+                    char *Name,
+                    struct ifnet *Retifnet, struct in_ifaddr *dummy)
+{
     struct ifnet    ifnet;
     register char  *cp;
 
@@ -1868,15 +1896,18 @@ Interface_Scan_Next(short *Index,
         }
 #else
         ifnet = *ifnetaddr;
-        strncpy(saveName, ifnet.if_name, sizeof(saveName));
+        strlcpy(saveName, ifnet.if_name, sizeof(saveName));
 #endif
 
         saveName[sizeof(saveName) - 1] = '\0';
         cp = (char *) strchr(saveName, '\0');
 #ifdef linux
-        strncat(cp, ifnet.if_unit, sizeof(saveName)-strlen(saveName)-1);
-        saveName[sizeof(saveName) - 1] = '\0';
+        strlcat(saveName, ifnet.if_unit, sizeof(saveName));
 #else
+#ifdef NETSNMP_FEATURE_CHECKIN
+        /* this exists here just so we don't copy ifdef logic elsewhere */
+        netsnmp_feature_require(string_append_int);
+#endif
         string_append_int(cp, ifnet.if_unit);
 #endif
         if (1 || strcmp(saveName, "lo0") != 0) {        /* XXX */
@@ -1902,11 +1933,11 @@ Interface_Scan_Next(short *Index,
 int
 Interface_Index_By_Name(char *Name, int Len)
 {
-    short           ifIndex = 0;
+    int             ifIndex = 0;
     char            ifName[20];
 
     Interface_Scan_Init();
-    while (Interface_Scan_Next(&ifIndex, ifName, NULL, NULL)
+    while (Interface_Scan_NextInt(&ifIndex, ifName, NULL, NULL)
            && strcmp(Name, ifName));
     return ifIndex;
 }
@@ -1921,9 +1952,23 @@ Interface_Index_By_Name(char *Name, int Len)
 #endif
 
 #if defined(hpux11)
-
 int
 Interface_Scan_Next(short *Index, char *Name, nmapi_phystat * Retifnet)
+{
+    int returnIndex = 0;
+    int ret;
+    if (Index)
+        returnIndex = *Index;
+
+    ret = Interface_Scan_NextInt( &returnIndex, Name, Retifnet );
+    if (Index)
+        *Index = (returnIndex & 0x8fff);
+    return ret;
+}
+
+
+int
+Interface_Scan_NextInt(int *Index, char *Name, nmapi_phystat * Retifnet)
 {
     static nmapi_phystat *if_ptr = (nmapi_phystat *) 0;
     int             count = Interface_Scan_Get_Count();
@@ -1959,9 +2004,25 @@ Interface_Scan_Next(short *Index, char *Name, nmapi_phystat * Retifnet)
 }
 
 #else                           /* hpux11 */
-
 int
 Interface_Scan_Next(short *Index,
+                    char *Name,
+                    struct ifnet *Retifnet, struct in_ifaddr *Retin_ifaddr)
+{
+    int returnIndex = 0;
+    int ret;
+    if (Index)
+        returnIndex = *Index;
+
+    ret = Interface_Scan_NextInt( &returnIndex, Name, Retifnet, Retin_ifaddr );
+    if (Index)
+        *Index = (returnIndex & 0x8fff);
+    return ret;
+}
+
+
+int
+Interface_Scan_NextInt(int *Index,
                     char *Name,
                     struct ifnet *Retifnet, struct in_ifaddr *Retin_ifaddr)
 {
@@ -1982,7 +2043,7 @@ Interface_Scan_Next(short *Index,
         }
 #if HAVE_STRUCT_IFNET_IF_XNAME
 #if defined(netbsd1) || defined(openbsd2)
-        strncpy(saveName, ifnet.if_xname, sizeof saveName);
+        strlcpy(saveName, ifnet.if_xname, sizeof(saveName));
 #else
         if (!NETSNMP_KLOOKUP(ifnet.if_xname, (char *) saveName, sizeof saveName)) {
             DEBUGMSGTL(("mibII/interfaces:Interface_Scan_Next", "klookup failed\n"));
@@ -1998,6 +2059,10 @@ Interface_Scan_Next(short *Index,
 
         saveName[sizeof(saveName) - 1] = '\0';
         cp = strchr(saveName, '\0');
+#ifdef NETSNMP_FEATURE_CHECKIN
+        /* this exists here just so we don't copy ifdef logic elsewhere */
+        netsnmp_feature_require(string_append_int);
+#endif
         string_append_int(cp, ifnet.if_unit);
 #endif
         if (1 || strcmp(saveName, "lo0") != 0) {        /* XXX */
@@ -2078,10 +2143,10 @@ Interface_Scan_Next(short *Index,
 static int
 Interface_Scan_By_Index(int Index, char *Name, nmapi_phystat * Retifnet)
 {
-    short           i;
+    int           i;
 
     Interface_Scan_Init();
-    while (Interface_Scan_Next(&i, Name, Retifnet)) {
+    while (Interface_Scan_NextInt(&i, Name, Retifnet)) {
         if (i == Index)
             break;
     }
@@ -2098,10 +2163,10 @@ Interface_Scan_By_Index(int Index,
                         struct ifnet *Retifnet,
                         struct in_ifaddr *Retin_ifaddr)
 {
-    short           i;
+    int           i;
 
     Interface_Scan_Init();
-    while (Interface_Scan_Next(&i, Name, Retifnet, Retin_ifaddr)) {
+    while (Interface_Scan_NextInt(&i, Name, Retifnet, Retin_ifaddr)) {
         if (i == Index)
             break;
     }
@@ -2141,18 +2206,17 @@ Interface_Scan_Get_Count(void)
 
 #else                           /* hpux11 */
 
-static time_t   scan_time = 0;
-
 int
 Interface_Scan_Get_Count(void)
 {
+    static time_t   scan_time = 0;
     time_t          time_now = time(NULL);
 
     if (!Interface_Count || (time_now > scan_time + 60)) {
         scan_time = time_now;
         Interface_Scan_Init();
         Interface_Count = 0;
-        while (Interface_Scan_Next(NULL, NULL, NULL, NULL) != 0) {
+        while (Interface_Scan_NextInt(NULL, NULL, NULL, NULL) != 0) {
             Interface_Count++;
         }
     }
@@ -2163,7 +2227,7 @@ Interface_Scan_Get_Count(void)
 static int
 Interface_Get_Ether_By_Index(int Index, u_char * EtherAddr)
 {
-    short           i;
+    int             i;
 #if !(defined(linux) || defined(netbsd1) || defined(bsdi2) || defined(openbsd2))
     struct arpcom   arpcom;
 #else                           /* is linux or netbsd1 */
@@ -2188,7 +2252,7 @@ Interface_Get_Ether_By_Index(int Index, u_char * EtherAddr)
 
         Interface_Scan_Init();
 
-        while (Interface_Scan_Next((short *) &i, NULL, NULL, NULL) != 0) {
+        while (Interface_Scan_NextInt(&i, NULL, NULL, NULL) != 0) {
             if (i == Index)
                 break;
         }
@@ -2605,7 +2669,9 @@ var_ifEntry(struct variable * vp,
 #elif defined(HAVE_IPHLPAPI_H)  /* WIN32 cygwin */
 #include <iphlpapi.h>
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 WriteMethod     writeIfEntry;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
 long            admin_status = 0;
 long            oldadmin_status = 0;
 
@@ -2633,23 +2699,11 @@ header_ifEntry(struct variable *vp,
      * find "next" ifIndex 
      */
 
-
-    /*
-     * query for buffer size needed 
-     */
     status = GetIfTable(pIfTable, &dwActualSize, TRUE);
-
     if (status == ERROR_INSUFFICIENT_BUFFER) {
-        /*
-         * need more space 
-         */
-        pIfTable = (PMIB_IFTABLE) malloc(dwActualSize);
-        if (pIfTable != NULL) {
-            /*
-             * Get the sorted IF table 
-             */
+        pIfTable = malloc(dwActualSize);
+        if (pIfTable)
             GetIfTable(pIfTable, &dwActualSize, TRUE);
-        }
     }
     count = pIfTable->dwNumEntries;
     for (ifIndex = 0; ifIndex < count; ifIndex++) {
@@ -2663,9 +2717,9 @@ header_ifEntry(struct variable *vp,
     }
     if (ifIndex >= count) {
         DEBUGMSGTL(("mibII/interfaces", "... index out of range\n"));
-        return MATCH_FAILED;
+        count = MATCH_FAILED;
+        goto out;
     }
-
 
     memcpy((char *) name, (char *) newname,
            ((int) vp->namelen + 1) * sizeof(oid));
@@ -2678,6 +2732,7 @@ header_ifEntry(struct variable *vp,
     DEBUGMSG(("mibII/interfaces", "\n"));
 
     count = pIfTable->table[ifIndex].dwIndex;
+out:
     free(pIfTable);
     return count;
 }
@@ -2761,7 +2816,9 @@ var_ifEntry(struct variable * vp,
     case NETSNMP_IFADMINSTATUS:
         long_return = ifRow.dwAdminStatus;
         admin_status = long_return;
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         *write_method = writeIfEntry;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
         return (u_char *) & long_return;
     case NETSNMP_IFOPERSTATUS:
         long_return =
@@ -2817,6 +2874,7 @@ var_ifEntry(struct variable * vp,
 }
 
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 int
 writeIfEntry(int action,
              u_char * var_val,
@@ -2888,4 +2946,5 @@ writeIfEntry(int action,
     }
     return SNMP_ERR_NOERROR;
 }                               /* end of writeIfEntry */
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */ 
 #endif                          /* WIN32 cygwin */

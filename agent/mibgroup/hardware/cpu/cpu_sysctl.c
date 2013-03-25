@@ -3,6 +3,7 @@
  *     e.g. BSD/OS, NetBSD, OpenBSD, later Darwin releases
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/hardware/cpu.h>
@@ -30,6 +31,8 @@
 #include <vm/vm_extern.h>
 #endif
 
+netsnmp_feature_require(hardware_cpu_copy_stats)
+
 void _cpu_copy_stats( netsnmp_cpu_info *cpu );
 
     /*
@@ -38,18 +41,25 @@ void _cpu_copy_stats( netsnmp_cpu_info *cpu );
      */
 void init_cpu_sysctl( void ) {
     int               i, n;
+    size_t            siz;
     int               ncpu_mib[]  = { CTL_HW, HW_NCPU };
+#if !(defined(__NetBSD__) && ( defined(__i386__) || defined(__x86_64__) ) )
     int               model_mib[] = { CTL_HW, HW_MODEL };
+#endif
     char              descr[ SNMP_MAXBUF ];
     netsnmp_cpu_info  *cpu = netsnmp_cpu_get_byIdx( -1, 1 );
     strcpy(cpu->name, "Overall CPU statistics");
 
-    i = sizeof(n);
-    sysctl(ncpu_mib, 2, &n, (void *)&i, NULL, 0);
+    siz = sizeof(n);
+    sysctl(ncpu_mib, 2, &n, &siz, NULL, 0);
     if ( n <= 0 )
         n = 1;   /* Single CPU system */
-    i = sizeof(descr);
-    sysctl(model_mib, 2, descr, (void *)&i, NULL, 0);
+    siz = sizeof(descr);
+#if defined(__NetBSD__) && ( defined(__i386__) || defined(__x86_64__) )
+    sysctlbyname("machdep.cpu_brand", descr, &siz, NULL, 0);
+#else
+    sysctl(model_mib, 2, descr, &siz, NULL, 0);
+#endif
     for ( i = 0; i < n; i++ ) {
         cpu = netsnmp_cpu_get_byIdx( i, 1 );
         cpu->status = 2;  /* running */
@@ -60,18 +70,18 @@ void init_cpu_sysctl( void ) {
 }
 
 
+#if defined(__NetBSD__)
+#define NETSNMP_CPU_STATS uint64_t
+#else
 #define NETSNMP_CPU_STATS long
-#if defined(KERN_CPUSTATS)                /* BSDi */
+#endif
+
+#if defined(__NetBSD__)
+#define NETSNMP_KERN_CPU  KERN_CP_TIME
+#elif defined(KERN_CPUSTATS)              /* BSDi */
 #define NETSNMP_KERN_CPU  KERN_CPUSTATS
 #elif defined(KERN_CPTIME)                /* OpenBSD */
 #define NETSNMP_KERN_CPU  KERN_CPTIME
-#elif defined(KERN_CP_TIME)               /* NetBSD */
-#define NETSNMP_KERN_CPU  KERN_CP_TIME
-
-#if defined(netbsdelf3)
-#undef  NETSNMP_CPU_STATS 
-#define NETSNMP_CPU_STATS uint64_t
-#endif
 
 #elif defined(__FreeBSD__)
 #define NETSNMP_KERN_CPU  0    /* dummy value - sysctlnametomib(2) should be used */
@@ -137,7 +147,9 @@ void init_cpu_sysctl( void ) {
      * Load the latest CPU usage statistics
      */
 int netsnmp_cpu_arch_load( netsnmp_cache *cache, void *magic ) {
+#ifdef NETSNMP_KERN_MCPU
     int                     i;
+#endif
 
     /*
      * Strictly speaking, BSDi ought to use
@@ -147,29 +159,31 @@ int netsnmp_cpu_arch_load( netsnmp_cache *cache, void *magic ) {
      * Don't fight it, Dave - go with the flow....
      */
     NETSNMP_CPU_STATS cpu_stats[CPUSTATES];
+#if !defined(__FreeBSD__) && !defined(__NetBSD__)
     int            cpu_mib[] = { CTL_KERN, NETSNMP_KERN_CPU };
+#endif
     size_t         cpu_size  = sizeof(cpu_stats);
 #ifdef NETSNMP_KERN_MCPU 
     NETSNMP_KERN_MCPU_TYPE *mcpu_stats;
     int            mcpu_mib[] = { CTL_KERN, NETSNMP_KERN_MCPU };
-    size_t         mcpu_size  = sizeof(NETSNMP_KERN_MCPU_TYPE);
+    size_t         mcpu_size;
 #endif
     NETSNMP_VM_STATS_TYPE mem_stats;
     int            mem_mib[] = { CTL_VM, NETSNMP_VM_STATS };
     size_t         mem_size  = sizeof(NETSNMP_VM_STATS_TYPE);
     netsnmp_cpu_info *cpu = netsnmp_cpu_get_byIdx( -1, 0 );
 
-#if defined(__FreeBSD__)
+#if (defined(__FreeBSD__) || defined(__NetBSD__))
     sysctlbyname("kern.cp_time", cpu_stats, &cpu_size, NULL, 0);
 #else
     sysctl(cpu_mib, 2,  cpu_stats, &cpu_size, NULL, 0);
 #endif
-    cpu->user_ticks = (unsigned long)cpu_stats[CP_USER];
-    cpu->nice_ticks = (unsigned long)cpu_stats[CP_NICE];
-    cpu->sys2_ticks = (unsigned long)cpu_stats[CP_SYS]+cpu_stats[CP_INTR];
-    cpu->kern_ticks = (unsigned long)cpu_stats[CP_SYS];
-    cpu->idle_ticks = (unsigned long)cpu_stats[CP_IDLE];
-    cpu->intrpt_ticks = (unsigned long)cpu_stats[CP_INTR];
+    cpu->user_ticks = (unsigned long long)cpu_stats[CP_USER];
+    cpu->nice_ticks = (unsigned long long)cpu_stats[CP_NICE];
+    cpu->sys2_ticks = (unsigned long long)cpu_stats[CP_SYS]+cpu_stats[CP_INTR];
+    cpu->kern_ticks = (unsigned long long)cpu_stats[CP_SYS];
+    cpu->idle_ticks = (unsigned long long)cpu_stats[CP_IDLE];
+    cpu->intrpt_ticks = (unsigned long long)cpu_stats[CP_INTR];
         /* wait_ticks, sirq_ticks unused */
     
         /*
@@ -177,21 +191,21 @@ int netsnmp_cpu_arch_load( netsnmp_cache *cache, void *magic ) {
          *   XXX - Do these really belong here ?
          */
     sysctl(mem_mib, 2, &mem_stats, &mem_size, NULL, 0);
-    cpu->nInterrupts  = (unsigned long)mem_stats.NS_VM_INTR;
-    cpu->nCtxSwitches = (unsigned long)mem_stats.NS_VM_SWTCH;
-    cpu->swapIn       = (unsigned long)mem_stats.NS_VM_SWAPIN;
-    cpu->swapOut      = (unsigned long)mem_stats.NS_VM_SWAPOUT;
+    cpu->nInterrupts  = (unsigned long long)mem_stats.NS_VM_INTR;
+    cpu->nCtxSwitches = (unsigned long long)mem_stats.NS_VM_SWTCH;
+    cpu->swapIn       = (unsigned long long)mem_stats.NS_VM_SWAPIN;
+    cpu->swapOut      = (unsigned long long)mem_stats.NS_VM_SWAPOUT;
 #ifdef NS_VM_PAGEIN
-    cpu->pageIn       = (unsigned long)mem_stats.NS_VM_PAGEIN;
+    cpu->pageIn       = (unsigned long long)mem_stats.NS_VM_PAGEIN;
 #endif
 #ifdef NS_VM_PAGEOUT
-    cpu->pageOut      = (unsigned long)mem_stats.NS_VM_PAGEOUT;
+    cpu->pageOut      = (unsigned long long)mem_stats.NS_VM_PAGEOUT;
 #endif
 
 #ifdef NETSNMP_KERN_MCPU
-    mcpu_stats = (NETSNMP_KERN_MCPU_TYPE *)malloc(cpu_num*sizeof(NETSNMP_KERN_MCPU_TYPE));
-    sysctl(mcpu_mib, 2, mcpu_stats,
-           cpu_num*sizeof(NETSNMP_KERN_MCPU_TYPE), NULL, 0);
+    mcpu_size  = cpu_num*sizeof(NETSNMP_KERN_MCPU_TYPE);
+    mcpu_stats = malloc(mcpu_size);
+    sysctl(mcpu_mib, 2, mcpu_stats, &mcpu_size, NULL, 0);
     for ( i = 0; i < cpu_num; i++ ) {
         cpu = netsnmp_cpu_get_byIdx( i, 0 );
         /* XXX - per-CPU statistics - mcpu_mib[i].??? */

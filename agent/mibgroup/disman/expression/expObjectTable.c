@@ -22,6 +22,7 @@
  * This should always be included first before anything else 
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #if HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -34,6 +35,9 @@
 #include <limits.h>
 #endif
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(header_complex_find_entry)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /*
  * minimal include directives 
@@ -217,7 +221,6 @@ void
 parse_expObjectTable(const char *token, char *line)
 {
     size_t          tmpint;
-    oid            *tmpoid = NULL;
     struct expObjectTable_data *StorageTmp =
         SNMP_MALLOC_STRUCT(expObjectTable_data);
 
@@ -404,6 +407,7 @@ store_expObjectTable(int majorID, int minorID, void *serverarg,
         }
     }
     DEBUGMSGTL(("expObjectTable", "storage done\n"));
+    return 0;
 }
 
 

@@ -16,14 +16,6 @@
 #include <netinet/sctp.h>
 #include <netinet/sctp_constants.h>
 
-#define PROC_PREFIX          "/proc"
-#define PROC_RTO_MIN         PROC_PREFIX "/sys/net/sctp/rto_min"
-#define PROC_RTO_MAX         PROC_PREFIX "/sys/net/sctp/rto_max"
-#define PROC_RTO_INITIAL     PROC_PREFIX "/sys/net/sctp/rto_initial"
-#define PROC_VAL_COOKIE_LIFE PROC_PREFIX "/sys/net/sctp/valid_cookie_life"
-#define PROC_MAX_INIT_RETR   PROC_PREFIX "/sys/net/sctp/max_init_retransmits"
-#define PROC_STATS           PROC_PREFIX "/net/sctp/snmp"
-
 void
 netsnmp_access_sctp_stats_arch_init()
 {
@@ -68,9 +60,7 @@ netsnmp_access_sctp_params_arch_init()
 int
 netsnmp_access_sctp_params_arch_load(netsnmp_sctp_params * sctp_params)
 {
-    int             ret;
 	size_t len = sizeof(uint32_t);
-	unsigned int cnt = 0;
 
     sctp_params->rto_algorithm = NETSNMP_SCTP_ALGORITHM_VANJ;
     sctp_params->max_assocs =  SCTP_MAX_NUM_OF_ASOC; 

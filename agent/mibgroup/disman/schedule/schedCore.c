@@ -4,17 +4,22 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include "disman/schedule/schedCore.h"
 #include "utilities/iquery.h"
 
+netsnmp_feature_require(iquery)
+
+netsnmp_feature_child_of(sched_nextrowtime, netsnmp_unused)
+
 netsnmp_tdata *schedule_table;
 
 
-#ifndef HAVE_LOCALTIME_R
+#if !defined(HAVE_LOCALTIME_R) && !defined(localtime_r)
 /*
- * localtime_r() replacement for MinGW.
+ * localtime_r() replacement for older MinGW versions.
  * Note: this implementation is not thread-safe, while it should.
  */
 struct tm      *
@@ -297,15 +302,14 @@ sched_nextTime( struct schedTable_entry *entry )
              entry->schedNextRun = now + entry->schedInterval;
         }
         DEBUGMSGTL(("disman:schedule:time", "periodic: (%ld) %s",
-                                  entry->schedNextRun,
-                           ctime(&entry->schedNextRun)));
+                    (long) entry->schedNextRun, ctime(&entry->schedNextRun)));
         break;
 
     case SCHED_TYPE_ONESHOT:
         if ( entry->schedLastRun ) {
             DEBUGMSGTL(("disman:schedule:time", "one-shot: expired (%ld) %s",
-                                  entry->schedNextRun,
-                           ctime(&entry->schedNextRun)));
+                        (long) entry->schedNextRun,
+                        ctime(&entry->schedNextRun)));
             return;
         }
         /* Fallthrough */
@@ -342,8 +346,8 @@ sched_nextTime( struct schedTable_entry *entry )
          *    the first specified day (in that month)
          */
 
-        localtime_r( &now, &now_tm );
-        localtime_r( &now, &next_tm );
+        (void) localtime_r( &now, &now_tm );
+        (void) localtime_r( &now, &next_tm );
 
         next_tm.tm_mon=-1;
         next_tm.tm_mday=-1;
@@ -420,8 +424,7 @@ sched_nextTime( struct schedTable_entry *entry )
          */
         entry->schedNextRun = mktime( &next_tm );
         DEBUGMSGTL(("disman:schedule:time", "calendar: (%ld) %s",
-                                  entry->schedNextRun,
-                           ctime(&entry->schedNextRun)));
+                    (long) entry->schedNextRun, ctime(&entry->schedNextRun)));
         return;
 
     default:
@@ -435,11 +438,13 @@ sched_nextTime( struct schedTable_entry *entry )
     return;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_SCHED_NEXTROWTIME
 void
 sched_nextRowTime( netsnmp_tdata_row *row )
 {
     sched_nextTime((struct schedTable_entry *) row->data );
 }
+#endif /* NETSNMP_FEATURE_REMOVE_SCHED_NEXTROWTIME */
 
 /*
  * create a new row in the table 

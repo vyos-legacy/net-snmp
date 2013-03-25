@@ -10,10 +10,10 @@
 #
 # Process this file with autoconf to produce a configure script.
 #
-AC_INIT([Net-SNMP], [5.6.1.1], [net-snmp-coders@lists.sourceforge.net])
+AC_INIT([Net-SNMP], [5.7.2], [net-snmp-coders@lists.sourceforge.net])
 AC_PREREQ([2.63])
-AC_CONFIG_SRCDIR([agent/mibgroup/ucd-snmp/extensible.c])
-AC_REVISION([$Revision: 20465 $])
+AC_CONFIG_SRCDIR([agent/snmpd.c])
+AC_REVISION([$Revision$])
 
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADER(include/net-snmp/net-snmp-config.h)
@@ -72,6 +72,7 @@ AC_SUBST(LMIBLIBS)
 AC_SUBST(AGENTLIBS)
 AC_SUBST(OTHERAGENTLIBOBJS)
 AC_SUBST(OTHERAGENTLIBLOBJS)
+AC_SUBST(OTHERAGENTLIBLFTS)
 
 AC_SUBST(DLLIBS)
 

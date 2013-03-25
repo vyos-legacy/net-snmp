@@ -26,6 +26,8 @@
 
 #define MYTABLE "hrSWRunTable"
 
+static netsnmp_table_registration_info *table_info;
+
 /** Initializes the hrSWRunTable module */
 void
 init_hrSWRunTable(void)
@@ -34,6 +36,15 @@ init_hrSWRunTable(void)
      * here we initialize all the tables we're planning on supporting 
      */
     initialize_table_hrSWRunTable();
+}
+
+void
+shutdown_hrSWRunTable(void)
+{
+    if (table_info) {
+	netsnmp_table_registration_info_free(table_info);
+	table_info = NULL;
+    }
 }
 
 oid      hrSWRunTable_oid[] = { 1, 3, 6, 1, 2, 1, 25, 4, 2 };
@@ -45,13 +56,15 @@ initialize_table_hrSWRunTable(void)
 {
     netsnmp_handler_registration *reg;
     netsnmp_mib_handler *handler = NULL;
-    netsnmp_table_registration_info *table_info = NULL;
-
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 #ifdef NETSNMP_INCLUDE_HRSWRUN_WRITE_SUPPORT
 #  define SWRUN_ACCESS_LEVEL HANDLER_CAN_RWRITE
 #else
 #  define SWRUN_ACCESS_LEVEL HANDLER_CAN_RONLY
 #endif
+#else /* !NETSNMP_NO_WRITE_SUPPORT */ 
+#  define SWRUN_ACCESS_LEVEL HANDLER_CAN_RONLY
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     reg =
         netsnmp_create_handler_registration(MYTABLE,
                                             hrSWRunTable_handler,
@@ -115,6 +128,7 @@ initialize_table_hrSWRunTable(void)
     if (SNMPERR_SUCCESS != netsnmp_register_table(reg, table_info)) {
         snmp_log(LOG_ERR,"error registering table handler for "
                  MYTABLE "\n");
+        reg = NULL; /* it was freed inside netsnmp_register_table */
         goto bail;
     }
 
@@ -216,6 +230,7 @@ hrSWRunTable_handler(netsnmp_mib_handler *handler,
         }
         break;
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
 #ifdef NETSNMP_INCLUDE_HRSWRUN_WRITE_SUPPORT
         /*
          * Write-support
@@ -328,6 +343,7 @@ hrSWRunTable_handler(netsnmp_mib_handler *handler,
         }
         break;
 #endif /* NETSNMP_INCLUDE_HRSWRUN_WRITE_SUPPORT */
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
     }
     return SNMP_ERR_NOERROR;
 }

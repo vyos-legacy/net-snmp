@@ -156,6 +156,7 @@ var_vacm_sec2group(struct variable * vp,
      */
 
     switch (vp->magic) {
+#ifndef NETSNMP_NO_WRITE_SUPPORT 
     case SECURITYGROUP:
         *write_method = write_vacmGroupName;
         break;
@@ -165,9 +166,12 @@ var_vacm_sec2group(struct variable * vp,
     case SECURITYSTATUS:
         *write_method = write_vacmSecurityToGroupStatus;
         break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */ 
     default:
         *write_method = NULL;
     }
+
+	*var_len = 0; /* assume 0 length until found */
 
     if (memcmp(name, vp->name, sizeof(oid) * vp->namelen) != 0) {
         memcpy(name, vp->name, sizeof(oid) * vp->namelen);
@@ -252,6 +256,7 @@ var_vacm_sec2group(struct variable * vp,
     default:
         break;
     }
+
     return NULL;
 }
 
@@ -278,6 +283,7 @@ var_vacm_access(struct variable * vp,
      */
 
     switch (vp->magic) {
+#ifndef NETSNMP_NO_WRITE_SUPPORT 
     case ACCESSMATCH:
         *write_method = write_vacmAccessContextMatch;
         break;
@@ -296,9 +302,12 @@ var_vacm_access(struct variable * vp,
     case ACCESSSTATUS:
         *write_method = write_vacmAccessStatus;
         break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */ 
     default:
         *write_method = NULL;
     }
+
+	*var_len = 0; /* assume 0 length until found */
 
     if (memcmp(name, vp->name, sizeof(oid) * vp->namelen) != 0) {
         memcpy(name, vp->name, sizeof(oid) * vp->namelen);
@@ -469,6 +478,7 @@ var_vacm_access(struct variable * vp,
         long_return = gp->status;
         return (u_char *) & long_return;
     }
+
     return NULL;
 }
 
@@ -495,6 +505,7 @@ var_vacm_view(struct variable * vp,
      */
 
     switch (vp->magic) {
+#ifndef NETSNMP_NO_WRITE_SUPPORT 
     case VIEWMASK:
         *write_method = write_vacmViewMask;
         break;
@@ -507,11 +518,13 @@ var_vacm_view(struct variable * vp,
     case VIEWSTATUS:
         *write_method = write_vacmViewStatus;
         break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */ 
     default:
         *write_method = NULL;
     }
 
     *var_len = sizeof(long_return);
+
     if (vp->magic != VACMVIEWSPINLOCK) {
         if (memcmp(name, vp->name, sizeof(oid) * vp->namelen) != 0) {
             memcpy(name, vp->name, sizeof(oid) * vp->namelen);
@@ -623,7 +636,9 @@ var_vacm_view(struct variable * vp,
 
     switch (vp->magic) {
     case VACMVIEWSPINLOCK:
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         *write_method = write_vacmViewSpinLock;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
         long_return = vacmViewSpinLock;
         return (u_char *) & long_return;
 
@@ -651,34 +666,11 @@ var_vacm_view(struct variable * vp,
         long_return = gp->viewStatus;
         return (u_char *) & long_return;
     }
+
     return NULL;
 }
 
-oid            *
-sec2group_generate_OID(oid * prefix, size_t prefixLen,
-                       struct vacm_groupEntry * geptr, size_t * length)
-{
-    oid            *indexOid;
-    int             i, securityNameLen;
-
-    securityNameLen = strlen(geptr->securityName);
-
-    *length = 2 + securityNameLen + prefixLen;
-    indexOid = (oid *) malloc(*length * sizeof(oid));
-    if (indexOid) {
-        memmove(indexOid, prefix, prefixLen * sizeof(oid));
-
-        indexOid[prefixLen] = geptr->securityModel;
-
-        indexOid[prefixLen + 1] = securityNameLen;
-        for (i = 0; i < securityNameLen; i++)
-            indexOid[prefixLen + 2 + i] = (oid) geptr->securityName[i];
-
-    }
-    return indexOid;
-
-}
-
+#ifndef NETSNMP_NO_WRITE_SUPPORT 
 int
 sec2group_parse_oid(oid * oidIndex, size_t oidLen,
                     int *model, unsigned char **name, size_t * nameLen)
@@ -981,40 +973,6 @@ write_vacmSecurityToGroupStatus(int action,
     return SNMP_ERR_NOERROR;
 }
 
-oid            *
-access_generate_OID(oid * prefix, size_t prefixLen,
-                    struct vacm_accessEntry * aptr, size_t * length)
-{
-    oid            *indexOid;
-    int             i, groupNameLen, contextPrefixLen;
-
-    groupNameLen = strlen(aptr->groupName);
-    contextPrefixLen = strlen(aptr->contextPrefix);
-
-    *length = 4 + groupNameLen + contextPrefixLen + prefixLen;
-    indexOid = (oid *) malloc(*length * sizeof(oid));
-    if (indexOid) {
-        memmove(indexOid, prefix, prefixLen * sizeof(oid));
-
-        indexOid[prefixLen] = groupNameLen;
-        for (i = 0; i < groupNameLen; i++)
-            indexOid[groupNameLen + 1 + i] = (oid) aptr->groupName[i];
-
-        indexOid[prefixLen + groupNameLen + 1] = contextPrefixLen;
-        for (i = 0; i < contextPrefixLen; i++)
-            indexOid[prefixLen + groupNameLen + 2 + i] =
-                (oid) aptr->contextPrefix[i];
-
-        indexOid[prefixLen + groupNameLen + contextPrefixLen + 3] =
-            aptr->securityModel;
-        indexOid[prefixLen + groupNameLen + contextPrefixLen + 4] =
-            aptr->securityLevel;
-
-    }
-    return indexOid;
-
-}
-
 int
 access_parse_oid(oid * oidIndex, size_t oidLen,
                  unsigned char **groupName, size_t * groupNameLen,
@@ -1126,7 +1084,7 @@ write_vacmAccessStatus(int action,
 {
     static long     long_ret;
     int             model, level;
-    char           *newGroupName, *newContextPrefix;
+    char           *newGroupName = NULL, *newContextPrefix = NULL;
     size_t          groupNameLen, contextPrefixLen;
     struct vacm_accessEntry *aptr = NULL;
 
@@ -1550,35 +1508,6 @@ view_parse_oid(oid * oidIndex, size_t oidLen,
     return 0;
 }
 
-oid            *
-view_generate_OID(oid * prefix, size_t prefixLen,
-                  struct vacm_viewEntry * vptr, size_t * length)
-{
-    oid            *indexOid;
-    int             i, viewNameLen, viewSubtreeLen;
-
-    viewNameLen = strlen(vptr->viewName);
-    viewSubtreeLen = vptr->viewSubtreeLen;
-
-    *length = 2 + viewNameLen + viewSubtreeLen + prefixLen;
-    indexOid = (oid *) malloc(*length * sizeof(oid));
-    if (indexOid) {
-        memmove(indexOid, prefix, prefixLen * sizeof(oid));
-
-        indexOid[prefixLen] = viewNameLen;
-        for (i = 0; i < viewNameLen; i++)
-            indexOid[viewNameLen + 1 + i] = (oid) vptr->viewName[i];
-
-        indexOid[prefixLen + viewNameLen + 1] = viewSubtreeLen;
-        for (i = 0; i < viewSubtreeLen; i++)
-            indexOid[prefixLen + viewNameLen + 2 + i] =
-                (oid) vptr->viewSubtree[i];
-
-    }
-    return indexOid;
-
-}
-
 struct vacm_viewEntry *
 view_parse_viewEntry(oid * name, size_t name_len)
 {
@@ -1911,3 +1840,4 @@ write_vacmViewSpinLock(int action,
     }
     return SNMP_ERR_NOERROR;
 }
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */ 

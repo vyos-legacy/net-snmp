@@ -1,6 +1,7 @@
 #include <net-snmp/net-snmp-config.h>
 
 #include <net-snmp/library/snmpUDPIPv6Domain.h>
+#include <net-snmp/library/system.h>
 
 #include <net-snmp/types.h>
 
@@ -54,12 +55,17 @@ static const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
 #define SS_FAMILY __ss_family
 #endif
 
+#if defined(darwin)
+#include <stdint.h> /* for uint8_t */
+#endif
+
 #include <net-snmp/types.h>
 #include <net-snmp/output_api.h>
 #include <net-snmp/config_api.h>
 
 #include <net-snmp/library/snmp_transport.h>
 #include <net-snmp/library/snmpSocketBaseDomain.h>
+#include <net-snmp/library/tools.h>
 
 #include "inet_ntop.h"
 #include "inet_pton.h"
@@ -118,11 +124,13 @@ netsnmp_udp6_recv(netsnmp_transport *t, void *buf, int size,
 	}
 
         if (rc >= 0) {
-	    char *str = netsnmp_udp6_fmtaddr(NULL, from, fromlen);
-            DEBUGMSGTL(("netsnmp_udp6",
-			"recvfrom fd %d got %d bytes (from %s)\n", t->sock,
-                        rc, str));
-            free(str);
+            DEBUGIF("netsnmp_udp6") {
+                char *str = netsnmp_udp6_fmtaddr(NULL, from, fromlen);
+                DEBUGMSGTL(("netsnmp_udp6",
+                            "recvfrom fd %d got %d bytes (from %s)\n", t->sock,
+                            rc, str));
+                free(str);
+            }
         } else {
             DEBUGMSGTL(("netsnmp_udp6", "recvfrom fd %d err %d (\"%s\")\n",
 			t->sock, errno, strerror(errno)));
@@ -146,16 +154,20 @@ netsnmp_udp6_send(netsnmp_transport *t, void *buf, int size,
         *olength == sizeof(struct sockaddr_in6)) {
         to = (struct sockaddr *) (*opaque);
     } else if (t != NULL && t->data != NULL &&
-               t->data_length == sizeof(struct sockaddr_in6)) {
+               ((t->data_length == sizeof(struct sockaddr_in6)) ||
+                (t->data_length == sizeof(netsnmp_indexed_addr_pair)))) {
         to = (struct sockaddr *) (t->data);
     }
 
     if (to != NULL && t != NULL && t->sock >= 0) {
-        char *str = netsnmp_udp6_fmtaddr(NULL, (void *)to,
-					    sizeof(struct sockaddr_in6));
-        DEBUGMSGTL(("netsnmp_udp6", "send %d bytes from %p to %s on fd %d\n",
-                    size, buf, str, t->sock));
-        free(str);
+        DEBUGIF("netsnmp_udp6") {
+            char *str = netsnmp_udp6_fmtaddr(NULL, (void *)to,
+                                             sizeof(struct sockaddr_in6));
+            DEBUGMSGTL(("netsnmp_udp6",
+                        "send %d bytes from %p to %s on fd %d\n",
+                        size, buf, str, t->sock));
+            free(str);
+        }
 	while (rc < 0) {
 	    rc = sendto(t->sock, buf, size, 0, to,sizeof(struct sockaddr_in6));
 	    if (rc < 0 && errno != EINTR) {
@@ -178,24 +190,28 @@ netsnmp_udp6_transport(struct sockaddr_in6 *addr, int local)
 {
     netsnmp_transport *t = NULL;
     int             rc = 0;
-    char           *str = NULL;
+
+#ifdef NETSNMP_NO_LISTEN_SUPPORT
+    if (local)
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
 
     if (addr == NULL || addr->sin6_family != AF_INET6) {
         return NULL;
     }
 
-    t = (netsnmp_transport *) malloc(sizeof(netsnmp_transport));
+    t = SNMP_MALLOC_TYPEDEF(netsnmp_transport);
     if (t == NULL) {
         return NULL;
     }
 
-    str = netsnmp_udp6_fmtaddr(NULL, (void *) addr,
-				  sizeof(struct sockaddr_in6));
-    DEBUGMSGTL(("netsnmp_udp6", "open %s %s\n", local ? "local" : "remote",
-                str));
-    free(str);
-
-    memset(t, 0, sizeof(netsnmp_transport));
+    DEBUGIF("netsnmp_udp6") {
+        char *str = netsnmp_udp6_fmtaddr(NULL, (void *) addr,
+                                         sizeof(struct sockaddr_in6));
+        DEBUGMSGTL(("netsnmp_udp6", "open %s %s\n", local ? "local" : "remote",
+                    str));
+        free(str);
+    }
 
     t->domain = netsnmp_UDPIPv6Domain;
     t->domain_length =
@@ -210,8 +226,9 @@ netsnmp_udp6_transport(struct sockaddr_in6 *addr, int local)
     _netsnmp_udp_sockopt_set(t->sock, local);
 
     if (local) {
+#ifndef NETSNMP_NO_LISTEN_SUPPORT
         /*
-         * This session is inteneded as a server, so we must bind on to the
+         * This session is intended as a server, so we must bind on to the
          * given IP address, which may include an interface address, or could
          * be INADDR_ANY, but certainly includes a port number.
          */
@@ -245,20 +262,23 @@ netsnmp_udp6_transport(struct sockaddr_in6 *addr, int local)
         t->local_length = 18;
         t->data = NULL;
         t->data_length = 0;
+#else /* NETSNMP_NO_LISTEN_SUPPORT */
+        return NULL;
+#endif /* NETSNMP_NO_LISTEN_SUPPORT */
     } else {
         /*
          * This is a client session.  Save the address in the
          * transport-specific data pointer for later use by netsnmp_udp6_send.
          */
 
-        t->data = malloc(sizeof(struct sockaddr_in6));
+        t->data = malloc(sizeof(netsnmp_indexed_addr_pair));
         if (t->data == NULL) {
             netsnmp_socketbase_close(t);
             netsnmp_transport_free(t);
             return NULL;
         }
         memcpy(t->data, addr, sizeof(struct sockaddr_in6));
-        t->data_length = sizeof(struct sockaddr_in6);
+        t->data_length = sizeof(netsnmp_indexed_addr_pair);
         t->remote = (unsigned char*)malloc(18);
         if (t->remote == NULL) {
             netsnmp_socketbase_close(t);
@@ -530,7 +550,7 @@ netsnmp_udp6_parse_security(const char *token, char *param)
 
                 hints.ai_family = AF_INET6;
                 hints.ai_socktype = SOCK_DGRAM;
-                gai_error = getaddrinfo(source, NULL, &hints, &res);
+                gai_error = netsnmp_getaddrinfo(source, NULL, &hints, &res);
                 if (gai_error != 0) {
                     config_perror(gai_strerror(gai_error));
                     return;
@@ -743,8 +763,9 @@ netsnmp_udpipv6_ctor(void)
 {
     udp6Domain.name = netsnmp_UDPIPv6Domain;
     udp6Domain.name_length = sizeof(netsnmp_UDPIPv6Domain) / sizeof(oid);
+    udp6Domain.f_create_from_tstring     = NULL;
     udp6Domain.f_create_from_tstring_new = netsnmp_udp6_create_tstring;
-    udp6Domain.f_create_from_ostring = netsnmp_udp6_create_ostring;
+    udp6Domain.f_create_from_ostring     = netsnmp_udp6_create_ostring;
     udp6Domain.prefix = (const char**)calloc(5, sizeof(char *));
     udp6Domain.prefix[0] = "udp6";
     udp6Domain.prefix[1] = "ipv6";

@@ -86,6 +86,8 @@ xwinsock2)
   AC_SEARCH_LIBS(socket, socket,,AC_MSG_ERROR([socket(2) not found.]))
   AC_SEARCH_LIBS(gethostbyname, [nsl socket])
   AC_CHECK_FUNCS(gethostbyname)
+  AC_SEARCH_LIBS(gethostbyaddr, [nsl socket])
+  AC_CHECK_FUNCS(gethostbyaddr)
   ;;
 esac
 
@@ -156,25 +158,14 @@ NETSNMP_SEARCH_LIBS(kstat_lookup, kstat,
         LNETSNMPLIBS)
 
 
-#   libkvm
 #
-NETSNMP_SEARCH_LIBS(kvm_read, kvm,,,, LAGENTLIBS)
-NETSNMP_SEARCH_LIBS(kvm_openfiles, kvm,,,, LAGENTLIBS)
-NETSNMP_SEARCH_LIBS(kvm_getprocs, kvm,,,, LMIBLIBS)
-NETSNMP_SEARCH_LIBS(kvm_getswapinfo, kvm,,,, LMIBLIBS)
-netsnmp_save_LIBS="$LIBS"
-LIBS="$LAGENTLIBS $LMIBLIBS $LIBS"
-AC_CHECK_FUNCS([kvm_openfiles kvm_getprocs kvm_getswapinfo])
-LIBS="$netsnmp_save_LIBS"
-
-
-#   dynamic module support
+#   librt
 #
-NETSNMP_SEARCH_LIBS(dlopen, dl,,,,LMIBLIBS)
-netsnmp_save_LIBS="$LIBS"
-LIBS="$LMIBLIBS $LIBS"
-AC_CHECK_FUNCS([dlopen])
-LIBS="$netsnmp_save_LIBS"
+
+NETSNMP_SEARCH_LIBS(clock_gettime, rt,
+        AC_DEFINE(HAVE_CLOCK_GETTIME, 1,
+                [Define to 1 if you have the `clock_gettime' library]),,,
+        LNETSNMPLIBS)
 
 
 ##
@@ -196,6 +187,12 @@ if test $? -eq 0 ; then
                         [define if you have devstat_getdevs()]),,,LMIBLIBS)
 fi
 
+#   libpci
+#        (for if-mib description)
+#
+NETSNMP_SEARCH_LIBS(pci_lookup_name, pci,
+	AC_DEFINE(HAVE_PCI_LOOKUP_NAME, 1,
+		[define if you have pci_lookup_name()]),,,LMIBLIBS)
 
 #   LM-SENSORS-MIB support
 #
@@ -281,6 +278,12 @@ if test "x$tryopenssl" != "xno" -a "x$tryopenssl" != "xinternal"; then
             AC_CHECK_LIB(${CRYPTO}, AES_cfb128_encrypt, 
                 AC_DEFINE(HAVE_AES_CFB128_ENCRYPT, 1,
                     [Define to 1 if you have the `AES_cfb128_encrypt' function.]))
+
+            AC_CHECK_LIB(${CRYPTO}, EVP_MD_CTX_create,
+                AC_DEFINE([HAVE_EVP_MD_CTX_CREATE], [],
+                    [Define to 1 if you have the `EVP_MD_CTX_create' function.])
+                AC_DEFINE([HAVE_EVP_MD_CTX_DESTROY], [],
+                    [Define to 1 if you have the `EVP_MD_CTX_destroy' function.]))
         fi
         if echo " $transport_result_list " | $GREP "DTLS" > /dev/null; then
 	    AC_CHECK_LIB(ssl, DTLSv1_method,
@@ -312,6 +315,17 @@ elif test "x$askedpkcs" = "xyes"; then
         AC_DEFINE(HAVE_LIBPKCS11)
         LIBPKCS11="-lpkcs11")
 fi
+if test "x$TLSPROG" = "xyes"; then
+   AC_CHECK_DECL([EVP_sha224],
+    : ,
+    AC_DEFINE([HAVE_EVP_SHA224], [], [Define if you have EVP_sha224/256 in openssl]),
+    [[#include <openssl/evp.h>]])
+   AC_CHECK_DECL([EVP_sha384],
+    : ,
+    AC_DEFINE([HAVE_EVP_SHA384], [], [Define if you have EVP_sha384/256 in openssl]),
+    [[#include <openssl/evp.h>]])
+fi
+
 LIBS=$NONAGENTLIBS	 # restore old libraries
 if test "x$SSHPROG" = "xyes"; then
     NETSNMP_BUILD_SSH_PROG_TRUE=''
@@ -320,17 +334,40 @@ else
     NETSNMP_BUILD_SSH_PROG_TRUE='#'
     NETSNMP_BUILD_SSH_PROG_FALSE=''
 fi
-if test "x$TLSPROG" = "xyes"; then
+if test "x$TLSPROG" = "xyes" -a "x$enable_read_only" != "xyes" ; then
     NETSNMP_BUILD_TLS_PROG_TRUE=''
     NETSNMP_BUILD_TLS_PROG_FALSE='#'
 else
     NETSNMP_BUILD_TLS_PROG_TRUE='#'
     NETSNMP_BUILD_TLS_PROG_FALSE=''
 fi
+if echo " ${security_mod_list} " | grep ' usm ' ; then
+    if test "x$enable_read_only" != "xyes" ; then
+    	NETSNMP_BUILD_USM_PROG_TRUE=''
+    	NETSNMP_BUILD_USM_PROG_FALSE='#'
+    else
+    	NETSNMP_BUILD_USM_PROG_TRUE='#'
+    	NETSNMP_BUILD_USM_PROG_FALSE=''
+    fi
+else
+    NETSNMP_BUILD_USM_PROG_TRUE='#'
+    NETSNMP_BUILD_USM_PROG_FALSE=''
+fi
+if test "x$enable_read_only" != "xyes" ; then
+    NETSNMP_BUILD_SET_PROG_TRUE=""
+    NETSNMP_BUILD_SET_PROG_FALSE="#"
+else
+    NETSNMP_BUILD_SET_PROG_TRUE="#"
+    NETSNMP_BUILD_SET_PROG_FALSE=""
+fi
 AC_SUBST(NETSNMP_BUILD_SSH_PROG_TRUE)
 AC_SUBST(NETSNMP_BUILD_SSH_PROG_FALSE)
 AC_SUBST(NETSNMP_BUILD_TLS_PROG_TRUE)
 AC_SUBST(NETSNMP_BUILD_TLS_PROG_FALSE)
+AC_SUBST(NETSNMP_BUILD_USM_PROG_TRUE)
+AC_SUBST(NETSNMP_BUILD_USM_PROG_FALSE)
+AC_SUBST(NETSNMP_BUILD_SET_PROG_TRUE)
+AC_SUBST(NETSNMP_BUILD_SET_PROG_FALSE)
 
 #
 # If we're using internal crypto support we need to compile in extra files
@@ -378,12 +415,11 @@ if test "$with_libwrap" != "no"; then
   LIBS="$LIBS -lwrap"
   AC_MSG_CHECKING([for TCP wrappers library -lwrap])
   # XXX: should check for hosts_ctl
-  AC_TRY_LINK(
-    [#include <sys/types.h>
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <sys/types.h>
      #include <tcpd.h>
      int allow_severity = 0;
-     int deny_severity  = 0;],
-    [hosts_access((void *)0)],
+     int deny_severity  = 0;]],
+    [[hosts_access((void *)0)]])],
     [AC_MSG_RESULT([yes])
      AC_DEFINE(NETSNMP_USE_LIBWRAP)
      test "$with_libwrap" != no -a "$with_libwrap" != yes && _wraplibs="-L$with_libwrap/lib"
@@ -393,12 +429,11 @@ if test "$with_libwrap" != "no"; then
      AC_CHECK_FUNC(yp_get_default_domain, ,
        AC_CHECK_LIB(nsl, yp_get_default_domain))
      AC_MSG_CHECKING([for TCP wrappers library -lwrap linked with -lnsl])
-     AC_TRY_LINK(
-       [#include <sys/types.h>
+     AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <sys/types.h>
 	#include <tcpd.h>
 	int allow_severity = 0;
-	int deny_severity  = 0;],
-       [hosts_access((void *)0)],
+	int deny_severity  = 0;]],
+       [[hosts_access((void *)0)]])],
        [AC_MSG_RESULT(yes)
 	AC_DEFINE(NETSNMP_USE_LIBWRAP)
 	test "$with_libwrap" != no -a "$with_libwrap" != yes && _wraplibs="-L$with_libwrap/lib"
@@ -424,6 +459,17 @@ if test "x$with_mysql" = "xyes" ; then
   fi
   MYSQL_LIBS=`$MYSQLCONFIG --libs`
   MYSQL_INCLUDES=`$MYSQLCONFIG --cflags`
+  AC_MSG_CHECKING([whether MY_INIT() works])
+  _libs="${LIBS}"
+  _cppflags="${CPPFLAGS}"
+  LIBS="${LIBS} ${MYSQL_LIBS}"
+  CPPFLAGS="${CPPFLAGS} ${MYSQL_INCLUDES}"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <mysql/my_global.h>
+               #include <mysql/my_sys.h>]], [[MY_INIT("my_init_test")]])],[AC_MSG_RESULT(yes)],[AC_MSG_RESULT(no)
+               AC_DEFINE([HAVE_BROKEN_LIBMYSQLCLIENT], 1,
+	                 [Define if using MY_INIT() causes a linker error])])
+  CPPFLAGS="${_cppflags}"
+  LIBS="${_libs}"
   AC_MSG_CACHE_ADD(MYSQL Trap Logging:         enabled)
 else
   AC_MSG_CACHE_ADD(MYSQL Trap Logging:         unavailable)

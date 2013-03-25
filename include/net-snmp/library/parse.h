@@ -32,9 +32,18 @@ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
 SOFTWARE.
 ******************************************************************/
 
-#define MAXLABEL        64      /* maximum characters in a label */
+#define NETSNMP_MAXLABEL 64      /* maximum characters in a label */
 #define MAXTOKEN        128     /* maximum characters in a token */
 #define MAXQUOTESTR     4096    /* maximum characters in a quoted string */
+
+/*
+ * MAXLABEL appears to be unused in code, and conflicts with
+ * <arpa/nameser.h>. Only define it if requested. This will
+ * cause problems if local DNSSEC validation is also enabled.
+ */
+#ifdef UCD_COMPATIBLE
+#define MAXLABEL        NETSNMP_MAXLABEL
+#endif
 
     struct variable_list;
 
@@ -105,6 +114,7 @@ SOFTWARE.
         char           *reference;    /* references (a quoted string) */
         int             reported;       /* 1=report started in print_subtree... */
         char           *defaultValue;
+       char	       *parseErrorString; /* Contains the error string if there are errors in parsing MIBs */
     };
 
     /*

@@ -15,214 +15,74 @@
 #include <linux/types.h>
 #include <asm/types.h>
 
-#ifdef HAVE_LINUX_RTNETLINK_H
-#include <linux/rtnetlink.h>
+static int _load_v4(netsnmp_arp_access *access);
 
-static void
-fillup_entry_info(netsnmp_arp_entry *entry, const struct ndmsg *r, int len)
+netsnmp_arp_access *
+netsnmp_access_arp_create(u_int init_flags,
+                          NetsnmpAccessArpUpdate *update_hook,
+                          NetsnmpAccessArpGC *gc_hook,
+                          int *cache_timeout, int *cache_flags,
+                          char *cache_expired)
 {
-    struct rtattr *rta;
+    netsnmp_arp_access *access;
 
-    entry->if_index = r->ndm_ifindex;
-    entry->arp_ipaddress_len = 0;
-    entry->arp_physaddress_len = 0;
-
-    for (rta  = RTM_RTA(r); RTA_OK(rta, len); rta = RTA_NEXT(rta,len)) {
-        size_t len = RTA_PAYLOAD(rta);
-
-        switch(rta->rta_type) {
-        case NDA_DST:
-            entry->arp_ipaddress_len = len;
-            memcpy(entry->arp_ipaddress, RTA_DATA(rta), len);
-            break;
-
-        case NDA_LLADDR:
-            entry->arp_physaddress_len = len;
-            memcpy(entry->arp_physaddress, RTA_DATA(rta), len);
-            break;
-        }
+    access = SNMP_MALLOC_TYPEDEF(netsnmp_arp_access);
+    if (NULL == access) {
+        snmp_log(LOG_ERR,"malloc error in netsnmp_access_arp_create\n");
+        return NULL;
     }
 
-    switch (r->ndm_state) {
-    case NUD_INCOMPLETE:
-        entry->arp_state = INETNETTOMEDIASTATE_INCOMPLETE;
-        break;
-    case NUD_REACHABLE:
-    case NUD_PERMANENT:
-        entry->arp_state = INETNETTOMEDIASTATE_REACHABLE;
-        break;
-    case NUD_STALE:
-        entry->arp_state = INETNETTOMEDIASTATE_STALE;
-        break;
-    case NUD_DELAY:
-        entry->arp_state = INETNETTOMEDIASTATE_DELAY;
-        break;
-    case NUD_PROBE:
-        entry->arp_state = INETNETTOMEDIASTATE_PROBE;
-        break;
-    case NUD_FAILED:
-        entry->arp_state = INETNETTOMEDIASTATE_INVALID;
-        break;
-    case NUD_NONE:
-        entry->arp_state = INETNETTOMEDIASTATE_UNKNOWN;
-        break;
-    default:
-        snmp_log(LOG_ERR, "Unrecognized ARP entry state %d", r->ndm_state);
-        break;
-    }
+    access->arch_magic = NULL;
+    access->magic = NULL;
+    access->update_hook = update_hook;
+    access->gc_hook = gc_hook;
+    access->synchronized = 0;
 
-    switch (r->ndm_state) {
-    case NUD_INCOMPLETE:
-    case NUD_FAILED:
-    case NUD_NONE:
-        entry->arp_type = INETNETTOMEDIATYPE_INVALID;
-        break;
-    case NUD_REACHABLE:
-    case NUD_STALE:
-    case NUD_DELAY:
-    case NUD_PROBE:
-        entry->arp_type = INETNETTOMEDIATYPE_DYNAMIC;
-        break;
-    case NUD_PERMANENT:
-        entry->arp_type = INETNETTOMEDIATYPE_STATIC;
-        break;
-    default:
-        entry->arp_type = INETNETTOMEDIATYPE_LOCAL;
-        break;
-    }
+    if (cache_timeout != NULL)
+        *cache_timeout = 5;
+    if (cache_flags != NULL)
+        *cache_flags |= NETSNMP_CACHE_DONT_FREE_BEFORE_LOAD
+                        | NETSNMP_CACHE_AUTO_RELOAD;
+    access->cache_expired = cache_expired;
+
+    return access;
 }
 
-static int
-_load_netlink(int sd, netsnmp_container *container, int family, u_long *index)
+int netsnmp_access_arp_delete(netsnmp_arp_access *access)
 {
-    struct {
-                struct nlmsghdr n;
-                struct ndmsg r;
-    } req;
-    int end_of_message = 0;
+    if (NULL == access)
+        return 0;
 
-    memset(&req, 0, sizeof(req));
-    req.n.nlmsg_len = NLMSG_LENGTH (sizeof(struct ndmsg));
-    req.n.nlmsg_flags = NLM_F_REQUEST | NLM_F_ROOT;
-    req.n.nlmsg_type = RTM_GETNEIGH;
+    netsnmp_access_arp_unload(access);
+    free(access);
 
-    req.r.ndm_family = family;
-
-    if(send(sd, &req, sizeof(req), 0) < 0) {
-        snmp_log_perror("Sending request failed\n");
-        return -1;
-     }
-
-    do {
-        struct nlmsghdr *n;
-        char rcvbuf[4096];
-        int msglen;
-
-        msglen = recv(sd, rcvbuf, sizeof(rcvbuf), 0);
-        if (msglen < 0) {
-            snmp_log_perror("Receiving netlink request failed\n");
-            return -1;
-       }
-
-        if (msglen == 0) {
-            snmp_log(LOG_ERR,"End of file\n");
-            return -1;
-        }
-
-        /*
-         * Walk all of the returned messages
-         */
-        for (n = (struct nlmsghdr *)rcvbuf; NLMSG_OK(n, msglen);
-             n = NLMSG_NEXT(n, msglen)) {
-                struct ndmsg *r;
-                netsnmp_arp_entry *entry;
-
-            if (n->nlmsg_type == NLMSG_ERROR) {
-                struct nlmsgerr *err = (struct nlmsgerr*) NLMSG_DATA(n);
-                if (n->nlmsg_len < NLMSG_LENGTH(sizeof(struct nlmsgerr)))
-                    snmp_log(LOG_ERR, "kernel netlink error truncated\n");
-                else
-                    snmp_log(LOG_ERR, "kernel netlink error %s\n",
-                             strerror(-err->error));
-                return -1;
-            }
-
-            if (n->nlmsg_type & NLMSG_DONE) {
-                end_of_message = 1;
-                break;
-            }
-
-            if (n->nlmsg_type != RTM_NEWNEIGH) {
-                snmp_log(LOG_ERR, "unexpected message of type %d in nlmsg\n",
-                         n->nlmsg_type);
-                continue;
-            }
-
-            r = NLMSG_DATA(n);
-            if (r->ndm_family != family) {
-                snmp_log(LOG_ERR, "Wrong family in netlink response %d\n",
-                         r->ndm_family);
-                break;
-            }
-
-            if (r->ndm_state == NUD_NOARP)
-                continue;
-
-            entry = netsnmp_access_arp_entry_create();
-
-            fillup_entry_info (entry, r, RTM_PAYLOAD(n));
-
-            if (entry->arp_ipaddress_len == 0 ||
-                entry->arp_physaddress_len == 0) {
-                DEBUGMSGTL(("access:arp:load", "skipping netlink message that"
-                            " did not contain valid ARP information\n"));
-                netsnmp_access_arp_entry_free(entry);
-                continue;
-            }
-
-            entry->ns_arp_index = *++index;
-            if (CONTAINER_INSERT(container, entry) < 0) {
-                DEBUGMSGTL(("access:arp:load",
-                            "error arp insert into container failed.\n"));
-                netsnmp_access_arp_entry_free(entry);
-                return -1;
-            }
-        }
-    } while (!end_of_message);
-
-     return 0;
+    return 0;
 }
 
-int
-netsnmp_access_arp_container_arch_load(netsnmp_container *container)
+int netsnmp_access_arp_load(netsnmp_arp_access *access)
 {
-    u_long          count = 0;
-    int             sd, rc;
+    int rc = 0;
 
-    DEBUGMSGTL(("access:arp:container", "load\n"));
+    access->generation++;
+    rc =_load_v4(access);
+    access->gc_hook(access);
+    access->synchronized = (rc == 0);
 
-    if((sd = socket (PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE)) < 0) {
-        snmp_log(LOG_ERR,"Unable to create netlink socket\n");
-        return -2;
-    }
-
-    rc = _load_netlink(sd, container, AF_INET, &count);
- 
-#ifdef NETSNMP_ENABLE_IPV6
-    if(rc == 0)
-        rc = _load_netlink(sd, container, AF_INET6, &count);
-#endif
-
-    close(sd);
     return rc;
 }
-#else
+
+int netsnmp_access_arp_unload(netsnmp_arp_access *access)
+{
+    access->synchronized = 0;
+
+    return 0;
+}
+
 /**
  */
-int
-netsnmp_access_arp_container_arch_load(netsnmp_container *container)
+static int
+_load_v4(netsnmp_arp_access *access)
 {
-    int rc = 0, idx_offset = 0;
     FILE           *in;
     char            line[128];
     int             rc = 0;
@@ -231,7 +91,7 @@ netsnmp_access_arp_container_arch_load(netsnmp_container *container)
     char           *arp_token;
     int             i;
 
-    netsnmp_assert(NULL != container);
+    netsnmp_assert(NULL != access);
 
 #define PROCFILE "/proc/net/arp"
     if (!(in = fopen(PROCFILE, "r"))) {
@@ -278,6 +138,7 @@ netsnmp_access_arp_container_arch_load(netsnmp_container *container)
         /*
          * look up ifIndex
          */
+        entry->generation = access->generation;
         entry->if_index = netsnmp_access_interface_index_find(ifname);
         if(0 == entry->if_index) {
             snmp_log(LOG_ERR,"couldn't find ifIndex for '%s', skipping\n",
@@ -290,7 +151,7 @@ netsnmp_access_arp_container_arch_load(netsnmp_container *container)
          * now that we've passed all the possible 'continue', assign
          * index offset.
          */
-        entry->ns_arp_index = ++idx_offset;
+        /* entry->ns_arp_index = ++idx_offset; */
 
         /*
          * parse ip addr
@@ -345,15 +206,9 @@ netsnmp_access_arp_container_arch_load(netsnmp_container *container)
         /*
          * add entry to container
          */
-        if (CONTAINER_INSERT(container, entry) < 0)
-        {
-            DEBUGMSGTL(("access:arp:container","error with arp_entry: insert into container failed.\n"));
-            netsnmp_access_arp_entry_free(entry);
-            continue;
-        }
+        access->update_hook(access, entry);
     }
 
     fclose(in);
-    return rc;
+    return 0;
 }
-#endif

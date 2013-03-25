@@ -22,6 +22,8 @@
 #define IN_SNMP_VARS_C
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
+
 #include <signal.h>
 #if HAVE_STRING_H
 #include <string.h>
@@ -64,6 +66,10 @@
 #include "agentx/subagent.h"
 #include "agentx/client.h"
 #endif
+
+netsnmp_feature_child_of(agent_registry_all, libnetsnmpagent)
+
+netsnmp_feature_child_of(unregister_mib_table_row, agent_registry_all)
 
 /** @defgroup agent_lookup_cache Lookup cache, storing the registered OIDs.
  *     Maintain the cache used for locating sub-trees and OIDs.
@@ -214,7 +220,7 @@ lookup_cache_replace(lookup_cache *ptr,
  *  @see snmp_oid_compare()
  */
 NETSNMP_STATIC_INLINE lookup_cache *
-lookup_cache_find(const char *context, oid *name, size_t name_len,
+lookup_cache_find(const char *context, const oid *name, size_t name_len,
                   int *retcmp) {
     lookup_cache_context *cptr;
     lookup_cache *ret = NULL;
@@ -549,6 +555,8 @@ netsnmp_subtree_change_prev(netsnmp_subtree *ptr, netsnmp_subtree *theprev)
                                &ptr->oid_off);
 }
 
+netsnmp_feature_child_of(netsnmp_subtree_compare,netsnmp_unused)
+#ifndef NETSNMP_FEATURE_REMOVE_NETSNMP_SUBTREE_COMPARE
 /** Compares OIDs of given subtrees.
  *
  *  @param ap,bp Pointers to the subtrees to be compared.
@@ -562,6 +570,7 @@ netsnmp_subtree_compare(const netsnmp_subtree *ap, const netsnmp_subtree *bp)
 {
     return snmp_oid_compare(ap->name_a, ap->namelen, bp->name_a, bp->namelen);
 }
+#endif /* NETSNMP_FEATURE_REMOVE_NETSNMP_SUBTREE_COMPARE */
 
 /** Joins the given subtree with the current tree.
  *  Trees are joined and the one supplied as parameter is freed.
@@ -733,7 +742,7 @@ netsnmp_subtree_split(netsnmp_subtree *current, oid name[], int name_len)
 
 /** Loads the subtree under given context name.
  *
- *  @param root The subtree to be loaded into current subtree.
+ *  @param new_sub The subtree to be loaded into current subtree.
  *
  *  @param context_name Text name of the context we're searching for.
  *
@@ -742,9 +751,8 @@ netsnmp_subtree_split(netsnmp_subtree *current, oid name[], int name_len)
 int
 netsnmp_subtree_load(netsnmp_subtree *new_sub, const char *context_name)
 {
-    netsnmp_subtree *tree1, *tree2, *new2;
+    netsnmp_subtree *tree1, *tree2;
     netsnmp_subtree *prev, *next;
-    int             res, rc = 0;
 
     if (new_sub == NULL) {
         return MIB_REGISTERED_OK;       /* Degenerate case */
@@ -786,7 +794,7 @@ netsnmp_subtree_load(netsnmp_subtree *new_sub, const char *context_name)
     /*  Handle new subtrees that start in virgin territory.  */
 
     if (tree1 == NULL) {
-	new2 = NULL;
+        netsnmp_subtree *new2 = NULL;
 	/*  Is there any overlap with later subtrees?  */
 	if (tree2 && snmp_oid_compare(new_sub->end_a, new_sub->end_len,
 				      tree2->start_a, tree2->start_len) > 0) {
@@ -845,10 +853,8 @@ netsnmp_subtree_load(netsnmp_subtree *new_sub, const char *context_name)
 	    If the new subtree extends beyond this existing region,
 	            split it, and recurse to merge the two parts.  */
 
-	rc = snmp_oid_compare(new_sub->end_a, new_sub->end_len, 
-			      tree1->end_a, tree1->end_len);
-
-        switch (rc) {
+	switch (snmp_oid_compare(new_sub->end_a, new_sub->end_len,
+                                 tree1->end_a, tree1->end_len)) {
 
 	case -1:
 	    /*  Existing subtree contains new one.  */
@@ -919,15 +925,18 @@ netsnmp_subtree_load(netsnmp_subtree *new_sub, const char *context_name)
 
 	case  1:
 	    /*  New subtree contains the existing one.  */
-	    new2 = netsnmp_subtree_split(new_sub, tree1->end_a,tree1->end_len);
-	    res = netsnmp_subtree_load(new_sub, context_name);
-	    if (res != MIB_REGISTERED_OK) {
-                netsnmp_remove_subtree(new2);
-		netsnmp_subtree_free(new2);
-		return res;
-	    }
-	    return netsnmp_subtree_load(new2, context_name);
-	}
+            {
+                netsnmp_subtree *new2 =
+                    netsnmp_subtree_split(new_sub, tree1->end_a,tree1->end_len);
+                int res = netsnmp_subtree_load(new_sub, context_name);
+                if (res != MIB_REGISTERED_OK) {
+                    netsnmp_remove_subtree(new2);
+                    netsnmp_subtree_free(new2);
+                    return res;
+                }
+                return netsnmp_subtree_load(new2, context_name);
+            }
+        }
     }
     return 0;
 }
@@ -955,7 +964,7 @@ clear_subtree (netsnmp_subtree *sub) {
 }
 
 netsnmp_subtree *
-netsnmp_subtree_find_prev(oid *name, size_t len, netsnmp_subtree *subtree,
+netsnmp_subtree_find_prev(const oid *name, size_t len, netsnmp_subtree *subtree,
 			  const char *context_name)
 {
     lookup_cache *lookup_cache = NULL;
@@ -1026,7 +1035,7 @@ netsnmp_subtree_find_prev(oid *name, size_t len, netsnmp_subtree *subtree,
 }
 
 netsnmp_subtree *
-netsnmp_subtree_find_next(oid *name, size_t len,
+netsnmp_subtree_find_next(const oid *name, size_t len,
 			  netsnmp_subtree *subtree, const char *context_name)
 {
     netsnmp_subtree *myptr = NULL;
@@ -1049,7 +1058,7 @@ netsnmp_subtree_find_next(oid *name, size_t len,
 }
 
 netsnmp_subtree *
-netsnmp_subtree_find(oid *name, size_t len, netsnmp_subtree *subtree, 
+netsnmp_subtree_find(const oid *name, size_t len, netsnmp_subtree *subtree, 
 		     const char *context_name)
 {
     netsnmp_subtree *myptr;
@@ -1076,8 +1085,22 @@ netsnmp_subtree_find(oid *name, size_t len, netsnmp_subtree *subtree,
 
 /** Registers a MIB handler.
  *
+ *  @param moduleName
+ *  @param var
+ *  @param varsize
+ *  @param numvars
+ *  @param  mibloc
+ *  @param mibloclen
+ *  @param priority
+ *  @param range_subid
+ *  @param range_ubound
+ *  @param  ss
+ *  @param context
+ *  @param timeout
+ *  @param flags
  *  @param reginfo Registration handler structure.
  *                 In a case of failure, it will be freed.
+ *  @param perform_callback
  *
  *  @return gives MIB_REGISTERED_OK or MIB_* error code.
  *
@@ -1103,7 +1126,7 @@ netsnmp_register_mib(const char *moduleName,
                      int perform_callback)
 {
     netsnmp_subtree *subtree, *sub2;
-    int             res, i;
+    int             res;
     struct register_parameters reg_parms;
     int old_lookup_cache_val = netsnmp_get_lookup_cache_size();
 
@@ -1184,6 +1207,7 @@ netsnmp_register_mib(const char *moduleName,
 	rest of the range.  */
 
     if (res == MIB_REGISTERED_OK && range_subid != 0) {
+        int i;
 	for (i = mibloc[range_subid - 1] + 1; i <= (int)range_ubound; i++) {
 	    sub2 = netsnmp_subtree_deepcopy(subtree);
 
@@ -1379,6 +1403,7 @@ register_mib_detach(void)
  *                     If range_subid is zero, then this parameter is ignored.
  *
  *  @param ss 
+ *  @param context
  *  @param timeout 
  *  @param flags 
  *
@@ -1394,7 +1419,7 @@ register_mib_context(const char *moduleName,
                      struct variable *var,
                      size_t varsize,
                      size_t numvars,
-                     oid * mibloc,
+                     const oid * mibloc,
                      size_t mibloclen,
                      int priority,
                      int range_subid,
@@ -1459,7 +1484,7 @@ register_mib_range(const char *moduleName,
                    struct variable *var,
                    size_t varsize,
                    size_t numvars,
-                   oid * mibloc,
+                   const oid * mibloc,
                    size_t mibloclen,
                    int priority,
                    int range_subid, oid range_ubound, netsnmp_session * ss)
@@ -1508,7 +1533,7 @@ register_mib_priority(const char *moduleName,
                       struct variable *var,
                       size_t varsize,
                       size_t numvars,
-                      oid * mibloc, size_t mibloclen, int priority)
+                      const oid * mibloc, size_t mibloclen, int priority)
 {
     return register_mib_range(moduleName, var, varsize, numvars,
                               mibloc, mibloclen, priority, 0, 0, NULL);
@@ -1547,7 +1572,7 @@ int
 register_mib(const char *moduleName,
              struct variable *var,
              size_t varsize,
-             size_t numvars, oid * mibloc, size_t mibloclen)
+             size_t numvars, const oid * mibloc, size_t mibloclen)
 {
     return register_mib_priority(moduleName, var, varsize, numvars,
                                  mibloc, mibloclen, DEFAULT_MIB_PRIORITY);
@@ -1574,6 +1599,7 @@ netsnmp_subtree_unload(netsnmp_subtree *sub, netsnmp_subtree *prev, const char *
         DEBUGMSGOID(("register_mib", sub->start_a, sub->start_len));
     } else {
         DEBUGMSG(("register_mib", "[NIL]"));
+        return;
     }
     DEBUGMSG(("register_mib", ", "));
     if (prev != NULL) {
@@ -1654,7 +1680,7 @@ unregister_mib_context(oid * name, size_t len, int priority,
                        int range_subid, oid range_ubound,
                        const char *context)
 {
-    netsnmp_subtree *list, *myptr;
+    netsnmp_subtree *list, *myptr = NULL;
     netsnmp_subtree *prev, *child, *next; /* loop through children */
     struct register_parameters reg_parms;
     int old_lookup_cache_val = netsnmp_get_lookup_cache_size();
@@ -1748,6 +1774,7 @@ unregister_mib_context(oid * name, size_t len, int priority,
     return MIB_UNREGISTERED_OK;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_UNREGISTER_MIB_TABLE_ROW
 int
 netsnmp_unregister_mib_table_row(oid * name, size_t len, int priority,
                                  int var_subid, oid range_ubound,
@@ -1826,6 +1853,7 @@ netsnmp_unregister_mib_table_row(oid * name, size_t len, int priority,
 
     return 0;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_UNREGISTER_MIB_TABLE_ROW */
 
 /**
  * Unregisters a module registered against a given OID (or range) in the default context. 
@@ -2124,9 +2152,10 @@ netsnmp_acm_check_subtree(netsnmp_pdu *pdu, oid *name, size_t namelen)
     return 1;
 }
 
-
+netsnmp_feature_child_of(get_session_for_oid,netsnmp_unused)
+#ifndef NETSNMP_FEATURE_REMOVE_GET_SESSION_FOR_OID
 netsnmp_session *
-get_session_for_oid(oid *name, size_t len, const char *context_name)
+get_session_for_oid(const oid *name, size_t len, const char *context_name)
 {
     netsnmp_subtree *myptr;
 
@@ -2144,6 +2173,7 @@ get_session_for_oid(oid *name, size_t len, const char *context_name)
         return myptr->session;
     }
 }
+#endif /* NETSNMP_FEATURE_REMOVE_GET_SESSION_FOR_OID */
 
 void
 setup_tree(void)
@@ -2279,15 +2309,9 @@ dump_registry(void)
         }
     }
 
-    if (s != NULL) {
-        SNMP_FREE(s);
-    }
-    if (e != NULL) {
-        SNMP_FREE(e);
-    }
-    if (v != NULL) {
-        SNMP_FREE(v);
-    }
+    SNMP_FREE(s);
+    SNMP_FREE(e);
+    SNMP_FREE(v);
 
     dump_idx_registry();
 }

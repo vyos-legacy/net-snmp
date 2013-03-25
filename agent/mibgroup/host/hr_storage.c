@@ -106,8 +106,7 @@
 #endif                          /* if HAVE_SYS_SYSCTL_H */
 #endif                          /* ifndef dynix */
 
-#if (defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)) && HAVE_LI
-BPERFSTAT_H
+#if (defined(aix4) || defined(aix5) || defined(aix6) || defined(aix7)) && HAVE_LIBPERFSTAT_H
 #ifdef HAVE_SYS_PROTOSW_H
 #include <sys/protosw.h>
 #endif
@@ -596,8 +595,7 @@ really_try_next:
         return (u_char *) storage_type_id;
     case HRSTORE_DESCR:
         if (store_idx > NETSNMP_MEM_TYPE_MAX) {
-            strncpy(string, HRFS_entry->HRFS_mount, sizeof(string)-1);
-            string[ sizeof(string)-1 ] = 0;
+            strlcpy(string, HRFS_entry->HRFS_mount, sizeof(string));
             *var_len = strlen(string);
             return (u_char *) string;
         } else {

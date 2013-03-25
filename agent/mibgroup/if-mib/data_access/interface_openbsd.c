@@ -1,12 +1,15 @@
 /*
  *  Interface MIB architecture support
  *
- * $Id: interface_openbsd.c 18978 2010-06-13 21:02:03Z dts12 $
+ * $Id$
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include "mibII/mibII_common.h"
 #include "if-mib/ifTable/ifTable_constants.h"
+
+netsnmp_feature_child_of(interface_arch_set_admin_status, interface_all)
 
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
@@ -340,12 +343,10 @@ netsnmp_openbsd_interface_get_if_speed(char *name, u_int *speed, u_int *speed_hi
         return 0;
     }
 
-    (void) memset(&ifmr, 0, sizeof(ifmr));
-    (void) strncpy(ifmr.ifm_name, name, sizeof(ifmr.ifm_name));
+    memset(&ifmr, 0, sizeof(ifmr));
+    strlcpy(ifmr.ifm_name, name, sizeof(ifmr.ifm_name));
 
-    if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0 ||
-        ifmr.ifm_count == 0) {
-
+    if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0 || ifmr.ifm_count == 0) {
         close(s);
         return 0;
     }
@@ -388,6 +389,7 @@ netsnmp_openbsd_interface_get_if_speed(char *name, u_int *speed, u_int *speed_hi
     return *speed;
 }
 
+#ifndef NETSNMP_FEATURE_REMOVE_INTERFACE_ARCH_SET_ADMIN_STATUS
 int
 netsnmp_arch_set_admin_status(netsnmp_interface_entry * entry,
                               int ifAdminStatus_val)
@@ -401,4 +403,5 @@ netsnmp_arch_set_admin_status(netsnmp_interface_entry * entry,
 
     return -4;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_INTERFACE_ARCH_SET_ADMIN_STATUS */
 

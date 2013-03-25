@@ -26,13 +26,13 @@ netsnmp_sensor_arch_load(netsnmp_cache *cache, void *vp) {
 	int             a = 0;
 
         while ((data = sensors_get_features( chip, &a))) {
-            DEBUGMSGTL(("sensors:arch:detail", "get_features (%s, %d)\n", data->name, data->number));
 	    int             b = 0;
- 
+
+            DEBUGMSGTL(("sensors:arch:detail", "get_features (%s, %d)\n", data->name, data->number));
 
             while ((data2 = sensors_get_all_subfeatures( chip, data, &b))) {
                 char           *label = NULL;
-                double          val;
+                double          val = 0;
                 int             type = NETSNMP_SENSOR_TYPE_OTHER;
 
                 DEBUGMSGTL(("sensors:arch:detail", "  get_subfeatures (%s, %d)\n", data2->name, data2->number));

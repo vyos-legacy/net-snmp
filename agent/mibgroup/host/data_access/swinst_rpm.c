@@ -3,6 +3,7 @@
  *     hrSWInstalledTable data access:
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <stdio.h>
 #ifdef HAVE_STDLIB_H
@@ -32,7 +33,8 @@
 #ifdef HAVE_RPMGETPATH		/* HAVE_RPM_RPMMACRO_H */
 #include <rpm/rpmmacro.h>
 #endif
-#ifdef HAVE_RPM_RPMDB_H
+#ifdef HAVE_RPM_RPMTS_H
+#include <rpm/rpmts.h>
 #include <rpm/rpmdb.h>
 #endif
 
@@ -41,6 +43,8 @@
 #include <net-snmp/library/container.h>
 #include <net-snmp/library/snmp_debug.h>
 #include <net-snmp/data_access/swinst.h>
+
+netsnmp_feature_require(date_n_time)
 
    /*
     * Location of RPM package directory.
@@ -64,18 +68,10 @@ netsnmp_swinst_arch_init(void)
     rpmdbpath = rpmGetPath( "%{_dbpath}", NULL );
     dbpath = rpmdbpath;
 #else
-#ifdef RPMVAR_DBPATH
-    rpmReadConfigFiles( NULL, NULL, NULL, 0 );
-    rpmdbpath = rpmGetVar( RPMVAR_DBPATH );
-    dbpath = rpmdbpath;
-#else
     dbpath = "/var/lib/rpm";   /* Most likely */
-#endif
 #endif
 
     snprintf( pkg_directory, SNMP_MAXPATH, "%s/Packages", dbpath );
-    if (-1 == stat( pkg_directory, &stat_buf ))
-        snprintf( pkg_directory, SNMP_MAXPATH, "%s/packages.rpm", dbpath );
     SNMP_FREE(rpmdbpath);
     dbpath = NULL;
     if (-1 == stat( pkg_directory, &stat_buf )) {
@@ -96,44 +92,33 @@ netsnmp_swinst_arch_shutdown(void)
 int
 netsnmp_swinst_arch_load( netsnmp_container *container, u_int flags)
 {
-    rpmdb                 db;
+    rpmts                 ts;
 
-#if defined(RPMDBI_PACKAGES)
     rpmdbMatchIterator    mi;
-#else
-    int                   offset;
-#endif
     Header                h;
     char                 *n, *v, *r, *g;
     int32_t              *t;
     time_t                install_time;
     size_t                date_len;
-    int                   rc, i = 1;
+    int                   i = 1;
     netsnmp_swinst_entry *entry;
 
-    if (rpmdbOpen("", &db, O_RDONLY, 0644))
+    ts = rpmtsCreate();
+    rpmtsSetVSFlags( ts, (_RPMVSF_NOSIGNATURES|_RPMVSF_NODIGESTS));
+
+    mi = rpmtsInitIterator( ts, RPMDBI_PACKAGES, NULL, 0);
+    if (mi == NULL)
 	NETSNMP_LOGONCE((LOG_ERR, "rpmdbOpen() failed\n"));
 
-#if defined(RPMDBI_PACKAGES)
-    mi = rpmdbInitIterator( db, RPMDBI_PACKAGES, NULL, 0);
     while (NULL != (h = rpmdbNextIterator( mi )))
-#else
-    for (offset  = rpmdbFirstRecNum( db );
-         offset != 0;
-         offset  = rpmdbNextRecNum(  db, offset ))
-#endif
     {
-
+        const u_char *dt;
         entry = netsnmp_swinst_entry_create( i++ );
         if (NULL == entry)
             continue;   /* error already logged by function */
-        rc = CONTAINER_INSERT(container, entry);
+        CONTAINER_INSERT(container, entry);
 
-#if defined(RPMDBI_PACKAGES)
         h = headerLink( h );
-#else
-        h = rpmdbGetRecord( db, offset );
-#endif
         headerGetEntry( h, RPMTAG_NAME,        NULL, (void**)&n, NULL);
         headerGetEntry( h, RPMTAG_VERSION,     NULL, (void**)&v, NULL);
         headerGetEntry( h, RPMTAG_RELEASE,     NULL, (void**)&r, NULL);
@@ -149,15 +134,20 @@ netsnmp_swinst_arch_load( netsnmp_container *container, u_int flags)
                         : 4;     /*  application    */
 
         install_time = *t;
-        entry->swDate_len = snprintf( entry->swDate, sizeof(entry->swDate),
-                                      "%s", date_n_time( &install_time, &date_len ));
+        dt = date_n_time( &install_time, &date_len );
+        if (date_len != 8 && date_len != 11) {
+            snmp_log(LOG_ERR, "Bogus length from date_n_time for %s", entry->swName);
+            entry->swDate_len = 0;
+        }
+        else {
+            entry->swDate_len = date_len;
+            memcpy(entry->swDate, dt, entry->swDate_len);
+        }
 
         headerFree( h );
     }
-#if defined(RPMDBI_PACKAGES)
     rpmdbFreeIterator( mi );
-#endif
-    rpmdbClose( db );
+    rpmtsFree( ts );
 
     DEBUGMSGTL(("swinst:load:arch", "loaded %d entries\n",
                 (int)CONTAINER_SIZE(container)));

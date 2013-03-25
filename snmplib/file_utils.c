@@ -1,4 +1,5 @@
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 
 #include <stdio.h>
@@ -37,7 +38,11 @@
 #include <net-snmp/library/container.h>
 #include <net-snmp/library/file_utils.h>
 
+netsnmp_feature_child_of(file_utils_all, libnetsnmp)
+netsnmp_feature_child_of(file_utils, file_utils_all)
+netsnmp_feature_child_of(file_close, file_utils_all)
 
+#ifndef NETSNMP_FEATURE_REMOVE_FILE_UTILS
 /*------------------------------------------------------------------
  *
  * Prototypes
@@ -190,7 +195,7 @@ netsnmp_file_open(netsnmp_file * filei)
         filei->fd = open(filei->name, filei->fs_flags, filei->mode);
 
     if (filei->fd < 0) {
-        snmp_log(LOG_ERR, "error opening %s (%d)\n", filei->name, errno);
+        DEBUGMSGTL(("netsnmp_file", "error opening %s (%d)\n", filei->name, errno));
     }
 
     /*
@@ -206,6 +211,7 @@ netsnmp_file_open(netsnmp_file * filei)
  * @retval  0 : success
  * @retval -1 : error
  */
+#ifndef NETSNMP_FEATURE_REMOVE_FILE_CLOSE
 int
 netsnmp_file_close(netsnmp_file * filei)
 {
@@ -229,13 +235,14 @@ netsnmp_file_close(netsnmp_file * filei)
      */
     rc = close(filei->fd);
     if (rc < 0) {
-        snmp_log(LOG_ERR, "error closing %s (%d)\n", filei->name, errno);
+        DEBUGMSGTL(("netsnmp_file", "error closing %s (%d)\n", filei->name, errno));
     }
     else
         filei->fd = -1;
 
     return rc;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_FILE_CLOSE */
 
 void
 netsnmp_file_container_free(netsnmp_file *file, void *context)
@@ -251,3 +258,6 @@ netsnmp_file_compare_name(netsnmp_file *lhs, netsnmp_file *rhs)
 
     return strcmp(lhs->name, rhs->name);
 }
+#else /* NETSNMP_FEATURE_REMOVE_FILE_UTILS */
+netsnmp_feature_unused(file_utils);
+#endif /* NETSNMP_FEATURE_REMOVE_FILE_UTILS */

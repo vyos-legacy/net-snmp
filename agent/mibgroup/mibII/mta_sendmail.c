@@ -499,7 +499,7 @@ open_sendmailst(BOOL config)
 count_queuegroup(struct QGrp *qg)
 {
     struct QDir    *d;
-    char            cwd[200];
+    char            cwd[SNMP_MAXPATH];
     time_t          current_time = time(NULL);
 
     if (current_time <= (qg->last + dir_cache_time)) {
@@ -853,8 +853,7 @@ read_sendmailcf(BOOL config)
                 }
 
                 if (strncasecmp(line + 2, "StatusFile", 10) == 0) {
-                    strncpy(sendmailst_fn, filename, sizeof(sendmailst_fn));
-                    sendmailst_fn[ sizeof(sendmailst_fn)-1 ] = 0;
+                    strlcpy(sendmailst_fn, filename, sizeof(sendmailst_fn));
                     found_sendmailst = TRUE;
                     DEBUGMSGTL(("mibII/mta_sendmail.c:read_sendmailcf",
                                 "found statatistics file \"%s\"\n",
@@ -975,11 +974,7 @@ read_sendmailcf(BOOL config)
         linenr++;
     }
 
-    for (i = 0; i < 10 && fclose(sendmailcf_fp) != 0; i++) {
-        /*
-         * nothing to do 
-         */
-    }
+    fclose(sendmailcf_fp);
 
     for (i = mailers; i < MAXMAILERS; i++) {
         mailernames[i][0] = '\0';

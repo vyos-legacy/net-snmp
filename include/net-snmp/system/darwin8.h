@@ -63,14 +63,6 @@
 #endif
 
 /*
- * Although Darwin does have a kvm.h file, kvm_openfiles etc. always
- * return null because /dev/kmem was removed in OS X 10.4 for Intel.
- */
-#undef HAVE_KVM_H
-#undef HAVE_KVM_GETPROCS
-#undef HAVE_KVM_OPENFILES
-
-/*
  * Although Darwin does have an fstab.h file, getfsfile etc. always return null.
  * At least, as of 5.3.
  */
@@ -100,8 +92,3 @@
 /* #define USE_UNIFIED_IPV6_STRUCTS 1 */
 #undef STRUCT_in6pcb_HAS_inp_vflag
 
-/*
- * as of 7/2010, openssl on darwin does not have sha256
- */
-#define OPENSSL_NO_SHA256 1
-#define OPENSSL_NO_SHA512 1

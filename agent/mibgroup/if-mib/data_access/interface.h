@@ -1,7 +1,7 @@
 /*
  * interface data access header
  *
- * $Id: interface.h 19133 2010-06-29 22:18:49Z magfr $
+ * $Id$
  */
 #ifndef NETSNMP_ACCESS_INTERFACE_CONFIG_H
 #define NETSNMP_ACCESS_INTERFACE_CONFIG_H
@@ -36,8 +36,9 @@ config_exclude(mibII/interfaces)
     config_require(if-mib/data_access/interface_linux)
     config_require(if-mib/data_access/interface_ioctl)
 
-#   elif defined( openbsd3 ) || defined( openbsd4 ) || \
-    defined( freebsd4 ) || defined( freebsd5 ) || defined( freebsd6 ) || defined (darwin)
+#   elif defined( openbsd3 ) || \
+         defined( freebsd4 ) || defined( freebsd5 ) || defined( freebsd6 ) || \
+         defined( darwin )   || defined( dragonfly ) || defined( netbsd1 )
 
     config_require(if-mib/data_access/interface_sysctl)
 

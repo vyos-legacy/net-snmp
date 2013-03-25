@@ -4,7 +4,11 @@
 #include <net-snmp/agent/hardware/memory.h>
 
 #include <unistd.h>
+#include <errno.h>
 #include <sys/sysctl.h>
+#if HAVE_SYS_VMMETER_H
+#include <sys/vmmeter.h>
+#endif
 #include <sys/swap.h>
 
 #if defined(HAVE_UVM_UVM_PARAM_H) && defined(HAVE_UVM_UVM_EXTERN_H)
@@ -30,27 +34,61 @@ int netsnmp_mem_arch_load( netsnmp_cache *cache, void *magic ) {
     long           pagesize;
 
     struct uvmexp  uvmexp;
-    int            uvmexp_size  = sizeof(uvmexp);
-    int            uvmexp_mib[] = { CTL_VM, VM_UVMEXP };
+    size_t         uvmexp_size  = sizeof(uvmexp);
 
     struct vmtotal total;
     size_t         total_size  = sizeof(total);
-    int            total_mib[] = { CTL_VM, VM_METER };
 
-    long            phys_mem;
-    long            user_mem;
+    quad_t          phys_mem;
+    quad_t          user_mem;
     size_t          mem_size  = sizeof(phys_mem);
-    int             phys_mem_mib[] = { CTL_HW, HW_PHYSMEM };
-    int             user_mem_mib[] = { CTL_HW, HW_USERMEM };
+#if defined(openbsd)
+    int             phys_mem_mib[] = { CTL_HW, HW_PHYSMEM64 };
+    int             user_mem_mib[] = { CTL_HW, HW_USERMEM64 };
+    int             uvmexp_mib[] = { CTL_VM, VM_UVMEXP };
+    int             total_mib[] = { CTL_VM, VM_METER };
+#else
+    unsigned int    bufspace;
+    unsigned int    maxbufspace;
+    size_t          buf_size  = sizeof(bufspace);
+#endif
 
     /*
      * Retrieve the memory information from the underlying O/S...
      */
+#if defined(openbsd)
     sysctl(uvmexp_mib,   2, &uvmexp,   &uvmexp_size,   NULL, 0);
     sysctl(total_mib,    2, &total,    &total_size,    NULL, 0);
     sysctl(phys_mem_mib, 2, &phys_mem, &mem_size,      NULL, 0);
     sysctl(user_mem_mib, 2, &user_mem, &mem_size,      NULL, 0);
-    pagesize = uvmexp.pagesize;
+#else
+    if (sysctlbyname("vm.uvmexp", &uvmexp, &uvmexp_size, NULL, 0) == -1) {
+        snmp_log(LOG_ERR, "sysctl vm.uvmexp failed (errno %d)\n", errno);
+        return -1;
+    }
+    if (sysctlbyname("vm.vmmeter", &total,  &total_size, NULL, 0) == -1) {
+        snmp_log(LOG_ERR, "sysctl vm.vmmeter failed (errno %d)\n", errno);
+        return -1;
+    }
+    if (sysctlbyname("hw.physmem64", &phys_mem, &mem_size, NULL, 0) == -1) {
+        snmp_log(LOG_ERR, "sysctl hw.physmem64 failed (errno %d)\n", errno);
+        return -1;
+    }
+    if (sysctlbyname("hw.usermem64", &user_mem, &mem_size, NULL, 0) == -1) {
+        snmp_log(LOG_ERR, "sysctl hw.usermem64 failed (errno %d)\n", errno);
+        return -1;
+    }
+    if (sysctlbyname("vm.bufmem", &bufspace, &buf_size, NULL, 0) == -1) {
+        snmp_log(LOG_ERR, "sysctl vm.bufmem failed (errno %d)\n", errno);
+        return -1;
+    }
+    if (sysctlbyname("vm.bufmem_hiwater", &maxbufspace, &buf_size, NULL, 0) == -1) {
+        snmp_log(LOG_ERR, "sysctl vm.bufmem_hiwater failed (errno %d)\n", errno);
+        return -1;
+    }
+
+#endif
+    pagesize = sysconf(_SC_PAGESIZE);
 
     /*
      * ... and save this in a standard form.
@@ -64,7 +102,6 @@ int netsnmp_mem_arch_load( netsnmp_cache *cache, void *magic ) {
         mem->units = pagesize;
         mem->size  = phys_mem/pagesize;
         mem->free  = total.t_free;
-        mem->other = -1;
     }
 
     mem = netsnmp_memory_get_byIdx( NETSNMP_MEM_TYPE_USERMEM, 1 );
@@ -76,8 +113,42 @@ int netsnmp_mem_arch_load( netsnmp_cache *cache, void *magic ) {
         mem->units = pagesize;
         mem->size  = user_mem/pagesize;
         mem->free  = uvmexp.free;
-        mem->other = -1;
     }
+
+#if 1
+    mem = netsnmp_memory_get_byIdx( NETSNMP_MEM_TYPE_VIRTMEM, 1 );
+    if (!mem) {
+        snmp_log_perror("No Virtual Memory info entry");
+    } else {
+        if (!mem->descr)
+             mem->descr = strdup("Virtual memory");
+        mem->units = pagesize;
+        mem->size  = total.t_vm;
+        mem->free  = total.t_avm;
+    }
+
+    mem = netsnmp_memory_get_byIdx( NETSNMP_MEM_TYPE_SHARED, 1 );
+    if (!mem) {
+        snmp_log_perror("No Shared Memory info entry");
+    } else {
+        if (!mem->descr)
+             mem->descr = strdup("Shared virtual memory");
+        mem->units = pagesize;
+        mem->size  = total.t_vmshr;
+        mem->free  = total.t_avmshr;
+    }
+
+    mem = netsnmp_memory_get_byIdx( NETSNMP_MEM_TYPE_SHARED2, 1 );
+    if (!mem) {
+        snmp_log_perror("No Shared2 Memory info entry");
+    } else {
+        if (!mem->descr)
+             mem->descr = strdup("Shared real memory");
+        mem->units = pagesize;
+        mem->size  = total.t_rmshr;
+        mem->free  = total.t_armshr;
+    }
+#endif
 
 #ifdef SWAP_NSWAP
     swapinfo(pagesize);
@@ -93,6 +164,19 @@ int netsnmp_mem_arch_load( netsnmp_cache *cache, void *magic ) {
         mem->free  = uvmexp.swpages - uvmexp.swpginuse;
         mem->other = -1;
     }
+
+#if defined(__NetBSD__)
+    mem = netsnmp_memory_get_byIdx( NETSNMP_MEM_TYPE_MBUF, 1 );
+    if (!mem) {
+        snmp_log_perror("No Buffer, etc info entry");
+    } else {
+        if (!mem->descr)
+             mem->descr = strdup("Memory buffers");
+        mem->units = 1024;
+        mem->size  =  maxbufspace            /1024;
+        mem->size  = (maxbufspace - bufspace)/1024;
+    }
+#endif
 
     return 0;
 }

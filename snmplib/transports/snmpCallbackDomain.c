@@ -289,10 +289,7 @@ netsnmp_callback_send(netsnmp_transport *t, void *buf, int size,
         /*
          * we don't need the transport data any more 
          */
-        if (*opaque) {
-            SNMP_FREE(*opaque);
-            *opaque = NULL;
-        }
+        SNMP_FREE(*opaque);
     } else {
         /*
          * we're the server, send it to the person that sent us the request 
@@ -301,10 +298,7 @@ netsnmp_callback_send(netsnmp_transport *t, void *buf, int size,
         /*
          * we don't need the transport data any more 
          */
-        if (*opaque) {
-            SNMP_FREE(*opaque);
-            *opaque = NULL;
-        }
+        SNMP_FREE(*opaque);
         other_side = find_transport_from_callback_num(from);
         if (!other_side) {
             snmp_free_pdu(cp->pdu);
@@ -359,7 +353,7 @@ netsnmp_callback_accept(netsnmp_transport *t)
 {
     DEBUGMSGTL(("transport_callback", "hook_accept enter\n"));
     DEBUGMSGTL(("transport_callback", "hook_accept exit\n"));
-    return 0;
+    return -1;
 }
 
 
@@ -391,8 +385,10 @@ netsnmp_callback_transport(int to)
      * our stuff 
      */
     mydata = SNMP_MALLOC_TYPEDEF(netsnmp_callback_info);
-    if (!mydata)
+    if (!mydata) {
+        SNMP_FREE(t);
         return NULL;
+    }
     mydata->linkedto = to;
     mydata->callback_num = ++callback_count;
     mydata->data = NULL;

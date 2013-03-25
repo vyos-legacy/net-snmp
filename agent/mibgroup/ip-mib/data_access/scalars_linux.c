@@ -1,7 +1,7 @@
 /*
  *  Arp MIB architecture support
  *
- * $Id: scalars_linux.c 18994 2010-06-16 13:13:25Z dts12 $
+ * $Id$
  */
 #include <net-snmp/net-snmp-config.h>
 #include <net-snmp/net-snmp-includes.h>

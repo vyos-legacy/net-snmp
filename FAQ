@@ -1,7 +1,7 @@
       Frequently Asked Questions (FAQ) for the UCD/Net-SNMP package
       =============================================================
 		       FAQ Author: Dave Shield
-			Net-SNMP Version: 5.6.1.1
+			Net-SNMP Version: 5.7.2
 	    Net-SNMP/UCD-SNMP Project Leader: Wes Hardaker
 	     Email: net-snmp-coders@lists.sourceforge.net
 
@@ -459,8 +459,11 @@ How do I submit a patch or bug report?
   doesn't contain a decent description field.
 
   The best way to submit patch (diff) information is by checking out
-  the current code from the development SVN trunk, making your changes
-  and then running "svn diff" after you're done.
+  the current code from the development git trunk, making your changes
+  and then running "git diff" or "git format-patch" after you're done.
+
+  (Please see http://www.net-snmp.org/wiki/index.php/Git for further
+  information on using git with the Net-SNMP project)
 
   If you're working from a source code distribution, and comparing old
   and new versions of a code file, use "diff -u OLDFILE NEWFILE" 
@@ -1311,7 +1314,7 @@ How do I send traps and notifications?
   covered in the AGENT and CODING sections.
 
   You should also read the snmptrap tutorial at
-	http://www.net-snmp.org/tutorial-5/commands/snmptrap.html
+        http://www.net-snmp.org/wiki/index.php/TUT:snmptrap
   which will help you understand everything you need to know about traps.
 
 
@@ -1348,7 +1351,7 @@ How do I receive traps and notifications?
         forward default                  10.0.0.2
 
   There's a tutorial with more details on the web site at
-	http://www.net-snmp.org/tutorial-5/commands/snmptrap.html
+        http://www.net-snmp.org/wiki/index.php/TUT:snmptrap
 
 
 

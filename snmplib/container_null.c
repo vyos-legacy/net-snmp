@@ -1,12 +1,13 @@
 /*
  * container_null.c
- * $Id: container_null.c 16924 2008-05-09 21:35:32Z magfr $
+ * $Id$
  *
  * see comments in header file.
  *
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #if HAVE_IO_H
 #include <io.h>
@@ -33,6 +34,8 @@
 #include <net-snmp/library/tools.h>
 #include <net-snmp/library/snmp_assert.h>
 
+netsnmp_feature_child_of(container_null, container_types)
+
 /** @defgroup null_container null_container
  *  Helps you implement specialized containers.
  *  @ingroup container
@@ -50,6 +53,7 @@
  *  @{
  */
 
+#ifndef NETSNMP_FEATURE_REMOVE_CONTAINER_NULL
 /**********************************************************************
  *
  * container
@@ -180,5 +184,8 @@ netsnmp_container_null_init(void)
     netsnmp_container_register("null",
                                netsnmp_container_get_null_factory());
 }
+#else  /* NETSNMP_FEATURE_REMOVE_CONTAINER_NULL */
+netsnmp_feature_unused(container_null);
+#endif /* NETSNMP_FEATURE_REMOVE_CONTAINER_NULL */
 /**  @} */
 

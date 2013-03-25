@@ -1,3 +1,26 @@
+net-snmp (5.7.2-vyatta+1) unstable; urgency=low
+
+  [ Stephen Hemminger ]
+  * Fix snmp MIB search path
+  * Patch documentation files to change paths to Debian specific
+    locations.
+  * Load default mibs in snmp daemon
+  * ip-mib: make load_ipv6 static
+  * snmpd: disable logging of debug messages
+  * Extra MIB files shipped with Debian.
+  * Debian patch 03_makefiles
+  * initgroups will fail for non-root user
+  * Reduce the deleted interface hold time to 1 minute
+  * optimize insertion of binary array container
+
+  [ James Davidson ]
+  * Update to v5.7.2
+  * SNMP-135 add 'net-snmp-cert' script to 'libsnmp15' package
+  * Support netlink for reading routes
+  * Merge in Daisy branch
+
+ -- James Davidson <james.davidson@vyatta.com>  Mon, 25 Mar 2013 12:33:02 -0700
+
 net-snmp (5.6.1.1-vyatta+14) unstable; urgency=low
 
   * new branch

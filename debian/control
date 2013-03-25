@@ -11,6 +11,7 @@ Vcs-Browser: http://svn.debian.org/wsvn/pkg-net-snmp/
 XS-Python-Version: all
 Homepage: http://net-snmp.sourceforge.net/
 
+
 Package: snmpd
 Section: net
 Priority: optional
@@ -23,6 +24,7 @@ Description: SNMP (Simple Network Management Protocol) agents
  .
  The Net-SNMP agent is a daemon which listens for incoming SNMP
  requests from clients and provides responses.
+
 
 Package: snmp
 Section: net

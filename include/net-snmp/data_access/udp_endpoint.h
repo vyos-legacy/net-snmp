@@ -1,7 +1,7 @@
 /*
  * udp_endpoint data access header
  *
- * $Id: udp_endpoint.h 16319 2007-04-30 10:50:39Z dts12 $
+ * $Id$
  */
 #ifndef NETSNMP_ACCESS_UDP_ENDPOINT_H
 #define NETSNMP_ACCESS_UDP_ENDPOINT_H

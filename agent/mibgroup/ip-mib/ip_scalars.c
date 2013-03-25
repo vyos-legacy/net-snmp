@@ -4,10 +4,13 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 #include <net-snmp/data_access/ip_scalars.h>
+
+netsnmp_feature_require(register_num_file_instance)
 
 #include "ip_scalars.h"
 
@@ -122,6 +125,7 @@ handle_ipForwarding(netsnmp_mib_handler *handler,
             }
             break;
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         /*
          * SET REQUEST
          *
@@ -180,6 +184,7 @@ handle_ipForwarding(netsnmp_mib_handler *handler,
                  netsnmp_set_request_error(reqinfo, requests, SNMP_ERR_UNDOFAILED);
              }
              break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
 
         default:
             /* we should never get here, so this is a really bad error */
@@ -224,6 +229,7 @@ handle_ipv6IpForwarding(netsnmp_mib_handler *handler,
         }
         break;
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         /*
          * SET REQUEST
          *
@@ -282,6 +288,7 @@ handle_ipv6IpForwarding(netsnmp_mib_handler *handler,
             netsnmp_set_request_error(reqinfo, requests, SNMP_ERR_UNDOFAILED);
         }
         break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
 
     default:
         /*
@@ -317,6 +324,7 @@ handle_ipAddressSpinLock(netsnmp_mib_handler *handler,
                                      sizeof(ipAddressSpinLockValue));
             break;
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
         /*
          * SET REQUEST
          *
@@ -352,6 +360,7 @@ handle_ipAddressSpinLock(netsnmp_mib_handler *handler,
 
         case MODE_SET_UNDO:
              break;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
 
         default:
             /* we should never get here, so this is a really bad error */

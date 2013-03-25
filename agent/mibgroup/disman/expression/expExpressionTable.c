@@ -21,6 +21,7 @@
  * This should always be included first before anything else 
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #if HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -45,6 +46,10 @@
 #include "expObjectTable.h"
 #include "expValueTable.h"
 
+netsnmp_feature_require(tdomain_support)
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+netsnmp_feature_require(header_complex_find_entry)
+#endif /* NETSNMP_NO_WRITE_SUPPORT */
 
 /*
  * expExpressionTable_variables_oid:
@@ -318,9 +323,7 @@ store_expExpressionTable(int majorID, int minorID, void *serverarg,
     char           *cptr;
     size_t          tmpint;
     struct expExpressionTable_data *StorageTmp;
-    struct expObjectTable_data *ObjectStorageTmp;
-    struct expValueTable_data *ValueStorageTmp;
-    struct header_complex_index *hcindex, *hc_object, *hc_value;
+    struct header_complex_index *hcindex;
 
     DEBUGMSGTL(("expExpressionTable", "storing data...  "));
 

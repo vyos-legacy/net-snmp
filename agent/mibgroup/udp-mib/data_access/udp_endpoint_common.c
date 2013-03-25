@@ -1,9 +1,10 @@
 /*
  *  UDP-MIB endpoint architecture support
  *
- * $Id: udp_endpoint_common.c 16922 2008-05-09 21:23:43Z magfr $
+ * $Id$
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 #include <net-snmp/net-snmp-includes.h>
 #include "udp-mib/udpEndpointTable/udpEndpointTable_constants.h"
 
@@ -12,6 +13,10 @@
 #include <net-snmp/data_access/udp_endpoint.h>
 
 #include "udp_endpoint_private.h"
+
+netsnmp_feature_child_of(udp_endpoint_common, libnetsnmpmibs)
+
+netsnmp_feature_child_of(udp_endpoint_entry_create, udp_endpoint_common)
 
 /**---------------------------------------------------------------------*/
 /*
@@ -23,11 +28,6 @@
 /*
  * initialization
  */
-
-void
-netsnmp_access_udp_endpoint_init(void)
-{
-}
 
 /**---------------------------------------------------------------------*/
 /*
@@ -120,6 +120,7 @@ netsnmp_access_udp_endpoint_container_free(netsnmp_container *container,
  */
 /**
  */
+#ifndef NETSNMP_FEATURE_REMOVE_UDP_ENDPOINT_ENTRY_CREATE
 netsnmp_udp_endpoint_entry *
 netsnmp_access_udp_endpoint_entry_create(void)
 {
@@ -136,6 +137,7 @@ netsnmp_access_udp_endpoint_entry_create(void)
 
     return entry;
 }
+#endif /* NETSNMP_FEATURE_REMOVE_UDP_ENDPOINT_ENTRY_CREATE */
 
 /**
  */

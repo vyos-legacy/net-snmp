@@ -1,8 +1,6 @@
-python-build-stamp-2.6
 *.debhelper.log
 *.debhelper
 *.substvars
-build-stamp
 files
 libsnmp15
 libsnmp15-dbg
@@ -10,24 +8,8 @@ libsnmp-base
 libsnmp-dev
 libsnmp-perl
 libsnmp-python
-patches/*.log
-python-build-stamp-*
-python-install-stamp-*
 snmp
 snmpd
-snmpd.debhelper.log
-snmp.debhelper.log
-snmpd.postinst.debhelper
-snmpd.postrm.debhelper
-snmpd.prerm.debhelper
-snmpd.substvars
-snmp.substvars
-stamp-autotools-files
-stamp-makefile-build
-stamp-patch-*.patch
-stamp-patched
 tkmib
-tkmib.debhelper.log
-tkmib.substvars
 tmp
 

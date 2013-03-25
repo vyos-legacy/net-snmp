@@ -9,6 +9,7 @@
  * distributed with the Net-SNMP package.
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <sys/types.h>
 #if HAVE_STRING_H
@@ -22,6 +23,9 @@
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
 #include "proxy.h"
+
+netsnmp_feature_require(handler_mark_requests_as_delegated)
+netsnmp_feature_require(request_set_error_idx)
 
 static struct simple_proxy *proxies = NULL;
 
@@ -281,14 +285,13 @@ proxy_fill_in_session(netsnmp_mib_handler *handler,
                 return 0;
             }
 
-            *configured = malloc(strlen("-c") + 1);
-            strcpy((char*)*configured, "-c");
+            *configured = strdup("-c");
             DEBUGMSGTL(("proxy", "pdu has community string\n"));
             session->community_len = reqinfo->asp->pdu->community_len;
-            session->community = (u_char*)malloc(session->community_len + 1);
-            strncpy((char *)session->community,
-                    (const char *)reqinfo->asp->pdu->community,
-                    session->community_len);
+            session->community = malloc(session->community_len + 1);
+            sprintf((char *)session->community, "%.*s",
+                    (int) session->community_len,
+                    (const char *)reqinfo->asp->pdu->community);
         }
     }
 #endif
@@ -357,6 +360,7 @@ proxy_handler(netsnmp_mib_handler *handler,
         pdu = snmp_pdu_create(reqinfo->mode);
         break;
 
+#ifndef NETSNMP_NO_WRITE_SUPPORT
     case MODE_SET_ACTION:
         pdu = snmp_pdu_create(SNMP_MSG_SET);
         break;
@@ -384,6 +388,7 @@ proxy_handler(netsnmp_mib_handler *handler,
          *  Nothing to do in this pass
          */
         return SNMP_ERR_NOERROR;
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
 
     default:
         snmp_log(LOG_WARNING, "unsupported mode for proxy called (%d)\n",
@@ -395,6 +400,8 @@ proxy_handler(netsnmp_mib_handler *handler,
 
     if (!pdu || !sp) {
         netsnmp_set_request_error(reqinfo, requests, SNMP_ERR_GENERR);
+        if (pdu)
+            snmp_free_pdu(pdu);
         return SNMP_ERR_NOERROR;
     }
 
@@ -402,7 +409,33 @@ proxy_handler(netsnmp_mib_handler *handler,
         ourname = request->requestvb->name;
         ourlength = request->requestvb->name_length;
 
-        if (sp->base_len > 0) {
+        if (sp->base_len &&
+            reqinfo->mode == MODE_GETNEXT &&
+            (snmp_oid_compare(ourname, ourlength,
+                              sp->base, sp->base_len) < 0)) {
+            DEBUGMSGTL(( "proxy", "request is out of registered range\n"));
+            /*
+             * Create GETNEXT request with an OID so the
+             * master returns the first OID in the registered range.
+             */
+            memcpy(ourname, sp->base, sp->base_len * sizeof(oid));
+            ourlength = sp->base_len;
+            if (ourname[ourlength-1] <= 1) {
+                /*
+                 * The registered range ends with x.y.z.1
+                 * -> ask for the next of x.y.z
+                 */
+                ourlength--;
+            } else {
+                /*
+                 * The registered range ends with x.y.z.A
+                 * -> ask for the next of x.y.z.A-1.MAX_SUBID
+                 */
+                ourname[ourlength-1]--;
+                ourname[ourlength] = MAX_SUBID;
+                ourlength++;
+            }
+        } else if (sp->base_len > 0) {
             if ((ourlength - sp->name_len + sp->base_len) > MAX_OID_LEN) {
                 /*
                  * too large 
@@ -528,7 +561,8 @@ proxy_got_response(int operation, netsnmp_session * sess, int reqid,
                 netsnmp_handler_mark_requests_as_delegated(requests,
                                                            REQUEST_IS_NOT_DELEGATED);
             }
-	    else if ((cache->reqinfo->mode == MODE_SET_ACTION)) {
+#ifndef NETSNMP_NO_WRITE_SUPPORT
+	    else if (cache->reqinfo->mode == MODE_SET_ACTION) {
 		/*
 		 * In order for netsnmp_wrap_up_request to consider the
 		 * SET request complete,
@@ -544,6 +578,7 @@ proxy_got_response(int operation, netsnmp_session * sess, int reqid,
 		netsnmp_request_set_error_idx(requests, pdu->errstat,
                                                         pdu->errindex);
 	    }
+#endif /* !NETSNMP_NO_WRITE_SUPPORT */
             else {
 		netsnmp_handler_mark_requests_as_delegated( requests,
                                              REQUEST_IS_NOT_DELEGATED);

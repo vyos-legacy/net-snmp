@@ -249,7 +249,7 @@ tcpprotopr_bulkget(const char *name, oid *root, size_t root_len)
 	/*
      * setup initial object name
      */
-	memmove(tcpConnState_oid, root, sizeof(root) * root_len);
+	memmove(tcpConnState_oid, root, sizeof(oid) * root_len);
 	tcpConnState_len = root_len;
 
     /*
@@ -616,7 +616,8 @@ inetname(struct in_addr *inp)
 				cp = np->n_name;
 		}
 		if (cp == NULL) {
-			hp = gethostbyaddr((char *)inp, sizeof (*inp), AF_INET);
+			hp = netsnmp_gethostbyaddr((char *)inp, sizeof (*inp),
+                                                   AF_INET);
 			if (hp) {
 				if ((cp = strchr(hp->h_name, '.')) &&
 				    !strcmp(cp + 1, domain))

@@ -3,6 +3,7 @@
  *
  */
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #if HAVE_STDLIB_H
 #include <stdlib.h>
@@ -13,93 +14,40 @@
 #else
 #include <strings.h>
 #endif
-#if HAVE_UNISTD_H
-#include <unistd.h>
-#endif
-#include <ctype.h>
 
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 
-#include "struct.h"
-#include "util_funcs.h"
-
-#if defined(HAVE_DLFCN_H) && defined(HAVE_DLOPEN)
-
 #include <dlfcn.h>
 #include "dlmod.h"
+
+#ifndef SNMPDLMODPATH
+#define SNMPDLMODPATH "/usr/local/lib/snmp/dlmod"
+#endif
+
+struct dlmod {
+  struct dlmod   *next;
+  int             index;
+  char            name[64 + 1];
+  char            path[255 + 1];
+  char            error[255 + 1];
+  void           *handle;
+  int             status;
+};
+
+#define DLMOD_LOADED		1
+#define DLMOD_UNLOADED		2
+#define DLMOD_ERROR		3
+#define DLMOD_LOAD		4
+#define DLMOD_UNLOAD		5
+#define DLMOD_CREATE		6
+#define DLMOD_DELETE		7
 
 static struct dlmod *dlmods = NULL;
 static unsigned int dlmod_next_index = 1;
 static char     dlmod_path[1024];
 
-static void     dlmod_parse_config(const char *, char *);
-static void     dlmod_free_config(void);
-
-/*
- * this variable defines function callbacks and type return
- * information for the dlmod mib
- */
-static struct variable4 dlmod_variables[] = {
-    {DLMODNEXTINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
-     var_dlmod, 1, {1}},
-    {DLMODNAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
-     var_dlmodEntry, 3, {2, 1, 2}},
-    {DLMODPATH, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
-     var_dlmodEntry, 3, {2, 1, 3}},
-    {DLMODERROR, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
-     var_dlmodEntry, 3, {2, 1, 4}},
-    {DLMODSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
-     var_dlmodEntry, 3, {2, 1, 5}},
-};
-
-static oid      dlmod_variables_oid[] = { 1, 3, 6, 1, 4, 1, 2021, 13, 14 };
-static int      dlmod_variables_oid_len = 9;
-
-void
-init_dlmod(void)
-{
-    char           *p;
-    int             len;
-
-    REGISTER_MIB("dlmod", dlmod_variables, variable4, dlmod_variables_oid);
-
-    /*
-     * TODO: REGISTER_SYSOR_ENTRY 
-     */
-
-    DEBUGMSGTL(("dlmod", "register mib\n"));
-
-    snmpd_register_config_handler("dlmod", dlmod_parse_config,
-                                  dlmod_free_config,
-                                  "module-name module-path");
-
-    p = getenv("SNMPDLMODPATH");
-    strncpy(dlmod_path, SNMPDLMODPATH, sizeof(dlmod_path));
-    dlmod_path[ sizeof(dlmod_path)-1 ] = 0;
-    if (p) {
-        if (p[0] == ':') {
-            len = strlen(dlmod_path);
-            if (dlmod_path[len - 1] != ':') {
-                strncat(dlmod_path, ":", sizeof(dlmod_path) - len -1);
-                len++;
-            }
-            strncat(dlmod_path, p + 1,   sizeof(dlmod_path) - len);
-        } else
-            strncpy(dlmod_path, p, sizeof(dlmod_path));
-    }
-    dlmod_path[ sizeof(dlmod_path)-1 ] = 0;
-    DEBUGMSGTL(("dlmod", "dlmod_path: %s\n", dlmod_path));
-}
-
-void
-deinit_dlmod(void)
-{
-    unregister_mib(dlmod_variables_oid, dlmod_variables_oid_len);
-    snmpd_unregister_config_handler("dlmod");
-}
-
-struct dlmod   *
+static struct dlmod   *
 dlmod_create_module(void)
 {
     struct dlmod  **pdlmod, *dlm;
@@ -118,7 +66,7 @@ dlmod_create_module(void)
     return dlm;
 }
 
-void
+static void
 dlmod_delete_module(struct dlmod *dlm)
 {
     struct dlmod  **pdlmod;
@@ -135,14 +83,9 @@ dlmod_delete_module(struct dlmod *dlm)
         }
 }
 
-void
+static void
 dlmod_load_module(struct dlmod *dlm)
 {
-    char            sym_init[64];
-    char           *p, tmp_path[255];
-    int             (*dl_init) (void);
-    char           *st;
-
     DEBUGMSGTL(("dlmod", "dlmod_load_module %s: %s\n", dlm->name,
                 dlm->path));
 
@@ -163,6 +106,8 @@ dlmod_load_module(struct dlmod *dlm)
             return;
         }
     } else {
+        char *st, *p, tmp_path[255];
+
         for (p = strtok_r(dlmod_path, ":", &st); p; p = strtok_r(NULL, ":", &st)) {
             snprintf(tmp_path, sizeof(tmp_path), "%s/%s.so", p, dlm->path);
             DEBUGMSGTL(("dlmod", "p: %s tmp_path: %s\n", p, tmp_path));
@@ -177,29 +122,34 @@ dlmod_load_module(struct dlmod *dlm)
                 dlm->status = DLMOD_ERROR;
             }
         }
-        strncpy(dlm->path, tmp_path, sizeof(dlm->path));
+        strlcpy(dlm->path, tmp_path, sizeof(dlm->path));
         if (dlm->status == DLMOD_ERROR)
             return;
     }
-    snprintf(sym_init, sizeof(sym_init), "init_%s", dlm->name);
-    dl_init = dlsym(dlm->handle, sym_init);
-    if (dl_init == NULL) {
-        dlclose(dlm->handle);
-        snprintf(dlm->error, sizeof(dlm->error),
-                 "dlsym failed: can't find \'%s\'", sym_init);
-        dlm->status = DLMOD_ERROR;
-        return;
+    {
+        char sym_init[64 + sizeof("init_")];
+        int  (*dl_init) (void);
+
+        snprintf(sym_init, sizeof(sym_init), "init_%s", dlm->name);
+        dl_init = dlsym(dlm->handle, sym_init);
+        if (dl_init == NULL) {
+            dlclose(dlm->handle);
+            snprintf(dlm->error, sizeof(dlm->error),
+                     "dlsym failed: can't find \'%s\'", sym_init);
+            dlm->status = DLMOD_ERROR;
+            return;
+        }
+        dl_init();
     }
 
-    dl_init();
     dlm->error[0] = '\0';
     dlm->status = DLMOD_LOADED;
 }
 
-void
+static void
 dlmod_unload_module(struct dlmod *dlm)
 {
-    char            sym_deinit[64];
+    char            sym_deinit[64 + sizeof("shutdown_")];
     int             (*dl_deinit) (void);
 
     if (!dlm || dlm->status != DLMOD_LOADED)
@@ -207,25 +157,22 @@ dlmod_unload_module(struct dlmod *dlm)
 
     snprintf(sym_deinit, sizeof(sym_deinit), "deinit_%s", dlm->name);
     dl_deinit = dlsym(dlm->handle, sym_deinit);
-    if (dl_deinit) {
-        DEBUGMSGTL(("dlmod", "Calling deinit_%s()\n", dlm->name));
-        dl_deinit();
-    } else {
+    if (!dl_deinit) {
         snprintf(sym_deinit, sizeof(sym_deinit), "shutdown_%s", dlm->name);
         dl_deinit = dlsym(dlm->handle, sym_deinit);
-        if (dl_deinit) {
-            DEBUGMSGTL(("dlmod", "Calling shutdown_%s()\n", dlm->name));
-            dl_deinit();
-        } else {
-            DEBUGMSGTL(("dlmod", "No destructor for %s\n", dlm->name));
-        }
+    }
+    if (dl_deinit) {
+        DEBUGMSGTL(("dlmod", "Calling %s()\n", sym_deinit));
+        dl_deinit();
+    } else {
+        DEBUGMSGTL(("dlmod", "No destructor for %s\n", dlm->name));
     }
     dlclose(dlm->handle);
     dlm->status = DLMOD_UNLOADED;
     DEBUGMSGTL(("dlmod", "Module %s unloaded\n", dlm->name));
 }
 
-struct dlmod   *
+static struct dlmod   *
 dlmod_get_by_index(int iindex)
 {
     struct dlmod   *dlmod;
@@ -236,6 +183,10 @@ dlmod_get_by_index(int iindex)
 
     return NULL;
 }
+
+/*
+ * Functions to parse config lines
+ */
 
 static void
 dlmod_parse_config(const char *token, char *cptr)
@@ -249,7 +200,7 @@ dlmod_parse_config(const char *token, char *cptr)
         return;
     }
     /*
-     * remove comments 
+     * remove comments
      */
     *(cptr + strcspn(cptr, "#;\r\n")) = '\0';
 
@@ -258,7 +209,7 @@ dlmod_parse_config(const char *token, char *cptr)
         return;
 
     /*
-     * dynamic module name 
+     * dynamic module name
      */
     dlm_name = strtok_r(cptr, "\t ", &st);
     if (dlm_name == NULL) {
@@ -266,16 +217,16 @@ dlmod_parse_config(const char *token, char *cptr)
         dlmod_delete_module(dlm);
         return;
     }
-    strncpy(dlm->name, dlm_name, sizeof(dlm->name));
+    strlcpy(dlm->name, dlm_name, sizeof(dlm->name));
 
     /*
-     * dynamic module path 
+     * dynamic module path
      */
     dlm_path = strtok_r(NULL, "\t ", &st);
     if (dlm_path)
-        strncpy(dlm->path, dlm_path, sizeof(dlm->path));
+        strlcpy(dlm->path, dlm_path, sizeof(dlm->path));
     else
-        strncpy(dlm->path, dlm_name, sizeof(dlm->path));
+        strlcpy(dlm->path, dlm_name, sizeof(dlm->path));
 
     dlmod_load_module(dlm);
 
@@ -297,13 +248,23 @@ dlmod_free_config(void)
     dlmods = NULL;
 }
 
+/*
+ * Functions to handle SNMP management
+ */
+
+#define DLMODNEXTINDEX 		1
+#define DLMODINDEX     		2
+#define DLMODNAME      		3
+#define DLMODPATH      		4
+#define DLMODERROR     		5
+#define DLMODSTATUS    		6
 
 /*
  * header_dlmod(...
  * Arguments:
  * vp     IN      - pointer to variable entry that points here
  * name    IN/OUT  - IN/name requested, OUT/name found
- * length  IN/OUT  - length of IN/OUT oid's 
+ * length  IN/OUT  - length of IN/OUT oid's
  * exact   IN      - TRUE if an exact match was requested
  * var_len OUT     - length of variable or 0 if function returned
  * write_method
@@ -338,7 +299,7 @@ header_dlmod(struct variable *vp,
 }
 
 
-u_char         *
+static u_char         *
 var_dlmod(struct variable * vp,
           oid * name,
           size_t * length,
@@ -346,7 +307,7 @@ var_dlmod(struct variable * vp,
 {
 
     /*
-     * variables we may use later 
+     * variables we may use later
      */
 
     *write_method = 0;          /* assume it isnt writable for the time being */
@@ -358,7 +319,7 @@ var_dlmod(struct variable * vp,
         return NULL;
 
     /*
-     * this is where we do the value assignments for the mib results. 
+     * this is where we do the value assignments for the mib results.
      */
     switch (vp->magic) {
     case DLMODNEXTINDEX:
@@ -372,16 +333,127 @@ var_dlmod(struct variable * vp,
 }
 
 
+static int
+write_dlmodName(int action,
+                u_char * var_val,
+                u_char var_val_type,
+                size_t var_val_len,
+                u_char * statP, oid * name, size_t name_len)
+{
+    static struct dlmod *dlm;
+
+    if (var_val_type != ASN_OCTET_STR) {
+        snmp_log(LOG_ERR, "write to dlmodName not ASN_OCTET_STR\n");
+        return SNMP_ERR_WRONGTYPE;
+    }
+    if (var_val_len > sizeof(dlm->name)-1) {
+        snmp_log(LOG_ERR, "write to dlmodName: bad length: too long\n");
+        return SNMP_ERR_WRONGLENGTH;
+    }
+    if (action == COMMIT) {
+        dlm = dlmod_get_by_index(name[12]);
+        if (!dlm || dlm->status == DLMOD_LOADED)
+            return SNMP_ERR_RESOURCEUNAVAILABLE;
+        strncpy(dlm->name, (const char *) var_val, var_val_len);
+        dlm->name[var_val_len] = 0;
+    }
+    return SNMP_ERR_NOERROR;
+}
+
+static int
+write_dlmodPath(int action,
+                u_char * var_val,
+                u_char var_val_type,
+                size_t var_val_len,
+                u_char * statP, oid * name, size_t name_len)
+{
+    static struct dlmod *dlm;
+
+    if (var_val_type != ASN_OCTET_STR) {
+        snmp_log(LOG_ERR, "write to dlmodPath not ASN_OCTET_STR\n");
+        return SNMP_ERR_WRONGTYPE;
+    }
+    if (var_val_len > sizeof(dlm->path)-1) {
+        snmp_log(LOG_ERR, "write to dlmodPath: bad length: too long\n");
+        return SNMP_ERR_WRONGLENGTH;
+    }
+    if (action == COMMIT) {
+        dlm = dlmod_get_by_index(name[12]);
+        if (!dlm || dlm->status == DLMOD_LOADED)
+            return SNMP_ERR_RESOURCEUNAVAILABLE;
+        strncpy(dlm->path, (const char *) var_val, var_val_len);
+        dlm->path[var_val_len] = 0;
+    }
+    return SNMP_ERR_NOERROR;
+}
+
+static int
+write_dlmodStatus(int action,
+                  u_char * var_val,
+                  u_char var_val_type,
+                  size_t var_val_len,
+                  u_char * statP, oid * name, size_t name_len)
+{
+    /*
+     * variables we may use later
+     */
+    struct dlmod   *dlm;
+
+    if (var_val_type != ASN_INTEGER) {
+        snmp_log(LOG_ERR, "write to dlmodStatus not ASN_INTEGER\n");
+        return SNMP_ERR_WRONGTYPE;
+    }
+    if (var_val_len > sizeof(long)) {
+        snmp_log(LOG_ERR, "write to dlmodStatus: bad length\n");
+        return SNMP_ERR_WRONGLENGTH;
+    }
+    if (action == COMMIT) {
+        /*
+         * object identifier in form .1.3.6.1.4.1.2021.13.14.2.1.4.x
+         * where X is index with offset 12
+         */
+
+        dlm = dlmod_get_by_index(name[12]);
+        switch (*((long *) var_val)) {
+        case DLMOD_CREATE:
+            if (dlm || (name[12] != dlmod_next_index))
+                return SNMP_ERR_RESOURCEUNAVAILABLE;
+            dlm = dlmod_create_module();
+            if (!dlm)
+                return SNMP_ERR_RESOURCEUNAVAILABLE;
+            break;
+        case DLMOD_LOAD:
+            if (!dlm || dlm->status == DLMOD_LOADED)
+                return SNMP_ERR_RESOURCEUNAVAILABLE;
+            dlmod_load_module(dlm);
+            break;
+        case DLMOD_UNLOAD:
+            if (!dlm || dlm->status != DLMOD_LOADED)
+                return SNMP_ERR_RESOURCEUNAVAILABLE;
+            dlmod_unload_module(dlm);
+            break;
+        case DLMOD_DELETE:
+            if (!dlm || dlm->status == DLMOD_LOADED)
+                return SNMP_ERR_RESOURCEUNAVAILABLE;
+            dlmod_delete_module(dlm);
+            break;
+        default:
+            return SNMP_ERR_WRONGVALUE;
+        }
+    }
+    return SNMP_ERR_NOERROR;
+}
+
 /*
  * header_dlmodEntry(...
  * Arguments:
  * vp     IN      - pointer to variable entry that points here
  * name    IN/OUT  - IN/name requested, OUT/name found
- * length  IN/OUT  - length of IN/OUT oid's 
+ * length  IN/OUT  - length of IN/OUT oid's
  * exact   IN      - TRUE if an exact match was requested
  * var_len OUT     - length of variable or 0 if function returned
  * write_method
- * 
+ *
  */
 
 
@@ -432,14 +504,14 @@ header_dlmodEntry(struct variable *vp,
     return dlm;
 }
 
-u_char         *
+static u_char         *
 var_dlmodEntry(struct variable * vp,
                oid * name,
                size_t * length,
                int exact, size_t * var_len, WriteMethod ** write_method)
 {
     /*
-     * variables we may use later 
+     * variables we may use later
      */
     struct dlmod   *dlm;
 
@@ -452,7 +524,7 @@ var_dlmodEntry(struct variable * vp,
         return NULL;
 
     /*
-     * this is where we do the value assignments for the mib results. 
+     * this is where we do the value assignments for the mib results.
      */
     switch (vp->magic) {
     case DLMODNAME:
@@ -477,124 +549,66 @@ var_dlmodEntry(struct variable * vp,
     return NULL;
 }
 
-int
-write_dlmodName(int action,
-                u_char * var_val,
-                u_char var_val_type,
-                size_t var_val_len,
-                u_char * statP, oid * name, size_t name_len)
-{
-    static struct dlmod *dlm;
+/*
+ * this variable defines function callbacks and type return
+ * information for the dlmod mib
+ */
+static struct variable4 dlmod_variables[] = {
+    {DLMODNEXTINDEX, ASN_INTEGER, NETSNMP_OLDAPI_RONLY,
+     var_dlmod, 1, {1}},
+    {DLMODNAME, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+     var_dlmodEntry, 3, {2, 1, 2}},
+    {DLMODPATH, ASN_OCTET_STR, NETSNMP_OLDAPI_RWRITE,
+     var_dlmodEntry, 3, {2, 1, 3}},
+    {DLMODERROR, ASN_OCTET_STR, NETSNMP_OLDAPI_RONLY,
+     var_dlmodEntry, 3, {2, 1, 4}},
+    {DLMODSTATUS, ASN_INTEGER, NETSNMP_OLDAPI_RWRITE,
+     var_dlmodEntry, 3, {2, 1, 5}},
+};
 
-    if (var_val_type != ASN_OCTET_STR) {
-        snmp_log(LOG_ERR, "write to dlmodName not ASN_OCTET_STR\n");
-        return SNMP_ERR_WRONGTYPE;
-    }
-    if (var_val_len > sizeof(dlm->name)-1) {
-        snmp_log(LOG_ERR, "write to dlmodName: bad length: too long\n");
-        return SNMP_ERR_WRONGLENGTH;
-    }
-    if (action == COMMIT) {
-        dlm = dlmod_get_by_index(name[12]);
-        if (!dlm || dlm->status == DLMOD_LOADED)
-            return SNMP_ERR_RESOURCEUNAVAILABLE;
-        strncpy(dlm->name, (const char *) var_val, var_val_len);
-        dlm->name[var_val_len] = 0;
-    }
-    return SNMP_ERR_NOERROR;
-}
-
-int
-write_dlmodPath(int action,
-                u_char * var_val,
-                u_char var_val_type,
-                size_t var_val_len,
-                u_char * statP, oid * name, size_t name_len)
-{
-    static struct dlmod *dlm;
-
-    if (var_val_type != ASN_OCTET_STR) {
-        snmp_log(LOG_ERR, "write to dlmodPath not ASN_OCTET_STR\n");
-        return SNMP_ERR_WRONGTYPE;
-    }
-    if (var_val_len > sizeof(dlm->path)-1) {
-        snmp_log(LOG_ERR, "write to dlmodPath: bad length: too long\n");
-        return SNMP_ERR_WRONGLENGTH;
-    }
-    if (action == COMMIT) {
-        dlm = dlmod_get_by_index(name[12]);
-        if (!dlm || dlm->status == DLMOD_LOADED)
-            return SNMP_ERR_RESOURCEUNAVAILABLE;
-        strncpy(dlm->path, (const char *) var_val, var_val_len);
-        dlm->path[var_val_len] = 0;
-    }
-    return SNMP_ERR_NOERROR;
-}
-
-int
-write_dlmodStatus(int action,
-                  u_char * var_val,
-                  u_char var_val_type,
-                  size_t var_val_len,
-                  u_char * statP, oid * name, size_t name_len)
-{
-    /*
-     * variables we may use later 
-     */
-    struct dlmod   *dlm;
-
-    if (var_val_type != ASN_INTEGER) {
-        snmp_log(LOG_ERR, "write to dlmodStatus not ASN_INTEGER\n");
-        return SNMP_ERR_WRONGTYPE;
-    }
-    if (var_val_len > sizeof(long)) {
-        snmp_log(LOG_ERR, "write to dlmodStatus: bad length\n");
-        return SNMP_ERR_WRONGLENGTH;
-    }
-    if (action == COMMIT) {
-        /*
-         * object identifier in form .1.3.6.1.4.1.2021.13.14.2.1.4.x 
-         * where X is index with offset 12 
-         */
-
-        dlm = dlmod_get_by_index(name[12]);
-        switch (*((long *) var_val)) {
-        case DLMOD_CREATE:
-            if (dlm || (name[12] != dlmod_next_index))
-                return SNMP_ERR_RESOURCEUNAVAILABLE;
-            dlm = dlmod_create_module();
-            if (!dlm)
-                return SNMP_ERR_RESOURCEUNAVAILABLE;
-            break;
-        case DLMOD_LOAD:
-            if (!dlm || dlm->status == DLMOD_LOADED)
-                return SNMP_ERR_RESOURCEUNAVAILABLE;
-            dlmod_load_module(dlm);
-            break;
-        case DLMOD_UNLOAD:
-            if (!dlm || dlm->status != DLMOD_LOADED)
-                return SNMP_ERR_RESOURCEUNAVAILABLE;
-            dlmod_unload_module(dlm);
-            break;
-        case DLMOD_DELETE:
-            if (!dlm || dlm->status == DLMOD_LOADED)
-                return SNMP_ERR_RESOURCEUNAVAILABLE;
-            dlmod_delete_module(dlm);
-            break;
-        default:
-            return SNMP_ERR_WRONGVALUE;
-        }
-    }
-    return SNMP_ERR_NOERROR;
-}
-
-#else                           /* no dlopen support */
+static oid dlmod_variables_oid[] = { 1, 3, 6, 1, 4, 1, 2021, 13, 14 };
 
 void
 init_dlmod(void)
 {
-    DEBUGMSGTL(("dlmod",
-                "Dynamic modules not support on this platform\n"));
+    REGISTER_MIB("dlmod", dlmod_variables, variable4, dlmod_variables_oid);
+
+    /*
+     * TODO: REGISTER_SYSOR_ENTRY
+     */
+
+    DEBUGMSGTL(("dlmod", "register mib\n"));
+
+    snmpd_register_config_handler("dlmod", dlmod_parse_config,
+                                  dlmod_free_config,
+                                  "module-name module-path");
+
+    {
+        const char * const p = getenv("SNMPDLMODPATH");
+        strncpy(dlmod_path, SNMPDLMODPATH, sizeof(dlmod_path));
+        dlmod_path[ sizeof(dlmod_path) - 1 ] = 0;
+        if (p) {
+            if (p[0] == ':') {
+                int len = strlen(dlmod_path);
+                if (dlmod_path[len - 1] != ':') {
+                    strncat(dlmod_path, ":", sizeof(dlmod_path) - len - 1);
+                    len++;
+                }
+                strncat(dlmod_path, p + 1,   sizeof(dlmod_path) - len);
+            } else
+                strncpy(dlmod_path, p, sizeof(dlmod_path));
+        }
+    }
+
+    dlmod_path[ sizeof(dlmod_path)-1 ] = 0;
+    DEBUGMSGTL(("dlmod", "dlmod_path: %s\n", dlmod_path));
 }
 
-#endif
+netsnmp_feature_require(snmpd_unregister_config_handler)
+
+void
+shutdown_dlmod(void)
+{
+    snmpd_unregister_config_handler("dlmod");
+    unregister_mib(dlmod_variables_oid, OID_LENGTH(dlmod_variables_oid));
+}

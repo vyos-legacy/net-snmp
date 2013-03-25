@@ -32,6 +32,8 @@ extern          "C" {
     typedef void (NetsnmpCacheFree)(netsnmp_cache *, void*);
 
     struct netsnmp_cache_s {
+	/** Number of handlers whose myvoid member points at this structure. */
+	int      refcnt;
         /*
 	 * For operation of the data caches
 	 */
@@ -40,7 +42,7 @@ extern          "C" {
         int      valid;
         char     expired;
         int      timeout;	/* Length of time the cache is valid (in s) */
-        marker_t timestamp;	/* When the cache was last loaded */
+        marker_t timestampM;	/* When the cache was last loaded */
         u_long   timer_id;      /* periodic timer id */
 
         NetsnmpCacheLoad *load_cache;
@@ -100,6 +102,7 @@ extern          "C" {
 
     netsnmp_mib_handler *
     netsnmp_cache_handler_get(netsnmp_cache* cache);
+    void netsnmp_cache_handler_owns_cache(netsnmp_mib_handler *handler);
 
     netsnmp_cache * netsnmp_cache_find_by_oid(const oid * rootoid,
                                               int rootoid_len);
@@ -116,6 +119,7 @@ extern          "C" {
 #define NETSNMP_CACHE_DONT_AUTO_RELEASE                     0x0008
 #define NETSNMP_CACHE_PRELOAD                               0x0010
 #define NETSNMP_CACHE_AUTO_RELOAD                           0x0020
+#define NETSNMP_CACHE_RESET_TIMER_ON_USE                    0x0040
 
 #define NETSNMP_CACHE_HINT_HANDLER_ARGS                     0x1000
 

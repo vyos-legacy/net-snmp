@@ -1,7 +1,7 @@
 /*
  * ipaddress data access header
  *
- * $Id: ipaddress.h 16831 2008-02-23 00:59:03Z hardaker $
+ * $Id$
  */
 #ifndef NETSNMP_ACCESS_IPADDRESS_H
 #define NETSNMP_ACCESS_IPADDRESS_H

@@ -14,6 +14,7 @@
  */
 
 #include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-features.h>
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -29,6 +30,9 @@
 #include <strings.h>
 #endif
 
+#if HAVE_UNISTD_H
+#include <unistd.h>
+#endif
 #if HAVE_DMALLOC_H
 #include <dmalloc.h>
 #endif
@@ -58,6 +62,11 @@
 #include <net-snmp/library/keytools.h>
 
 #include <net-snmp/library/transform_oids.h>
+
+netsnmp_feature_child_of(usm_support, libnetsnmp)
+netsnmp_feature_child_of(usm_keytools, usm_support)
+
+#ifndef NETSNMP_FEATURE_REMOVE_USM_KEYTOOLS
 
 /*******************************************************************-o-******
  * generate_Ku
@@ -99,7 +108,8 @@ generate_Ku(const oid * hashtype, u_int hashtype_len,
 {
     int             rval = SNMPERR_SUCCESS,
         nbytes = USM_LENGTH_EXPANDED_PASSPHRASE;
-#if defined(NETSNMP_USE_INTERNAL_MD5) || defined(NETSNMP_USE_INTERNAL_CRYPTO)
+#if !defined(NETSNMP_USE_OPENSSL) && \
+    defined(NETSNMP_USE_INTERNAL_MD5) || defined(NETSNMP_USE_INTERNAL_CRYPTO)
     int             ret;
 #endif
 
@@ -108,13 +118,11 @@ generate_Ku(const oid * hashtype, u_int hashtype_len,
     u_char          buf[USM_LENGTH_KU_HASHBLOCK], *bufp;
 
 #ifdef NETSNMP_USE_OPENSSL
-    EVP_MD_CTX     *ctx = (EVP_MD_CTX *)malloc(sizeof(EVP_MD_CTX));
-    unsigned int    tmp_len;
+    EVP_MD_CTX     *ctx = NULL;
 #elif NETSNMP_USE_INTERNAL_CRYPTO
     SHA_CTX csha1;
     MD5_CTX cmd5;
     char    cryptotype = 0;
-    unsigned int    tmp_len;
 #define TYPE_MD5  1
 #define TYPE_SHA1 2
 #else
@@ -141,6 +149,12 @@ generate_Ku(const oid * hashtype, u_int hashtype_len,
      */
 #ifdef NETSNMP_USE_OPENSSL
 
+#ifdef HAVE_EVP_MD_CTX_CREATE
+    ctx = EVP_MD_CTX_create();
+#else
+    ctx = malloc(sizeof(*ctx));
+    EVP_MD_CTX_init(ctx);
+#endif
 #ifndef NETSNMP_DISABLE_MD5
     if (ISTRANSFORM(hashtype, HMACMD5Auth))
         EVP_DigestInit(ctx, EVP_md5());
@@ -148,15 +162,16 @@ generate_Ku(const oid * hashtype, u_int hashtype_len,
 #endif
         if (ISTRANSFORM(hashtype, HMACSHA1Auth))
         EVP_DigestInit(ctx, EVP_sha1());
-    else {
-        free(ctx);
-        return (SNMPERR_GENERR);
-    }
+    else
+        QUITFUN(SNMPERR_GENERR, generate_Ku_quit);
 #elif NETSNMP_USE_INTERNAL_CRYPTO
+#ifndef NETSNMP_DISABLE_MD5
     if (ISTRANSFORM(hashtype, HMACMD5Auth)) {
         MD5_Init(&cmd5);
         cryptotype = TYPE_MD5;
-    } else if (ISTRANSFORM(hashtype, HMACSHA1Auth)) {
+    } else
+#endif
+           if (ISTRANSFORM(hashtype, HMACSHA1Auth)) {
         SHA1_Init(&csha1);
         cryptotype = TYPE_SHA1;
     } else {
@@ -192,14 +207,17 @@ generate_Ku(const oid * hashtype, u_int hashtype_len,
     }
 
 #ifdef NETSNMP_USE_OPENSSL
+    {
+    unsigned int    tmp_len;
+
     tmp_len = *kulen;
     EVP_DigestFinal(ctx, (unsigned char *) Ku, &tmp_len);
     *kulen = tmp_len;
     /*
      * what about free() 
      */
+    }
 #elif NETSNMP_USE_INTERNAL_CRYPTO
-    tmp_len = *kulen;
     if (TYPE_SHA1 == cryptotype) {
         SHA1_Final(Ku, &csha1);
     } else {
@@ -235,7 +253,14 @@ generate_Ku(const oid * hashtype, u_int hashtype_len,
   generate_Ku_quit:
     memset(buf, 0, sizeof(buf));
 #ifdef NETSNMP_USE_OPENSSL
-    free(ctx);
+    if (ctx) {
+#ifdef HAVE_EVP_MD_CTX_DESTROY
+        EVP_MD_CTX_destroy(ctx);
+#else
+        EVP_MD_CTX_cleanup(ctx);
+        free(ctx);
+#endif
+    }
 #endif
     return rval;
 
@@ -625,11 +650,11 @@ decode_keychange(const oid * hashtype, u_int hashtype_len,
 
   decode_keychange_quit:
     if (rval != SNMPERR_SUCCESS) {
-        memset(newkey, 0, properlength);
+        if (newkey)
+            memset(newkey, 0, properlength);
     }
     memset(tmp_buf, 0, SNMP_MAXBUF);
-    if (tmpbuf != NULL)
-        SNMP_FREE(tmpbuf);
+    SNMP_FREE(tmpbuf);
 
     return rval;
 
@@ -638,3 +663,4 @@ decode_keychange(const oid * hashtype, u_int hashtype_len,
 #else
 _KEYTOOLS_NOT_AVAILABLE
 #endif                          /* internal or openssl */
+#endif /* NETSNMP_FEATURE_REMOVE_USM_KEYTOOLS */

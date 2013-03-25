@@ -36,6 +36,8 @@ INSTALL_PREFIX  = $(DESTDIR)
 INSTALL		= $(LIBTOOL) --mode=install @INSTALL@
 UNINSTALL	= $(LIBTOOL) --mode=uninstall rm -f
 LIBTOOLCLEAN	= $(LIBTOOL) --mode=clean rm -f
+FEATURECHECK	= $(top_srcdir)/local/minimalist/feature-check
+FEATUREPROCESS	= $(top_srcdir)/local/minimalist/feature-remove
 INSTALL_DATA    = @INSTALL_DATA@
 SED		= @SED@
 LN_S		= @LN_S@
@@ -77,14 +79,14 @@ LINKCC	        = @LINKCC@
 # 5.3 was at 10, 5.4 is at 15, ...  This leaves some room for needed
 # changes for past releases if absolutely necessary.
 #
-LIBCURRENT  = 25
+LIBCURRENT  = 30
 LIBAGE      = 0
 LIBREVISION = 2
 
 LIB_LD_CMD      = $(LIBTOOL) --mode=link $(LINKCC) $(CFLAGS) -rpath $(libdir) -version-info $(LIBCURRENT):$(LIBREVISION):$(LIBAGE) -o
 LIB_EXTENSION   = la
 LIB_VERSION     =
-LIB_LDCONFIG_CMD = $(LIBTOOL) --mode=finish $(libdir)
+LIB_LDCONFIG_CMD = $(LIBTOOL) --mode=finish $(INSTALL_PREFIX)$(libdir)
 LINK		= $(LIBTOOL) --mode=link $(LINKCC)
 # RANLIB 	= @RANLIB@
 RANLIB		= :

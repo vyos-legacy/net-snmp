@@ -74,7 +74,7 @@ static int ps_numdisks;			/* number of disks in system, may change while running
 #include <sys/param.h>
 #if __FreeBSD_version >= 500101
 #include <sys/resource.h>       /* for CPUSTATES in devstat.h */
-#else
+#elif !defined(dragonfly)
 #include <sys/dkstat.h>
 #endif
 #include <devstat.h>
@@ -116,6 +116,10 @@ void		devla_getstats(unsigned int regno, void *dummy);
 #endif
 
 FILE           *file;
+
+#if 0
+static void	diskio_free_config(void);
+#endif
 
          /*********************
 	 *
@@ -220,18 +224,44 @@ init_diskio(void)
     ps_disk = NULL;
 #endif
 
-#if defined (freebsd4) || defined(freebsd5)
-	devla_getstats(0, NULL);
-	/* collect LA data regularly */
-	snmp_alarm_register(DISKIO_SAMPLE_INTERVAL, SA_REPEAT, devla_getstats, NULL);
-#endif
-
-#if defined (linux)
+#if defined (freebsd4) || defined(freebsd5) || defined(linux)
     devla_getstats(0, NULL);
+    /* collect LA data regularly */
     snmp_alarm_register(DISKIO_SAMPLE_INTERVAL, SA_REPEAT, devla_getstats, NULL);
 #endif
 
+
+#ifdef linux
+    char *app = netsnmp_ds_get_string(NETSNMP_DS_LIBRARY_ID,
+                                      NETSNMP_DS_LIB_APPTYPE);
+    netsnmp_ds_register_config(ASN_BOOLEAN, app, "diskio_exclude_fd",
+                               NETSNMP_DS_APPLICATION_ID,
+                               NETSNMP_DS_AGENT_DISKIO_NO_FD);
+    netsnmp_ds_register_config(ASN_BOOLEAN, app, "diskio_exclude_loop",
+                               NETSNMP_DS_APPLICATION_ID,
+                               NETSNMP_DS_AGENT_DISKIO_NO_LOOP);
+    netsnmp_ds_register_config(ASN_BOOLEAN, app, "diskio_exclude_ram",
+                               NETSNMP_DS_APPLICATION_ID,
+                               NETSNMP_DS_AGENT_DISKIO_NO_RAM);
+
+        /* or possible an exclusion pattern? */
+#endif
 }
+
+#if 0
+/* to do: make sure diskio_free_config() gets invoked upon SIGHUP. */
+static void
+diskio_free_config(void)
+{
+    netsnmp_ds_set_boolean(NETSNMP_DS_APPLICATION_ID, 
+			   NETSNMP_DS_AGENT_DISKIO_NO_FD,   0);
+    netsnmp_ds_set_boolean(NETSNMP_DS_APPLICATION_ID, 
+			   NETSNMP_DS_AGENT_DISKIO_NO_LOOP, 0);
+    netsnmp_ds_set_boolean(NETSNMP_DS_APPLICATION_ID, 
+			   NETSNMP_DS_AGENT_DISKIO_NO_RAM,  0);
+}
+#endif
+
 
 #ifdef solaris2
 int
@@ -346,7 +376,8 @@ getstats(void)
     time_t          now;
     int             mib[2];
     char           *t, *tp;
-    int             size, dkn_size, i;
+    size_t          size, dkn_size;
+    int             i;
 
     now = time(NULL);
     if (cache_time + CACHE_TIMEOUT > now) {
@@ -445,6 +476,157 @@ var_diskio(struct variable * vp,
     return NULL;
 }
 #endif                          /* bsdi */
+
+#ifdef __NetBSD__
+#include <sys/sysctl.h>
+static int      ndisk;
+#ifdef HW_IOSTATNAMES
+static int nmib[2] = {CTL_HW, HW_IOSTATNAMES};
+#else
+static int nmib[2] = {CTL_HW, HW_DISKNAMES};
+#endif
+#ifdef HW_DISKSTATS
+#include <sys/disk.h>
+static int dmib[3] = {CTL_HW, HW_DISKSTATS, sizeof(struct disk_sysctl)};
+static struct disk_sysctl *dk;
+#endif
+#ifdef HW_IOSTATS
+#include <sys/iostat.h>
+static int dmib[3] = {CTL_HW, HW_IOSTATS, sizeof(struct io_sysctl)};
+static struct io_sysctl *dk;
+#endif
+static char   **dkname;
+
+static int
+getstats(void)
+{
+    time_t          now;
+    char           *t, *tp;
+    size_t          size, dkn_size;
+    int             i;
+
+    now = time(NULL);
+    if (cache_time + CACHE_TIMEOUT > now) {
+        return 1;
+    }
+    size = 0;
+    if (sysctl(dmib, 3, NULL, &size, NULL, 0) < 0) {
+        perror("Can't get size of HW_DISKSTATS/HW_IOSTATS mib");
+        return 0;
+    }
+    if (ndisk != size / dmib[2]) {
+        if (dk)
+            free(dk);
+        if (dkname) {
+            for (i = 0; i < ndisk; i++)
+                if (dkname[i])
+                    free(dkname[i]);
+            free(dkname);
+        }
+        ndisk = size / dmib[2];
+        if (ndisk == 0)
+            return 0;
+        dkname = malloc(ndisk * sizeof(char *));
+        dkn_size = 0;
+        if (sysctl(nmib, 2, NULL, &dkn_size, NULL, 0) < 0) {
+            perror("Can't get size of HW_DISKNAMES mib");
+            return 0;
+        }
+        t = malloc(dkn_size);
+        if (sysctl(nmib, 2, t, &dkn_size, NULL, 0) < 0) {
+            perror("Can't get size of HW_DISKNAMES mib");
+            return 0;
+        }
+        for (i = 0, tp = strtok(t, " "); tp && i < ndisk; i++,
+	    tp = strtok(NULL, " ")) {
+            dkname[i] = strdup(tp);
+        }
+        free(t);
+        dk = malloc(ndisk * sizeof(*dk));
+    }
+    if (sysctl(dmib, 3, dk, &size, NULL, 0) < 0) {
+        perror("Can't get HW_DISKSTATS/HW_IOSTATS mib");
+        return 0;
+    }
+    cache_time = now;
+    return 1;
+}
+
+u_char *
+var_diskio(struct variable * vp,
+           oid * name,
+           size_t * length,
+           int exact, size_t * var_len, WriteMethod ** write_method)
+{
+    static long     long_ret;
+    unsigned int    indx;
+
+    if (getstats() == 0)
+        return 0;
+
+    if (header_simple_table
+        (vp, name, length, exact, var_len, write_method, ndisk))
+        return NULL;
+
+    indx = (unsigned int) (name[*length - 1] - 1);
+    if (indx >= ndisk)
+        return NULL;
+
+    switch (vp->magic) {
+    case DISKIO_INDEX:
+        long_ret = (long) indx + 1;
+        return (u_char *) & long_ret;
+
+    case DISKIO_DEVICE:
+        *var_len = strlen(dkname[indx]);
+        return (u_char *) dkname[indx];
+
+    case DISKIO_NREAD:
+#ifdef HW_DISKSTATS
+     	long_ret = dk[indx].dk_rbytes;
+#endif
+#ifdef HW_IOSTATS
+	if (dk[indx].type == IOSTAT_DISK)
+	    long_ret = dk[indx].rbytes;
+#endif
+        return (u_char *) & long_ret;
+
+    case DISKIO_NWRITTEN:
+#ifdef HW_DISKSTATS
+     	long_ret = dk[indx].dk_wbytes;
+#endif
+#ifdef HW_IOSTATS
+	if (dk[indx].type == IOSTAT_DISK)
+	    long_ret = dk[indx].wbytes;
+#endif
+        return (u_char *) & long_ret;
+
+    case DISKIO_READS:
+#ifdef HW_DISKSTATS
+     	long_ret = dk[indx].dk_rxfer;
+#endif
+#ifdef HW_IOSTATS
+	if (dk[indx].type == IOSTAT_DISK)
+	    long_ret = dk[indx].rxfer;
+#endif
+        return (u_char *) & long_ret;
+
+    case DISKIO_WRITES:
+#ifdef HW_DISKSTATS
+     	long_ret = dk[indx].dk_wxfer;
+#endif
+#ifdef HW_IOSTATS
+	if (dk[indx].type == IOSTAT_DISK)
+	    long_ret = dk[indx].wxfer;
+#endif
+        return (u_char *) & long_ret;
+
+    default:
+        ERROR_MSG("diskio.c: don't know how to handle this request.");
+    }
+    return NULL;
+}
+#endif /* __NetBSD__ */
 
 #if defined(freebsd4) || defined(freebsd5)
 
@@ -777,6 +959,23 @@ void devla_getstats(unsigned int regno, void * dummy) {
     }
 }
 
+int is_excluded(const char *name)
+{
+    if (netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
+                               NETSNMP_DS_AGENT_DISKIO_NO_FD)
+                           && !(strncmp(name, "fd", 2)))
+        return 1;
+    if (netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
+                               NETSNMP_DS_AGENT_DISKIO_NO_LOOP)
+                           && !(strncmp(name, "loop", 4)))
+        return 1;
+    if (netsnmp_ds_get_boolean(NETSNMP_DS_APPLICATION_ID,
+                               NETSNMP_DS_AGENT_DISKIO_NO_RAM)
+                           && !(strncmp(name, "ram", 3)))
+        return 1;
+    return 0;
+}
+
 static int
 getstats(void)
 {
@@ -817,7 +1016,8 @@ getstats(void)
 		    &pTemp->major, &pTemp->minor, pTemp->name,
 		    &pTemp->rio, &pTemp->rsect,
 		    &pTemp->wio, &pTemp->wsect);
-	    head.length++;
+            if (!is_excluded(pTemp->name))
+	        head.length++;
 	}
     }
     else {
@@ -852,9 +1052,11 @@ getstats(void)
 		    &pTemp->running, &pTemp->use, &pTemp->aveq);
             if (rc != 15) {
                snmp_log(LOG_ERR, "diskio.c: cannot find statistics in /proc/partitions\n");
+               fclose(parts);
                return 1;
             }
-	    head.length++;
+            if (!is_excluded(pTemp->name))
+	        head.length++;
 	}
     }
 
