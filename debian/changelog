@@ -1,3 +1,9 @@
+net-snmp (5.7.2-vyatta+2) unstable; urgency=low
+
+  * Force release for master
+
+ -- John Southworth <john.southworth@vyatta.com>  Tue, 02 Apr 2013 09:10:41 -0700
+
 net-snmp (5.7.2-vyatta+1) unstable; urgency=low
 
   [ Stephen Hemminger ]
