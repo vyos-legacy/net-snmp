@@ -1,3 +1,9 @@
+net-snmp (5.7.2-vyatta+1+hydrogen1) unstable; urgency=low
+
+  * New branch
+
+ -- Daniil Baturin <daniil@baturin.org>  Sat, 16 Nov 2013 23:46:23 +0100
+
 net-snmp (5.7.2-vyatta+1+daisy4) unstable; urgency=low
 
   * Add VYATTA-TRAP-MIB
