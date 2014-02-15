@@ -1,3 +1,9 @@
+net-snmp (5.7.2+vyos1+helium1) unstable; urgency=low
+
+  * New branch
+
+ -- Daniil Baturin <daniil@baturin.org>  Sat, 15 Feb 2014 15:26:51 +0100
+
 net-snmp (5.7.2-vyatta+1+hydrogen1) unstable; urgency=low
 
   * New branch
