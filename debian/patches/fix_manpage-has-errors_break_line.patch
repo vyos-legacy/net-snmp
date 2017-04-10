@@ -1,0 +1,43 @@
+Description: fix manpage error
+
+ see http://lintian.debian.org/tags/manpage-has-errors-from-man.html
+
+Author: Hideki Yamane <henrich@debian.org>
+
+---
+Forwarded: no
+Last-Update: 2013-04-26
+
+--- net-snmp-5.7.2~dfsg.orig/man/snmpcmd.1.def
++++ net-snmp-5.7.2~dfsg/man/snmpcmd.1.def
+@@ -888,7 +888,7 @@ The standard prefix for object identifie
+ Defaults to .iso.org.dod.internet.mgmt.mib\-2
+ .IP MIBS
+ The list of MIBs to load. Defaults to
+-SNMPv2\-TC:SNMPv2\-MIB:IF\-MIB:IP\-MIB:TCP\-MIB:UDP\-MIB:SNMP\-VACM\-MIB.
++SNMPv2\-TC\:SNMPv2\-MIB:IF\-MIB:IP\-MIB\:TCP\-MIB\:UDP\-MIB\:SNMP\-VACM\-MIB.
+ Overridden by the
+ .B \-m
+ option.
+--- net-snmp-5.7.2~dfsg.orig/man/netsnmp_mib_api.3.def
++++ net-snmp-5.7.2~dfsg/man/netsnmp_mib_api.3.def
+@@ -277,7 +277,7 @@ A colon separated list of MIB modules to
+ .br
+ The default list of modules will depend on how the Net-SNMP software
+ was originally compiled, but is typically:
+-IP\-MIB:IF\-MIB:TCP\-MIB:UDP\-MIB:SNMPv2\-MIB:RFC1213\-MIB: UCD\-SNMP\-MIB:HOST\-RESOURCES\-MIB
++IP\-MIB\:IF\-MIB\:TCP\-MIB\:UDP\-MIB\:SNMPv2\-MIB\:RFC1213\-MIB\: UCD\-SNMP\-MIB\:HOST\-RESOURCES\-MIB
+ .IP
+ If the value of the
+ .B MIBS
+--- net-snmp-5.7.2~dfsg.orig/man/netsnmp_config_api.3.def
++++ net-snmp-5.7.2~dfsg/man/netsnmp_config_api.3.def
+@@ -365,7 +365,7 @@ function that it should abort the operat
+ SNMPCONFPATH
+ A colon separated list of directories to search for configuration
+ files in.
+-Default: SYSCONFDIR/snmp:DATADIR/snmp:LIBDIR/snmp:$HOME/.snmp
++Default\: SYSCONFDIR/snmp\:DATADIR/snmp\:LIBDIR/snmp\:$HOME/.snmp
+ .SH "SEE ALSO"
+ .BR mib_api "(3), " snmp_api (3)
+ .\" Local Variables:

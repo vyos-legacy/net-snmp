@@ -1,0 +1,46 @@
+Description: fix regular expression mismatching
+ setup.py would find library via net-snmp-config, however, its result also 
+ matches to "-L/usr/lib/x86_64-linux-gnu" and return "inux-gnu" as library
+ in Debian/Ubuntu enabling Multi-Arch environtment as below.
+>>> import os
+>>> import re
+>>> import string
+>>> import sys
+>>> netsnmp_libs="-Wl,-z,relro -Wl,-z,now -L/usr/lib/x86_64-linux-gnu -lnetsnmp -lcrypto -lm"
+>>> print netsnmp_libs
+-Wl,-z,relro -Wl,-z,now -L/usr/lib/x86_64-linux-gnu -lnetsnmp -lcrypto -lm
+>>> re.findall(r"-l(\S+)", netsnmp_libs)
+['inux-gnu', 'netsnmp', 'crypto', 'm']
+
+ Just inserting space will fix this.
+>>> re.findall(r" -l(\S+)", netsnmp_libs)
+['netsnmp', 'crypto', 'm']
+
+Author: Hideki Yamane <henrich@debian.org>
+
+---
+Origin: vendor
+Forwarded: no
+Last-Update: 2013-01-07
+
+Index: net-snmp-5.7.1~dfsg/python/setup.py
+===================================================================
+--- net-snmp-5.7.1~dfsg.orig/python/setup.py	2013-01-07 11:33:32.346195340 +0900
++++ net-snmp-5.7.1~dfsg/python/setup.py	2013-01-07 11:33:58.654255360 +0900
+@@ -18,14 +18,14 @@
+     netsnmp_libs = os.popen(basedir+'/net-snmp-config --libs').read()
+     libdir = os.popen(basedir+'/net-snmp-config --build-lib-dirs '+basedir).read()
+     incdir = os.popen(basedir+'/net-snmp-config --build-includes '+basedir).read()
+-    libs = re.findall(r"-l(\S+)", netsnmp_libs)
++    libs = re.findall(r" -l(\S+)", netsnmp_libs)
+     libdirs = re.findall(r"-L(\S+)", libdir)
+     incdirs = re.findall(r"-I(\S+)", incdir)
+ else:
+     netsnmp_libs = os.popen('net-snmp-config --libs').read()
+     libdirs = re.findall(r"-L(\S+)", netsnmp_libs)
+     incdirs = []
+-    libs = re.findall(r"-l(\S+)", netsnmp_libs)
++    libs = re.findall(r" -l(\S+)", netsnmp_libs)
+ 
+ setup(
+     name="netsnmp-python", version="1.0a1",

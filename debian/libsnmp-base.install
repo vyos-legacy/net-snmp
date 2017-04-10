@@ -1,0 +1,2 @@
+mibs/*.txt	usr/share/snmp/mibs
+usr/share/snmp/mib2c-data

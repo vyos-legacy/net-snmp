@@ -1,0 +1,13 @@
+Index: pkg-net-snmp/EXAMPLE.conf.def
+===================================================================
+--- pkg-net-snmp.orig/EXAMPLE.conf.def	2013-09-04 19:13:13.000000000 +0900
++++ pkg-net-snmp/EXAMPLE.conf.def	2013-09-04 19:13:13.000000000 +0900
+@@ -49,6 +49,8 @@
+ #rocommunity public  localhost
+                                                  #  Default access to basic system info
+  rocommunity public  default    -V systemonly
++                                                 #  rocommunity6 is for IPv6
++ rocommunity6 public  default   -V systemonly
+ 
+                                                  #  Full access from an example network
+                                                  #     Adjust this network address to match your local

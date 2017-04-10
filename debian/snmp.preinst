@@ -1,0 +1,30 @@
+#!/bin/sh
+
+set -e
+
+case "$1" in
+
+install|upgrade)
+  if [ -L /usr/share/doc/snmp ]; then
+    rm -f /usr/share/doc/snmp
+  fi
+  if [ -d /usr/doc/snmp ]; then
+    rm -rf /usr/doc/snmp
+  fi
+
+  killall -u snmp 2>/dev/null || true
+
+  ;;
+abort-upgrade)
+  ;;
+
+*)
+  echo "preinst called with unknown argument \`$1'" >&2
+  exit 1
+  ;;
+
+esac
+
+#DEBHELPER#
+
+exit 0

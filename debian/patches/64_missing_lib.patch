@@ -1,0 +1,45 @@
+Index: net-snmp-5.7.2~dfsg/apps/Makefile.in
+===================================================================
+--- net-snmp-5.7.2~dfsg.orig/apps/Makefile.in	2012-10-09 22:28:58.000000000 +0000
++++ net-snmp-5.7.2~dfsg/apps/Makefile.in	2013-01-14 05:56:10.000000000 +0000
+@@ -83,6 +83,8 @@
+ USEAGENTLIBS	= $(MIBLIB) $(AGENTLIB) $(USELIBS)
+ MYSQL_LIBS	= @MYSQL_LIBS@
+ MYSQL_INCLUDES	= @MYSQL_INCLUDES@
++LIBCRYPTO       = @LIBCRYPTO@
++LIBWRAP         = @LIBWRAP@
+ 
+ VAL_LIBS	= @VAL_LIBS@
+ LIBS		= $(USELIBS) $(VAL_LIBS) @LIBS@
+@@ -170,7 +172,7 @@
+ 	$(LINK) ${CFLAGS} -o $@ snmptest.$(OSUFFIX) ${LDFLAGS} ${LIBS}
+ 
+ snmptrapd$(EXEEXT):    $(TRAPD_OBJECTS) $(USETRAPLIBS) $(INSTALLLIBS)
+-	$(LINK) ${CFLAGS} -o $@ $(TRAPD_OBJECTS) $(INSTALLLIBS) ${LDFLAGS} ${TRAPLIBS}
++	$(LINK) ${CFLAGS} -o $@ $(TRAPD_OBJECTS) $(INSTALLLIBS) ${LDFLAGS} ${TRAPLIBS} $(LIBWRAP)
+ 
+ snmptrap$(EXEEXT):    snmptrap.$(OSUFFIX) $(USELIBS)
+ 	$(LINK) ${CFLAGS} -o $@ snmptrap.$(OSUFFIX) ${LDFLAGS} ${LIBS}
+@@ -183,7 +185,7 @@
+ 	$(LINK) ${CFLAGS} -o $@ snmpset.$(OSUFFIX) ${LDFLAGS} ${LIBS}
+ 
+ snmpusm$(EXEEXT):    snmpusm.$(OSUFFIX) $(USELIBS)
+-	$(LINK) ${CFLAGS} -o $@ snmpusm.$(OSUFFIX) ${LDFLAGS} ${LIBS}
++	$(LINK) ${CFLAGS} -o $@ snmpusm.$(OSUFFIX) ${LDFLAGS} ${LIBS} $(LIBCRYPTO)
+ 
+ snmpvacm$(EXEEXT):    snmpvacm.$(OSUFFIX) $(USELIBS)
+ 	$(LINK) ${CFLAGS} -o $@ snmpvacm.$(OSUFFIX) ${LDFLAGS} ${LIBS}
+Index: net-snmp-5.7.2~dfsg/configure.ac
+===================================================================
+--- net-snmp-5.7.2~dfsg.orig/configure.ac	2012-10-09 22:28:58.000000000 +0000
++++ net-snmp-5.7.2~dfsg/configure.ac	2013-01-14 05:56:44.894900017 +0000
+@@ -78,6 +78,9 @@
+ 
+ AC_SUBST(PARTIALTARGETFLAGS)
+ AC_SUBST(ac_cv_NETSNMP_SYSTEM_INCLUDE_FILE)
++LIBWRAP="$_wraplibs"
++AC_SUBST(LIBWRAP)
++AC_SUBST(LIBCRYPTO)
+ 
+ AC_CONFIG_FILES([Makefile:Makefile.top:Makefile.in:Makefile.rules])
+ AC_CONFIG_FILES([snmplib/Makefile:Makefile.top:snmplib/Makefile.in:Makefile.rules:snmplib/Makefile.depend])

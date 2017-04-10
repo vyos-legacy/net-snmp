@@ -1,0 +1,19 @@
+Description: fix snmpcheck shebang
+ Just don't use /usr/local/bin/perl...
+
+Author: Hideki Yamane <henrich@debian.org>
+
+---
+Origin: vendor
+Bug-Debian: http://bugs.debian.org/44373
+Forwarded: not-needed
+Last-Update: 2012-07-17
+
+--- net-snmp-5.7.1~dfsg.orig/local/snmpcheck.def
++++ net-snmp-5.7.1~dfsg/local/snmpcheck.def
+@@ -1,4 +1,4 @@
+-#!/usr/local/bin/perl -w
++#!/usr/bin/perl 
+ 
+ use strict 'refs';
+ require Net::Ping;

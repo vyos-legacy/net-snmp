@@ -1,0 +1,45 @@
+From a2f2f610b56c7d6bce88a8dab54a1f09bcd6f5b7 Mon Sep 17 00:00:00 2001
+From: Niko Tyni <ntyni@debian.org>
+Date: Wed, 16 Jul 2014 21:42:30 +0000
+Subject: [PATCH] Fix kfreebsd builds with kernel headers >= 10
+
+This fixes warnings like
+
+In file included from ../../include/net-snmp/net-snmp-config.h:2085:0,
+                 from host/data_access/swinst_apt.c:5:
+../../include/net-snmp/system/kfreebsd.h:5:0: warning: "__FreeBSD_version" redefined [enabled by default]
+ #define __FreeBSD_version __FreeBSD_kernel_version
+ ^
+In file included from /usr/include/sys/kern/param.h:1:0,
+                 from /usr/include/osreldate.h:1,
+                 from ../../include/net-snmp/system/kfreebsd.h:4,
+                 from ../../include/net-snmp/net-snmp-config.h:2085,
+                 from host/data_access/swinst_apt.c:5:
+/usr/include/sys/kglue/sys/param.h:67:0: note: this is the location of the previous definition
+ #define __FreeBSD_version 1000510 /* Master, propagated to newvers */
+
+and makes agent/mibgroup/host/data_access/swrun_kinfo.c use the modern
+kinfo_proc field names.
+
+Bug-Debian: http://bugs.debian.org/753144
+---
+ include/net-snmp/system/kfreebsd.h |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/include/net-snmp/system/kfreebsd.h b/include/net-snmp/system/kfreebsd.h
+index dbf7024..cb32758 100644
+--- a/include/net-snmp/system/kfreebsd.h
++++ b/include/net-snmp/system/kfreebsd.h
+@@ -2,7 +2,9 @@
+ #define freebsd6 freebsd6
+ 
+ #include <osreldate.h>
++#if defined(__FreeBSD_kernel_version) && !defined(__FreeBSD_version)
+ #define __FreeBSD_version __FreeBSD_kernel_version
++#endif
+ 
+ #include <sys/queue.h>
+ #include <sys/_types.h>
+-- 
+1.7.10.4
+

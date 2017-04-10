@@ -1,0 +1,1 @@
+snmpd: non-standard-file-perm etc/snmp/snmpd.conf 0600 != 0644

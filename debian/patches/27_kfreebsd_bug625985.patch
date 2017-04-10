@@ -1,0 +1,18 @@
+Index: net-snmp-5.7.2~dfsg/agent/mibgroup/hardware/memory/memory_freebsd.c
+===================================================================
+--- net-snmp-5.7.2~dfsg.orig/agent/mibgroup/hardware/memory/memory_freebsd.c	2013-01-07 14:23:52.000000000 +0900
++++ net-snmp-5.7.2~dfsg/agent/mibgroup/hardware/memory/memory_freebsd.c	2013-01-07 14:23:55.000000000 +0900
+@@ -211,11 +211,12 @@
+ 
+ #include <sys/conf.h>
+ 
++kvm_t   *kd = NULL;
++
+ int
+ swapmode(long pagesize)
+ {
+     int             i, n;
+-    static kvm_t   *kd = NULL;
+     struct kvm_swap kswap[16];
+     netsnmp_memory_info *mem;
+     char buf[1024];

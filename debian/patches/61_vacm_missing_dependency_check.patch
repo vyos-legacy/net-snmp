@@ -1,0 +1,33 @@
+Do not call vacm_standard_views() if the corresponding module was not compiled.
+(applied upstream in changeset 19116)
+
+http://net-snmp.git.sourceforge.net/git/gitweb.cgi?p=net-snmp/net-snmp;a=commitdiff;h=93161743ab8caa5259a945a8d890ae96a99f0b1c;hp=2299559c29fc6493ac2f8836b82683c0904a9b9d
+
+However, it isn't applied newest 5.7.2 source tree... why?
+
+Index: net-snmp-5.7.2~dfsg/apps/snmptrapd_auth.c
+===================================================================
+--- net-snmp-5.7.2~dfsg.orig/apps/snmptrapd_auth.c	2013-01-23 11:40:36.267276110 +0900
++++ net-snmp-5.7.2~dfsg/apps/snmptrapd_auth.c	2013-01-23 11:40:36.263276099 +0900
+@@ -27,6 +27,7 @@
+ #endif
+ 
+ #include <net-snmp/agent/agent_trap.h>
++#include <net-snmp/agent/net-snmp-agent-includes.h>
+ 
+ /**
+  * initializes the snmptrapd authorization code registering needed
+Index: net-snmp-5.7.2~dfsg/agent/agent_read_config.c
+===================================================================
+--- net-snmp-5.7.2~dfsg.orig/agent/agent_read_config.c	2013-01-23 11:38:12.334930631 +0900
++++ net-snmp-5.7.2~dfsg/agent/agent_read_config.c	2013-01-23 11:41:40.083429045 +0900
+@@ -290,6 +290,9 @@
+     snmp_call_callbacks(SNMP_CALLBACK_APPLICATION,
+                         SNMPD_CALLBACK_PRE_UPDATE_CONFIG, NULL);
+     free_config();
++#ifdef USING_MIBII_VACM_CONF_MODULE
++    vacm_standard_views(0,0,NULL,NULL);
++#endif
+     read_configs();
+ }
+ 

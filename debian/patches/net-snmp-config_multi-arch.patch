@@ -1,0 +1,32 @@
+Description: enable Multi-Arch support in net-snmp-config
+ specify $DEB_HOST_MULTIARCH to enable Multi-Arch
+
+Author: Hideki Yamane <henrich@debian.org>
+
+---
+Origin: vendor
+Forwarded: no
+Last-Update: 2012-07-18
+
+Index: net-snmp-5.7.2~dfsg/net-snmp-config.in
+===================================================================
+--- net-snmp-5.7.2~dfsg.orig/net-snmp-config.in	2013-01-14 16:10:26.524006164 +0900
++++ net-snmp-5.7.2~dfsg/net-snmp-config.in	2013-01-14 16:13:34.584345846 +0900
+@@ -90,14 +90,14 @@
+     --prefix=*)
+       prefix=$optarg
+       NSC_PREFIX=${prefix}
+-      NSC_INCLUDEDIR=${prefix}/include
+-      NSC_LIBDIR=-L${prefix}/lib
++      NSC_INCLUDEDIR=${prefix}/include/$DEB_HOST_MULTIARC/,${prefix}/include/
++      NSC_LIBDIR=-L${prefix}/lib/$DEB_HOST_MULTIARCH/,${prefix}/lib/
+       ;;
+ 
+     --exec-prefix=*)
+       exec_prefix=$optarg
+       NSC_EXEC_PREFIX=${exec_prefix}
+-      NSC_LIBDIR=-L${exec_prefix}/lib
++      NSC_LIBDIR=-L${exec_prefix}/lib/$DEB_HOST_MULTIARCH/,${prefix}/lib/
+       ;;
+ 
+     --debug-tokens|--deb*|--dbg*)
