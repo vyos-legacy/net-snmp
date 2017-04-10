@@ -54,6 +54,7 @@ override_dh_auto_configure:
 	  --with-mnttab=/etc/mtab \
 	  --with-mibdirs="\$$HOME/.snmp/mibs:$(MIBS_DIR):$(OLD_MIBS_DIR)" \
 	  --with-mysql \
+	  --with-security-modules="usm,tsm" \
 	  --with-defaults
 # --with-python-modules=""  # don't specify it, since dh_python2 cannot handle it.
 # --with-dnssec-local-validation  # not enabled since libval doesn't exist in Debian yet

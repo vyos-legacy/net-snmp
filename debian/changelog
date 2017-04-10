@@ -1,3 +1,9 @@
+net-snmp (5.7.2.1+vyos2+current1) UNRELEASED; urgency=medium
+
+  * add tsm security module
+
+ -- Kim Hagen <kim.sidney@gmail.com>  Mon, 10 Apr 2017 14:58:59 -0400
+
 net-snmp (5.7.2.1+dfsg-1) unstable; urgency=medium
 
   * re-generate upstream source due to accidentally include non-free MIB files.
