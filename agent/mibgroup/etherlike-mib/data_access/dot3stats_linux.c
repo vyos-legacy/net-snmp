@@ -440,7 +440,7 @@ _dot3Stats_netlink_get_errorcntrs(dot3StatsTable_rowreq_ctx *rowreq_ctx, const c
         {
             dot3StatsTable_data *data = &rowreq_ctx->data;
 
-            snmp_log(LOG_ERR, "IFLA_STATS for %s\n", name);
+            snmp_log(LOG_DEBUG, "IFLA_STATS for %s\n", name);
 
             data->dot3StatsFCSErrors = ke->stats.rx_crc_errors;
             rowreq_ctx->column_exists_flags |= COLUMN_DOT3STATSFCSERRORS_FLAG;
