@@ -17,6 +17,7 @@ pipeline {
 git clone --single-branch --branch $GIT_BRANCH $GIT_URL $BUILD_NUMBER
 cd $BUILD_NUMBER
 sudo apt-get -o Acquire::Check-Valid-Until=false update
+dpkg -r libsnmp-dev
 sudo mk-build-deps -i -r -t \'apt-get --no-install-recommends -yq\' debian/control
 dpkg-buildpackage -b -us -uc -tc
 mkdir -p /tmp/$GIT_BRANCH/packages/script
@@ -37,6 +38,7 @@ mv ../*.deb /tmp/$GIT_BRANCH/packages/'''
 git clone --single-branch --branch $GIT_BRANCH $GIT_URL $BUILD_NUMBER
 cd $BUILD_NUMBER
 sudo apt-get -o Acquire::Check-Valid-Until=false update
+dpkg -r libsnmp-dev
 sudo mk-build-deps -i -r -t \'apt-get --no-install-recommends -yq\' debian/control
 dpkg-buildpackage -b -us -uc -tc
 mkdir -p /tmp/$GIT_BRANCH/packages/script
@@ -57,6 +59,7 @@ mv ../*.deb /tmp/$GIT_BRANCH/packages/'''
 git clone --single-branch --branch $GIT_BRANCH $GIT_URL $BUILD_NUMBER
 cd $BUILD_NUMBER
 sudo apt-get -o Acquire::Check-Valid-Until=false update
+dpkg -r libsnmp-dev
 sudo mk-build-deps -i -r -t \'apt-get --no-install-recommends -yq\' debian/control
 dpkg-buildpackage -b -us -uc -tc
 mkdir -p /tmp/$GIT_BRANCH/packages/script
